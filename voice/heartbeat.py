@@ -28,7 +28,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from voice import git_digest, test_runner, todo_tracker
+from voice import git_digest, spaced_repetition, test_runner, todo_tracker
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -242,6 +242,7 @@ class Heartbeat:
         self._build_watch_done_date: date | None = _parse_date(state.get("build_watch_date"))
         self._last_test_ok: bool | None = state.get("last_test_ok")
         self._last_workflow_conclusion: str | None = state.get("last_workflow_conclusion")
+        self._review_reminder_done_date: date | None = _parse_date(state.get("review_reminder_date"))
 
     @staticmethod
     def _state_path() -> Path:
@@ -268,6 +269,7 @@ class Heartbeat:
             "build_watch_date": str(self._build_watch_done_date) if self._build_watch_done_date else None,
             "last_test_ok": self._last_test_ok,
             "last_workflow_conclusion": self._last_workflow_conclusion,
+            "review_reminder_date": str(self._review_reminder_done_date) if self._review_reminder_done_date else None,
         }
         try:
             p = self._state_path()
@@ -653,6 +655,31 @@ class Heartbeat:
 
         self._save_state()
 
+    def _check_spaced_repetition(self) -> None:
+        """Once-daily reminder of due spaced-repetition cards. The actual
+        review conversation happens via the review_cards/grade_card voice
+        tools — this just prompts the user to start one."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("spaced_repetition_enabled", True):
+            return
+
+        now = datetime.now(cfg.get_timezone())
+        today = now.date()
+        if self._review_reminder_done_date == today:
+            return
+        rh, rm = (int(x) for x in conf.get("review_reminder_time", "10:00").split(":"))
+        if now.hour < rh or (now.hour == rh and now.minute < rm):
+            return
+
+        self._review_reminder_done_date = today
+        self._save_state()
+
+        due = spaced_repetition.due_cards()
+        if due:
+            n = len(due)
+            _post(f"{n} flashcard{'s' if n != 1 else ''} due for review. Say \"quiz me\" to start.")
+
     def _process_inbox(self) -> None:
         """Classify/summarise new inbox files, promote extracted deadlines,
         refresh the daily-log timeline (migrated from the old heartbeat's
@@ -711,7 +738,7 @@ class Heartbeat:
                      self._check_calendar_sync, self._check_github_digest,
                      self._check_deadline_thresholds, self._check_ambient_notices,
                      self._check_habits, self._check_git_todo_summary,
-                     self._check_build_watch):
+                     self._check_build_watch, self._check_spaced_repetition):
             try:
                 task()
             except Exception as _e:

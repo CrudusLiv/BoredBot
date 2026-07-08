@@ -109,6 +109,8 @@ DEFAULTS: dict[str, Any] = {
     "build_watch_enabled": True,
     "build_watch_time": "07:30",
     "build_watch_repo": "",
+    "spaced_repetition_enabled": True,
+    "review_reminder_time": "10:00",
     # Clap detector
     "clap_enabled": False,
     "clap_threshold": 0.7,
