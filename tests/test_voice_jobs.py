@@ -192,3 +192,13 @@ def test_match_sender():
     assert jobs.match_sender("Mom <mom@example.com>", senders) is None
     assert jobs.match_sender("", senders) is None
     assert jobs.match_sender("no-angle-brackets", senders) is None
+
+
+def test_parse_digest_normalizes_onsite():
+    body = ("QA Engineer (On-site)\n"
+            "Zeta Labs · Kuala Lumpur (On-site)\n"
+            "View job <https://www.linkedin.com/comm/jobs/view/777>\n")
+    out = jobs.parse_digest("linkedin.com", body)
+    assert len(out) == 1
+    assert out[0]["remote"] == "onsite"
+    assert out[0]["location"] == "Kuala Lumpur"   # trailing (On-site) stripped
