@@ -80,3 +80,50 @@ def test_load_seen_missing_returns_empty(tmp_path):
 def test_load_seen_corrupt_returns_empty(tmp_path):
     (tmp_path / downloads.SEEN_FILE).write_text("{not json", encoding="utf-8")
     assert downloads.load_seen(tmp_path) == {}
+
+
+def test_is_under_true(tmp_path):
+    f = tmp_path / "a.pdf"
+    f.write_bytes(b"x")
+    assert downloads.is_under(str(f), [str(tmp_path)]) is True
+
+
+def test_is_under_false(tmp_path):
+    assert downloads.is_under("C:/Windows/system32/x.dll", [str(tmp_path)]) is False
+
+
+def test_file_candidate_moves_into_inbox(tmp_path):
+    watch = tmp_path / "dl"; watch.mkdir()
+    inbox = tmp_path / "inbox"; inbox.mkdir()
+    src = watch / "lecture.pdf"; src.write_bytes(b"hi")
+    res = downloads.file_candidate(str(src), [str(watch)], inbox)
+    assert res["ok"] is True
+    assert (inbox / "lecture.pdf").read_bytes() == b"hi"
+    assert not src.exists()
+
+
+def test_file_candidate_rejects_outside_watch(tmp_path):
+    inbox = tmp_path / "inbox"; inbox.mkdir()
+    outside = tmp_path / "elsewhere" / "x.pdf"
+    outside.parent.mkdir(); outside.write_bytes(b"x")
+    res = downloads.file_candidate(str(outside), [str(tmp_path / "dl")], inbox)
+    assert res["ok"] is False
+    assert outside.exists()          # not moved
+
+
+def test_file_candidate_decollides_name(tmp_path):
+    watch = tmp_path / "dl"; watch.mkdir()
+    inbox = tmp_path / "inbox"; inbox.mkdir()
+    (inbox / "a.pdf").write_bytes(b"old")
+    src = watch / "a.pdf"; src.write_bytes(b"new")
+    res = downloads.file_candidate(str(src), [str(watch)], inbox)
+    assert res["ok"] is True
+    assert (inbox / "a (2).pdf").read_bytes() == b"new"
+    assert (inbox / "a.pdf").read_bytes() == b"old"
+
+
+def test_file_candidate_missing_source(tmp_path):
+    watch = tmp_path / "dl"; watch.mkdir()
+    inbox = tmp_path / "inbox"; inbox.mkdir()
+    res = downloads.file_candidate(str(watch / "gone.pdf"), [str(watch)], inbox)
+    assert res["ok"] is False

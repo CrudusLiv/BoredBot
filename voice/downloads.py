@@ -65,3 +65,44 @@ def mark_seen(data_dir: Path, path: str, mtime: float) -> None:
     p = Path(data_dir) / SEEN_FILE
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(seen, ensure_ascii=False), encoding="utf-8")
+
+
+def is_under(path: str, folders: list[str]) -> bool:
+    try:
+        target = Path(path).resolve()
+    except OSError:
+        return False
+    for folder in folders:
+        try:
+            if target.is_relative_to(Path(folder).resolve()):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _dest_path(inbox_dir: Path, name: str) -> Path:
+    dest = inbox_dir / name
+    if not dest.exists():
+        return dest
+    stem, suffix = Path(name).stem, Path(name).suffix
+    n = 2
+    while (inbox_dir / f"{stem} ({n}){suffix}").exists():
+        n += 1
+    return inbox_dir / f"{stem} ({n}){suffix}"
+
+
+def file_candidate(path: str, folders: list[str], inbox_dir: Path) -> dict:
+    if not is_under(path, folders):
+        return {"ok": False, "error": "path is outside the watch folders"}
+    src = Path(path)
+    if not src.is_file():
+        return {"ok": False, "error": "source file not found"}
+    inbox_dir = Path(inbox_dir)
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    dest = _dest_path(inbox_dir, src.name)
+    try:
+        shutil.move(str(src), str(dest))
+    except OSError as e:
+        return {"ok": False, "error": f"move failed: {e}"}
+    return {"ok": True, "moved_to": str(dest)}
