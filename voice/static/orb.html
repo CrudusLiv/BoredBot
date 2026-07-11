@@ -2002,6 +2002,33 @@ function scrollChatToBottom() {
   if (hist) hist.scrollTop = hist.scrollHeight;
 }
 
+// Download-suggestion notice actions: File it / Dismiss, wired to
+// voice/ui_server.py POST /cmd/downloads/file and /cmd/downloads/dismiss.
+// Uses the pill-btn look already used for approve/revoke in the Apps panel.
+// The UI never constructs a destination — it only ever echoes back the
+// meta.path the heartbeat already put on the notice.
+function _downloadNoticeActions(meta) {
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:6px; margin-top:6px;';
+  const post = (url) => vfetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: meta.path }),
+  }).then(() => { row.remove(); }).catch(() => {});
+  const file = document.createElement('button');
+  file.type = 'button';
+  file.className = 'pill-btn';
+  file.textContent = 'File it';
+  file.onclick = () => post('/cmd/downloads/file');
+  const skip = document.createElement('button');
+  skip.type = 'button';
+  skip.className = 'pill-btn';
+  skip.textContent = 'Dismiss';
+  skip.onclick = () => post('/cmd/downloads/dismiss');
+  row.append(file, skip);
+  return row;
+}
+
 // ── Notices feed ────────────────────────────────────────────────────────────
 async function loadNotices() {
   const targets = [document.getElementById('notices-list')].filter(Boolean);
@@ -2052,6 +2079,9 @@ async function loadNotices() {
         del.onclick = () => act({ id: n.id || n.ts, delete: true });
         acts.appendChild(del);
         div.appendChild(acts);
+        if (n.meta && n.meta.kind === 'download_suggestion') {
+          div.appendChild(_downloadNoticeActions(n.meta));
+        }
         list.appendChild(div);
       });
     });
@@ -2502,6 +2532,32 @@ async function _renderActivityAwareness(conf, container) {
   } catch (_) {}
 }
 
+// Downloads-triage enable toggle appended to the Cfg tab: mirrors the
+// activity-awareness enable toggle above (same wrap style, same
+// _saveSetting helper). Persists downloads_triage_enabled, which gates
+// voice/heartbeat.py _check_downloads — the heartbeat task that scans the
+// Downloads folder and posts a download_suggestion notice per new file.
+async function _renderDownloadsTriage(conf, container) {
+  const group = document.createElement('div');
+  group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
+
+  const toggleWrap = document.createElement('label');
+  toggleWrap.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer;';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.checked = conf.downloads_triage_enabled === true;
+  const toggleText = document.createElement('span');
+  toggleText.className = 'settings-field-label';
+  toggleText.textContent = 'Watch Downloads and suggest filing';
+  const toggleHint = document.createElement('span');
+  toggleHint.className = 'settings-save-hint';
+  toggleWrap.append(toggle, toggleText, toggleHint);
+  group.appendChild(toggleWrap);
+  toggle.addEventListener('change', () => _saveSetting('downloads_triage_enabled', toggle.checked, toggleHint));
+
+  container.appendChild(group);
+}
+
 async function loadSettingsPanel() {
   const llmEl = document.getElementById('settings-llm-status');
   if (llmEl) {
@@ -2612,6 +2668,7 @@ async function loadSettingsPanel() {
     if (engineCtrl) engineCtrl.addEventListener('change', applyEngineVisibility);
     applyEngineVisibility();
     await _renderActivityAwareness(conf, fieldsEl);
+    await _renderDownloadsTriage(conf, fieldsEl);
   } catch (_) {
     fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
   }
