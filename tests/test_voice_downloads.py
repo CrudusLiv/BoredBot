@@ -219,3 +219,51 @@ def test_check_downloads_survives_scan_error(dl_env, tmp_path, monkeypatch):
     monkeypatch.setattr(downloads, "scan_new", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     _hb()._check_downloads()         # must not raise
     assert dl_env == []
+
+
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    from voice import ui_server
+    dl = tmp_path / "dl"; dl.mkdir()
+    vault = tmp_path / "vault"; (vault / "inbox").mkdir(parents=True)
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(cfg, "get_vault_dir", lambda: vault)
+    monkeypatch.setattr(cfg, "load",
+                        lambda: dict(DL_CONF, downloads_watch_folders=[str(dl)]))
+    monkeypatch.setattr(ui_server, "TOKEN", "t")
+    return TestClient(ui_server.app), dl, vault
+
+
+def test_file_endpoint_moves(client):
+    c, dl, vault = client
+    src = dl / "a.pdf"; src.write_bytes(b"x")
+    r = c.post("/cmd/downloads/file", json={"path": str(src)}, headers={"X-Vesper-Token": "t"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert (vault / "inbox" / "a.pdf").exists()
+
+
+def test_file_endpoint_rejects_outside(client):
+    c, dl, vault = client
+    outside = vault / "secret.pdf"; outside.write_bytes(b"x")   # not under watch folder
+    r = c.post("/cmd/downloads/file", json={"path": str(outside)}, headers={"X-Vesper-Token": "t"})
+    assert r.status_code == 400
+    assert outside.exists()
+
+
+def test_file_endpoint_requires_token(client):
+    c, dl, vault = client
+    r = c.post("/cmd/downloads/file", json={"path": str(dl / "a.pdf")})
+    assert r.status_code == 401
+
+
+def test_dismiss_endpoint_marks_seen(client):
+    c, dl, vault = client
+    src = dl / "a.pdf"; src.write_bytes(b"x")
+    import os; os.utime(src, (100.0, 100.0))
+    r = c.post("/cmd/downloads/dismiss", json={"path": str(src)}, headers={"X-Vesper-Token": "t"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert downloads.load_seen(vault.parent).get(str(src)) == 100.0
+    assert src.exists()              # dismiss never moves

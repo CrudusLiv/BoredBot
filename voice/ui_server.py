@@ -322,6 +322,49 @@ async def apps_revoke(body: _AppRevoke) -> JSONResponse:
     return JSONResponse({"ok": removed})
 
 
+class _DownloadAction(BaseModel):
+    path: str
+
+
+def _download_folders(conf: dict) -> list[str]:
+    from voice import downloads
+    return conf.get("downloads_watch_folders") or downloads.default_folders()
+
+
+@app.post("/cmd/downloads/file", dependencies=[Depends(_require_token)])
+async def downloads_file(body: _DownloadAction) -> JSONResponse:
+    from voice import config as cfg
+    from voice import downloads
+    conf = cfg.load()
+    folders = _download_folders(conf)
+    if not downloads.is_under(body.path, folders):
+        return JSONResponse({"error": "path is outside the watch folders"}, status_code=400)
+    vault = cfg.get_vault_dir()
+    if vault is None:
+        return JSONResponse({"error": "no vault configured"}, status_code=400)
+    result = downloads.file_candidate(body.path, folders, vault / "inbox")
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
+    downloads.mark_seen(cfg.get_data_dir(), body.path, 0.0)   # ensure never re-suggested
+    return JSONResponse(result)
+
+
+@app.post("/cmd/downloads/dismiss", dependencies=[Depends(_require_token)])
+async def downloads_dismiss(body: _DownloadAction) -> JSONResponse:
+    from pathlib import Path
+    from voice import config as cfg
+    from voice import downloads
+    conf = cfg.load()
+    if not downloads.is_under(body.path, _download_folders(conf)):
+        return JSONResponse({"error": "path is outside the watch folders"}, status_code=400)
+    try:
+        mtime = Path(body.path).stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    downloads.mark_seen(cfg.get_data_dir(), body.path, mtime)
+    return JSONResponse({"ok": True})
+
+
 # ── App-launch profiles ──────────────────────────────────────────────────────
 # UI-only CRUD (no voice-callable create/edit/delete — matches how app
 # approval itself has no voice path). GET is open; state-changing POSTs are
@@ -536,6 +579,7 @@ _SETTINGS_ALLOWED = {
     "confirm_timeout_seconds", "stream_replies", "catchup_briefing",
     "clap_enabled", "clap_threshold",
     "activity_awareness_enabled", "silence_when_running",
+    "downloads_triage_enabled",
 }
 
 
