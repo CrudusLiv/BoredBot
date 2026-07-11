@@ -64,3 +64,19 @@ def test_scan_new_resurfaces_changed_mtime(tmp_path):
 def test_scan_new_missing_folder_ignored(tmp_path):
     out = downloads.scan_new([str(tmp_path / "nope")], [".pdf"], seen={}, min_age_seconds=0, now=1000.0)
     assert out == []
+
+
+def test_seen_roundtrip(tmp_path):
+    downloads.mark_seen(tmp_path, "C:/D/a.pdf", 100.0)
+    downloads.mark_seen(tmp_path, "C:/D/b.pdf", 200.0)
+    seen = downloads.load_seen(tmp_path)
+    assert seen == {"C:/D/a.pdf": 100.0, "C:/D/b.pdf": 200.0}
+
+
+def test_load_seen_missing_returns_empty(tmp_path):
+    assert downloads.load_seen(tmp_path) == {}
+
+
+def test_load_seen_corrupt_returns_empty(tmp_path):
+    (tmp_path / downloads.SEEN_FILE).write_text("{not json", encoding="utf-8")
+    assert downloads.load_seen(tmp_path) == {}

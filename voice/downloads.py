@@ -49,3 +49,19 @@ def scan_new(folders: list[str], exts: list[str], seen: dict,
                 continue                  # vanished/locked mid-scan: skip
     out.sort(key=lambda c: c["path"])
     return out
+
+
+def load_seen(data_dir: Path) -> dict:
+    p = Path(data_dir) / SEEN_FILE
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def mark_seen(data_dir: Path, path: str, mtime: float) -> None:
+    seen = load_seen(data_dir)
+    seen[path] = mtime
+    p = Path(data_dir) / SEEN_FILE
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(seen, ensure_ascii=False), encoding="utf-8")
