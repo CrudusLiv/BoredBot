@@ -114,6 +114,12 @@ DEFAULTS: dict[str, Any] = {
     "build_watch_repo": "",
     "spaced_repetition_enabled": True,
     "review_reminder_time": "10:00",
+    # Downloads triage
+    "downloads_triage_enabled": False,     # opt-in: watch Downloads, suggest filing
+    "downloads_watch_folders": [],         # empty => resolves to [~/Downloads] at runtime
+    "downloads_watch_exts": [
+        ".pdf", ".pptx", ".ppt", ".docx", ".png", ".jpg", ".jpeg",
+    ],
     # Clap detector
     "clap_enabled": False,
     "clap_threshold": 0.7,
