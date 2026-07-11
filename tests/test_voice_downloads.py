@@ -1,5 +1,8 @@
+import os
 import time
 from pathlib import Path
+
+import pytest
 
 from voice import config as cfg
 from voice import downloads
@@ -127,3 +130,32 @@ def test_file_candidate_missing_source(tmp_path):
     inbox = tmp_path / "inbox"; inbox.mkdir()
     res = downloads.file_candidate(str(watch / "gone.pdf"), [str(watch)], inbox)
     assert res["ok"] is False
+
+
+def test_file_candidate_moves_resolved_target_not_out_of_folder_link(tmp_path):
+    # Guard against the resolved-vs-raw inconsistency: is_under() validates
+    # the RESOLVED path, so a symlink object that lives OUTSIDE the watch
+    # folder but whose target resolves INSIDE it passes the guard. The fix
+    # must then act on that same resolved (in-folder) target consistently —
+    # never on the raw out-of-folder link object. So the real target file
+    # gets consumed/moved, while the link object itself (outside the watch
+    # folder) is left exactly where it was, untouched.
+    watch = tmp_path / "dl"; watch.mkdir()
+    inbox = tmp_path / "inbox"; inbox.mkdir()
+    outside = tmp_path / "elsewhere"; outside.mkdir()
+    target = watch / "real.pdf"; target.write_bytes(b"secret")
+    link = outside / "link.pdf"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not permitted on this platform/privilege level")
+
+    res = downloads.file_candidate(str(link), [str(watch)], inbox)
+
+    assert res["ok"] is True
+    assert (inbox / "real.pdf").read_bytes() == b"secret"   # resolved target moved
+    assert not target.exists()                              # ...and gone from watch
+    assert os.path.lexists(link)                             # link object itself, outside
+                                                              # the watch folder, was never
+                                                              # moved/consumed by the action
+    assert not (inbox / "link.pdf").exists()

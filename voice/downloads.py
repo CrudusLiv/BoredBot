@@ -95,7 +95,10 @@ def _dest_path(inbox_dir: Path, name: str) -> Path:
 def file_candidate(path: str, folders: list[str], inbox_dir: Path) -> dict:
     if not is_under(path, folders):
         return {"ok": False, "error": "path is outside the watch folders"}
-    src = Path(path)
+    try:
+        src = Path(path).resolve(strict=False)
+    except OSError as e:
+        return {"ok": False, "error": f"could not resolve path: {e}"}
     if not src.is_file():
         return {"ok": False, "error": "source file not found"}
     inbox_dir = Path(inbox_dir)
