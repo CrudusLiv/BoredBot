@@ -119,3 +119,84 @@ def test_handle_query_recent_human(capsys):
     captured = capsys.readouterr()
     assert "Test Subject" in captured.out
     assert "sender@example.com" in captured.out
+
+
+# ---- get_body ---------------------------------------------------------------
+
+import base64
+
+
+def _b64(text: str) -> str:
+    return base64.urlsafe_b64encode(text.encode("utf-8")).decode("ascii")
+
+
+def _svc_for_body(payload: dict):
+    svc = MagicMock()
+    svc.users().messages().get().execute.return_value = {"id": "m1", "payload": payload}
+    return svc
+
+
+def test_get_body_prefers_text_plain():
+    import importlib
+    import integrations.gmail_int as gi
+    importlib.reload(gi)
+    payload = {
+        "mimeType": "multipart/alternative",
+        "parts": [
+            {"mimeType": "text/plain", "body": {"data": _b64("plain body")}},
+            {"mimeType": "text/html", "body": {"data": _b64("<p>html body</p>")}},
+        ],
+    }
+    with patch.object(gi, "_service", return_value=_svc_for_body(payload)):
+        assert gi.get_body("m1") == "plain body"
+
+
+def test_get_body_html_fallback_keeps_links():
+    import importlib
+    import integrations.gmail_int as gi
+    importlib.reload(gi)
+    html = ('<div>Software Engineer</div>'
+            '<div>Acme · KL</div>'
+            '<a href="https://example.com/job/1">View job</a>')
+    payload = {"mimeType": "text/html", "body": {"data": _b64(html)}}
+    with patch.object(gi, "_service", return_value=_svc_for_body(payload)):
+        text = gi.get_body("m1")
+    assert "Software Engineer" in text
+    assert "Acme · KL" in text
+    assert "<https://example.com/job/1>" in text
+    # block tags became line breaks: title and meta are separate lines
+    lines = text.splitlines()
+    assert "Software Engineer" in lines
+
+
+def test_get_body_nested_multipart():
+    import importlib
+    import integrations.gmail_int as gi
+    importlib.reload(gi)
+    payload = {
+        "mimeType": "multipart/mixed",
+        "parts": [{
+            "mimeType": "multipart/alternative",
+            "parts": [{"mimeType": "text/plain", "body": {"data": _b64("nested")}}],
+        }],
+    }
+    with patch.object(gi, "_service", return_value=_svc_for_body(payload)):
+        assert gi.get_body("m1") == "nested"
+
+
+def test_get_body_service_unavailable():
+    import importlib
+    import integrations.gmail_int as gi
+    importlib.reload(gi)
+    with patch.object(gi, "_service", return_value=None):
+        assert gi.get_body("m1") == ""
+
+
+def test_get_body_api_error_returns_empty():
+    import importlib
+    import integrations.gmail_int as gi
+    importlib.reload(gi)
+    svc = MagicMock()
+    svc.users().messages().get().execute.side_effect = RuntimeError("boom")
+    with patch.object(gi, "_service", return_value=svc):
+        assert gi.get_body("m1") == ""
