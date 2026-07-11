@@ -78,7 +78,7 @@ def _set_output_suppressed(value: bool) -> None:
     _OUTPUT_SUPPRESSED = bool(value)
 
 
-def _post(text: str, level: str = "INFO") -> None:
+def _post(text: str, level: str = "INFO", meta: dict | None = None) -> None:
     from voice import config as cfg
     entry = {
         "id": uuid.uuid4().hex[:12],
@@ -87,6 +87,8 @@ def _post(text: str, level: str = "INFO") -> None:
         "level": level,
         "read": False,
     }
+    if meta:
+        entry["meta"] = meta
     notices = _notices_path()
     notices.parent.mkdir(parents=True, exist_ok=True)
     with notices.open("a", encoding="utf-8") as fh:
@@ -880,8 +882,35 @@ class Heartbeat:
         except Exception as _e:
             print(f"[heartbeat] inbox processing error: {_e}", flush=True)
 
+    def _check_downloads(self) -> None:
+        """Suggest filing new Downloads files into the inbox. Never moves —
+        the move happens only via the /cmd/downloads/file endpoint on approval."""
+        from voice import config as cfg
+        from voice import downloads
+        conf = cfg.load()
+        if not conf.get("downloads_triage_enabled", False):
+            return
+        if cfg.get_vault_dir() is None:
+            return                       # nowhere to file to
+        try:
+            folders = conf.get("downloads_watch_folders") or downloads.default_folders()
+            exts = conf.get("downloads_watch_exts", downloads.DEFAULT_EXTS)
+            data_dir = cfg.get_data_dir()
+            seen = downloads.load_seen(data_dir)
+            for cand in downloads.scan_new(folders, exts, seen):
+                _post(
+                    f"You downloaded {cand['name']} — file it into the inbox?",
+                    level="INFO",
+                    meta={"kind": "download_suggestion", "path": cand["path"],
+                          "name": cand["name"]},
+                )
+                downloads.mark_seen(data_dir, cand["path"], cand["mtime"])
+        except Exception as _e:
+            print(f"[heartbeat] downloads triage error: {_e}", flush=True)
+
     def _run_scheduled(self) -> None:
-        for task in (self._process_inbox, self._morning_briefing, self._evening_wrap,
+        for task in (self._process_inbox, self._check_downloads,
+                     self._morning_briefing, self._evening_wrap,
                      self._check_nudges, self._check_profile_triggers,
                      self._check_calendar_sync, self._check_github_digest,
                      self._check_deadline_thresholds, self._check_ambient_notices,

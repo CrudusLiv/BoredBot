@@ -6,6 +6,8 @@ import pytest
 
 from voice import config as cfg
 from voice import downloads
+from voice import heartbeat as hb_mod
+from voice.heartbeat import Heartbeat
 
 
 def test_config_has_downloads_defaults():
@@ -159,3 +161,61 @@ def test_file_candidate_moves_resolved_target_not_out_of_folder_link(tmp_path):
                                                               # the watch folder, was never
                                                               # moved/consumed by the action
     assert not (inbox / "link.pdf").exists()
+
+
+DL_CONF = {
+    "timezone_offset_hours": 8,
+    "downloads_triage_enabled": True,
+    "downloads_watch_folders": [],       # set per-test
+    "downloads_watch_exts": [".pdf"],
+}
+
+
+@pytest.fixture
+def dl_env(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(cfg, "get_vault_dir", lambda: tmp_path)   # non-None => filing allowed
+    posts: list[dict] = []
+    monkeypatch.setattr(hb_mod, "_post",
+                        lambda text, level="INFO", meta=None: posts.append({"text": text, "meta": meta}))
+    return posts
+
+
+def _hb() -> Heartbeat:
+    return Heartbeat(interval_minutes=30, idle_fn=lambda: None)
+
+
+def test_check_downloads_disabled_no_posts(dl_env, tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "load", lambda: dict(DL_CONF, downloads_triage_enabled=False))
+    _hb()._check_downloads()
+    assert dl_env == []
+
+
+def test_check_downloads_posts_suggestion(dl_env, tmp_path, monkeypatch):
+    dl = tmp_path / "dl"; dl.mkdir()
+    f = dl / "lecture.pdf"; f.write_bytes(b"x")
+    import os; os.utime(f, (100.0, 100.0))
+    monkeypatch.setattr(cfg, "load", lambda: dict(DL_CONF, downloads_watch_folders=[str(dl)]))
+    _hb()._check_downloads()
+    assert len(dl_env) == 1
+    assert "lecture.pdf" in dl_env[0]["text"]
+    assert dl_env[0]["meta"]["kind"] == "download_suggestion"
+    assert dl_env[0]["meta"]["path"] == str(f)
+
+
+def test_check_downloads_dedups_second_tick(dl_env, tmp_path, monkeypatch):
+    dl = tmp_path / "dl"; dl.mkdir()
+    f = dl / "lecture.pdf"; f.write_bytes(b"x")
+    import os; os.utime(f, (100.0, 100.0))
+    monkeypatch.setattr(cfg, "load", lambda: dict(DL_CONF, downloads_watch_folders=[str(dl)]))
+    hb = _hb()
+    hb._check_downloads(); hb._check_downloads()
+    assert len(dl_env) == 1          # second tick: already seen
+
+
+def test_check_downloads_survives_scan_error(dl_env, tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "load", lambda: dict(DL_CONF, downloads_watch_folders=[str(tmp_path)]))
+    from voice import downloads
+    monkeypatch.setattr(downloads, "scan_new", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    _hb()._check_downloads()         # must not raise
+    assert dl_env == []
