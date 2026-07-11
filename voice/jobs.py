@@ -25,7 +25,7 @@ def load_jobs(data_dir: Path) -> list[dict]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         return data if isinstance(data, list) else []
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
         return []
 
 

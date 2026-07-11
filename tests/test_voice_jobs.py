@@ -24,6 +24,11 @@ def test_load_jobs_corrupt_returns_empty(tmp_path):
     assert jobs.load_jobs(tmp_path) == []
 
 
+def test_load_jobs_invalid_utf8_returns_empty(tmp_path):
+    (tmp_path / jobs.JOBS_FILE).write_bytes(b"\xff\xfe\x00garbage")
+    assert jobs.load_jobs(tmp_path) == []
+
+
 def test_add_postings_roundtrip(tmp_path):
     added = jobs.add_postings(tmp_path, [P1, P2], now="2026-07-11T12:00:00+08:00")
     assert added == 2
