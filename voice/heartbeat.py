@@ -65,6 +65,19 @@ def _trim_notices(notices: Path) -> None:
         pass  # trimming is best-effort; never block posting a notice
 
 
+# Output suppression — set True by the heartbeat while a "busy" process
+# (silence_when_running) is active. _post() then skips the intrusive OS tray
+# toast and _speak() skips proactive speech, while the notice still lands in the
+# jsonl log + web UI so a digest can surface it on return. Module-level because
+# _post is a module function, not a Heartbeat method.
+_OUTPUT_SUPPRESSED = False
+
+
+def _set_output_suppressed(value: bool) -> None:
+    global _OUTPUT_SUPPRESSED
+    _OUTPUT_SUPPRESSED = bool(value)
+
+
 def _post(text: str, level: str = "INFO") -> None:
     from voice import config as cfg
     entry = {
@@ -84,12 +97,13 @@ def _post(text: str, level: str = "INFO") -> None:
         ui_server.post_event({"type": "notice", **entry})
     except Exception:
         pass
-    try:
-        from voice import tray
-        title = "Vesper [!]" if level == "URGENT" else "Vesper"
-        tray.notify(title, text)
-    except Exception:
-        pass
+    if not _OUTPUT_SUPPRESSED:
+        try:
+            from voice import tray
+            title = "Vesper [!]" if level == "URGENT" else "Vesper"
+            tray.notify(title, text)
+        except Exception:
+            pass
 
 
 def _parse_date(value) -> date | None:
@@ -221,6 +235,15 @@ class Heartbeat:
         # persists so a restart doesn't immediately re-fire the notice.
         self._away_since: datetime | None = None
 
+        # Activity awareness (process-based silence + reactive triggers). All
+        # in-memory — a restart just re-baselines on the next poll, same as
+        # _away_since. _prev_procs starts empty so the first poll baselines
+        # rather than firing "launched" triggers for already-running apps.
+        self._prev_procs: set[str] = set()
+        self._busy: bool = False
+        self._busy_since: datetime | None = None
+        self._busy_proc: str | None = None
+
         # Once-per-day guards persist to heartbeat_state.json so a restart
         # neither re-speaks an already-delivered briefing nor drops a missed
         # one — catch-up happens in _morning_briefing when a past-due date
@@ -281,6 +304,8 @@ class Heartbeat:
             print(f"[heartbeat] state save failed: {_e}", flush=True)
 
     def _speak(self, text: str) -> None:
+        if _OUTPUT_SUPPRESSED:
+            return  # busy (silence_when_running active) — hold proactive speech
         if self._speak_queue is not None and self._proactive_tts:
             try:
                 self._speak_queue.put_nowait(text)
@@ -310,16 +335,24 @@ class Heartbeat:
 
         while not self._stop.wait(self._context_poll_seconds):
             try:
-                if self._is_quiet() or killswitch.is_paused():
+                if killswitch.is_paused():
                     continue
                 self._poll_once()
             except Exception as _e:
                 print(f"[heartbeat] tick error: {_e}", flush=True)
 
     def _poll_once(self) -> None:
-        """One fast-cadence poll: idle check every time; the expensive slow
-        tick (calendar/email/deadlines + scheduled briefings) only when the
-        original heartbeat interval has elapsed."""
+        """One fast-cadence poll. Activity awareness (the silent busy-state gate
+        + live UI indicator) runs 24/7 so it works even during quiet hours.
+        Idle-return and the expensive slow tick (calendar/email/deadlines +
+        scheduled briefings) stay gated to non-quiet hours, so Vesper still never
+        speaks, toasts, or nudges at night."""
+        try:
+            self._check_activity()
+        except Exception as _e:
+            print(f"[heartbeat] activity check error: {_e}", flush=True)
+        if self._is_quiet():
+            return
         try:
             self._check_idle_return()
         except Exception as _e:
@@ -414,6 +447,121 @@ class Heartbeat:
                     _post(f"{profile.get('label', profile_id)}: {'; '.join(result['errors'])}", level="URGENT")
             except Exception as exc:
                 print(f"[heartbeat] context profile error for {profile_id}: {exc}", flush=True)
+
+    def _check_activity(self) -> None:
+        """One process scan per fast poll, feeding two consumers: the busy-state
+        silence gate and the reactive process triggers. Opt-in and dormant until
+        activity_awareness_enabled. Fails open (activity.running_processes never
+        raises); when disabled we skip entirely and leave _prev_procs stale so a
+        later enable re-baselines instead of firing on already-open apps."""
+        from voice import activity, config as cfg
+        conf = cfg.load()
+        if not conf.get("activity_awareness_enabled", False):
+            return
+        procs = activity.running_processes()
+        self._update_busy_state(conf, procs)
+        self._check_process_triggers(conf, procs)
+        self._prev_procs = procs
+
+    def _update_busy_state(self, conf: dict, procs: set[str]) -> None:
+        """Enter/exit a 'busy' state when a silence_when_running process appears
+        or disappears. Entering flips the module output-suppression flag (holds
+        proactive voice + tray toasts); exiting clears it and delivers a digest
+        of what accrued while busy."""
+        from voice import activity
+        names = conf.get("silence_when_running") or []
+        hits = activity.matched(procs, names)
+        now = datetime.now(timezone.utc)
+        if hits and not self._busy:
+            self._busy = True
+            self._busy_since = now
+            self._busy_proc = sorted(hits)[0]
+            _set_output_suppressed(True)
+            self._broadcast_busy(True)
+        elif hits and self._busy:
+            new_proc = sorted(hits)[0]  # track surviving proc if the first closed
+            if new_proc != self._busy_proc:
+                self._busy_proc = new_proc
+                self._broadcast_busy(True)  # only on change, not every poll
+        elif not hits and self._busy:
+            proc = self._busy_proc
+            self._busy = False
+            self._busy_proc = None
+            self._busy_since = None
+            _set_output_suppressed(False)
+            self._broadcast_busy(False)
+            self._deliver_busy_digest(conf, proc)
+
+    def _broadcast_busy(self, busy: bool) -> None:
+        """Push the busy/silenced state to the orb over the WebSocket so it can
+        show a live indicator. Fails open — a UI hiccup must never break the
+        heartbeat (same contract as _post)."""
+        try:
+            from voice import ui_server
+            ui_server.post_event({
+                "type": "busy_state",
+                "busy": busy,
+                "proc": self._busy_proc if busy else None,
+            })
+        except Exception:
+            pass
+
+    def _deliver_busy_digest(self, conf: dict, proc: str | None) -> None:
+        """On return from a busy stretch, surface the notices that were held.
+        Silent when nothing accrued — no point announcing a return with no news.
+        Runs only after suppression is cleared so the digest itself is spoken."""
+        if not conf.get("activity_awareness_enabled", False):
+            return
+        if self._is_quiet():
+            return  # busy state stays tracked + shown live, but no spoken digest at night
+        unread = _count_unread()
+        if not unread:
+            return
+        label = proc or "that app"
+        text = (f"You're back from {label} — {unread} "
+                f"notice{'s' if unread != 1 else ''} waiting.")
+        self._speak(text)
+        _post(text)
+
+    def _check_process_triggers(self, conf: dict, procs: set[str]) -> None:
+        """Fire profiles with a `process` trigger. `event: "launched"` is
+        edge-triggered on a newly-appeared exe (procs - prev), naturally firing
+        once per launch; `event: "running"` is level-triggered while the exe is
+        present, guarded by the profile's own 30-min last_fired cooldown. Calls
+        the shared un-gated profiles.activate() like the time/context triggers."""
+        from voice import profiles
+        now = datetime.now(timezone.utc)
+        newly = (procs - self._prev_procs) if self._prev_procs else set()
+        for profile_id, profile in profiles.load().items():
+            try:
+                trig = profile.get("trigger") or {}
+                if trig.get("type") != "process":
+                    continue
+                exe = (trig.get("exe") or "").lower()
+                if not exe:
+                    continue
+                if trig.get("event", "launched") == "launched":
+                    if exe not in newly:
+                        continue
+                else:  # "running"
+                    if exe not in procs:
+                        continue
+                    fired_dt = _parse_dt(profile.get("last_fired"))
+                    if fired_dt is not None and now - fired_dt < timedelta(minutes=30):
+                        continue
+            except (AttributeError, TypeError, ValueError):
+                continue  # malformed profile — skip, don't block later ones
+            try:
+                result = profiles.activate(profile_id)
+                if result.get("launched"):
+                    label = result.get("profile", profile_id)
+                    text = f"{label} started — launched {', '.join(result['launched'])}."
+                    self._speak(text)
+                    _post(text)
+                if result.get("errors"):
+                    _post(f"{profile.get('label', profile_id)}: {'; '.join(result['errors'])}", level="URGENT")
+            except Exception as exc:
+                print(f"[heartbeat] process trigger error for {profile_id}: {exc}", flush=True)
 
     def _check_calendar_sync(self) -> None:
         """Push DEADLINES.md rows / gcal: tags to Google Calendar (migrated

@@ -124,7 +124,7 @@ Place `google_credentials.json` at `.claude/data/google_credentials.json`. The t
 
 ### Settings Management
 
-User settings (active hours, feature toggles, heartbeat interval) are stored in `.claude/data/tray_settings.json`. The scheduler reads the interval at startup; feature toggles are honored by each heartbeat task.
+User settings (quiet hours, feature toggles, heartbeat interval, activity awareness) live in `voice/config.json`, merged over `DEFAULTS` in `voice/config.py` by `config.load()` (an installed `%APPDATA%\Vesper\config.json` wins over the repo copy). Every proactive capability has an independent `*_enabled` flag each heartbeat task checks at the top. Activity awareness adds `activity_awareness_enabled` (opt-in) + `silence_when_running` (list of exe names). There is no `tray_settings.json`.
 
 ## Vault write rules
 

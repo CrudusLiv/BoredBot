@@ -63,6 +63,9 @@ DEFAULTS: dict[str, Any] = {
     "idle_return_enabled": True,
     "idle_return_threshold_minutes": 20,
     "idle_return_cooldown_minutes": 15,
+    # Activity awareness (process-based silence + reactive triggers)
+    "activity_awareness_enabled": False,   # opt-in; dormant until enabled
+    "silence_when_running": [],            # lowercase exe names, e.g. ["zoom.exe", "teams.exe"]
     # UI
     "ui_enabled": False,
     "ui_port": 7070,

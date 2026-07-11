@@ -25,6 +25,13 @@ optional `min_idle_minutes` — fired by heartbeat.py's
 _check_context_profiles() when the user returns from an idle stretch at
 least that long. Time triggers are handled separately in
 _check_profile_triggers(), which still skips anything but "time".
+
+`trigger.type` may also be "process" with `exe: "<name>.exe"` and
+`event: "launched" | "running"` — fired by heartbeat.py's
+_check_process_triggers() from the per-poll process scan. "launched" fires
+once when the exe first appears; "running" fires while it is present, with a
+30-min per-profile cooldown. create() stores any trigger dict as-is, so no
+validation change is needed here.
 """
 from __future__ import annotations
 

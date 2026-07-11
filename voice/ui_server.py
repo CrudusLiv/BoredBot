@@ -535,6 +535,7 @@ _SETTINGS_ALLOWED = {
     "ui_port", "quiet_hours_start", "quiet_hours_end", "proactive_tts",
     "confirm_timeout_seconds", "stream_replies", "catchup_briefing",
     "clap_enabled", "clap_threshold",
+    "activity_awareness_enabled", "silence_when_running",
 }
 
 

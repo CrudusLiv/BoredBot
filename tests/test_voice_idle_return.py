@@ -17,6 +17,11 @@ CONF = {
     "idle_return_enabled": True,
     "idle_return_threshold_minutes": 20,
     "idle_return_cooldown_minutes": 15,
+    # start == end => is_quiet_hours() always False, so the slow-tick cadence
+    # tests are deterministic now that _poll_once gates idle-return + slow tick
+    # behind quiet hours.
+    "quiet_hours_start": "00:00",
+    "quiet_hours_end": "00:00",
 }
 
 
