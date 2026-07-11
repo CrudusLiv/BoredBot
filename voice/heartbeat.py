@@ -210,6 +210,58 @@ def _tick() -> None:
         _post(text)
 
 
+def process_inbox_once() -> None:
+    """Run one inbox-processing pass immediately (outside the heartbeat's own
+    tick cadence). Shared by Heartbeat._process_inbox and the downloads-triage
+    file endpoint, so approving a download doesn't wait for the next slow tick."""
+    from voice import config as cfg
+    conf = cfg.load()
+    if not conf.get("inbox_processing_enabled", True):
+        return
+    if cfg.get_vault_dir() is None:
+        return
+    try:
+        import sys
+        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+        from core import inbox, deadlines  # type: ignore
+
+        summaries = inbox.process_new_files()
+        all_deadlines: list[dict] = []
+        for summary in summaries:
+            stype = summary.get("type")
+            if stype == "lecture":
+                label = "Lecture summarised"
+            elif stype == "screenshot":
+                label = "Screenshot OCR'd"
+            else:
+                label = "Project filed"
+            bucket = summary.get("name", "")
+            if summary.get("subcategory"):
+                bucket += f" / {summary['subcategory']}"
+            title = summary.get("title", "")
+            _post(f"{label}: {bucket} — {title}" if bucket else f"{label}: {title}")
+            if summary.get("roadmap_notice"):
+                _post(summary["roadmap_notice"])
+            if summary.get("type") == "lecture":
+                try:
+                    from agents import quiz_generator  # type: ignore
+                    from voice import spaced_repetition as sr
+                    cards = quiz_generator.run(from_path=str(summary["path"]))
+                    if cards:
+                        sr.add_cards(summary.get("name", ""), cards)
+                except Exception as _e:
+                    print(f"[heartbeat] quiz generation error: {_e}", flush=True)
+            all_deadlines.extend(summary.get("deadlines") or [])
+
+        promoted = deadlines.promote(all_deadlines)
+        if promoted:
+            _post(f"Promoted {promoted} deadline{'s' if promoted != 1 else ''} to DEADLINES.md")
+
+        inbox.refresh_daily_timeline()
+    except Exception as _e:
+        print(f"[heartbeat] inbox processing error: {_e}", flush=True)
+
+
 class Heartbeat:
     """Background daemon thread. Calls _tick() each interval and schedules
     proactive spoken briefings when speak_queue is provided."""
@@ -835,52 +887,7 @@ class Heartbeat:
         refresh the daily-log timeline (migrated from the old heartbeat's
         top-of-tick inbox step — inbox.py's logic is unchanged; only the
         notify call for each summary is new)."""
-        from voice import config as cfg
-        conf = cfg.load()
-        if not conf.get("inbox_processing_enabled", True):
-            return
-        if cfg.get_vault_dir() is None:
-            return
-        try:
-            import sys
-            sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-            from core import inbox, deadlines  # type: ignore
-
-            summaries = inbox.process_new_files()
-            all_deadlines: list[dict] = []
-            for summary in summaries:
-                stype = summary.get("type")
-                if stype == "lecture":
-                    label = "Lecture summarised"
-                elif stype == "screenshot":
-                    label = "Screenshot OCR'd"
-                else:
-                    label = "Project filed"
-                bucket = summary.get("name", "")
-                if summary.get("subcategory"):
-                    bucket += f" / {summary['subcategory']}"
-                title = summary.get("title", "")
-                _post(f"{label}: {bucket} — {title}" if bucket else f"{label}: {title}")
-                if summary.get("roadmap_notice"):
-                    _post(summary["roadmap_notice"])
-                if summary.get("type") == "lecture":
-                    try:
-                        from agents import quiz_generator  # type: ignore
-                        from voice import spaced_repetition as sr
-                        cards = quiz_generator.run(from_path=str(summary["path"]))
-                        if cards:
-                            sr.add_cards(summary.get("name", ""), cards)
-                    except Exception as _e:
-                        print(f"[heartbeat] quiz generation error: {_e}", flush=True)
-                all_deadlines.extend(summary.get("deadlines") or [])
-
-            promoted = deadlines.promote(all_deadlines)
-            if promoted:
-                _post(f"Promoted {promoted} deadline{'s' if promoted != 1 else ''} to DEADLINES.md")
-
-            inbox.refresh_daily_timeline()
-        except Exception as _e:
-            print(f"[heartbeat] inbox processing error: {_e}", flush=True)
+        process_inbox_once()
 
     def _check_downloads(self) -> None:
         """Suggest filing new Downloads files into the inbox. Never moves —

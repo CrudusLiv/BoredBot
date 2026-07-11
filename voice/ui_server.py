@@ -346,6 +346,11 @@ async def downloads_file(body: _DownloadAction) -> JSONResponse:
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     downloads.mark_seen(cfg.get_data_dir(), body.path, 0.0)   # ensure never re-suggested
+    try:
+        from voice import heartbeat
+        heartbeat.process_inbox_once()   # don't wait for the next slow tick
+    except Exception as _e:
+        print(f"[ui_server] inbox processing after file error: {_e}", flush=True)
     return JSONResponse(result)
 
 
