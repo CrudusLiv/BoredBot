@@ -77,3 +77,118 @@ def test_get_job(tmp_path):
     jid = jobs.job_id(P1["link"])
     assert jobs.get_job(tmp_path, jid)["company"] == "Acme"
     assert jobs.get_job(tmp_path, "nope") is None
+
+
+# ---- parsers ----------------------------------------------------------------
+
+LINKEDIN_BODY = """\
+Your job alert for software engineer
+
+Software Engineer
+Acme Sdn Bhd · Kuala Lumpur, Malaysia (Remote)
+View job <https://www.linkedin.com/comm/jobs/view/4012345678?trk=abc>
+
+Junior Backend Developer
+Beta Tech · Petaling Jaya, Selangor
+View job <https://www.linkedin.com/comm/jobs/view/4098765432?trk=def>
+
+Unsubscribe <https://www.linkedin.com/e/unsub>
+"""
+
+INDEED_BODY = """\
+New jobs for: developer
+
+Full Stack Developer
+Gamma Solutions
+Kuala Lumpur
+<https://my.indeed.com/rc/clk?jk=abc123&from=ja>
+
+DevOps Engineer (Hybrid)
+Delta Corp
+Cyberjaya
+<https://my.indeed.com/rc/clk?jk=def456&from=ja>
+"""
+
+GLASSDOOR_BODY = """\
+Jobs for you
+
+Data Engineer
+Epsilon Analytics
+Remote - Malaysia
+<https://www.glassdoor.com/job-listing/data-engineer-JV_123.htm?src=alert>
+"""
+
+
+def test_parse_linkedin_digest():
+    out = jobs.parse_digest("linkedin.com", LINKEDIN_BODY)
+    assert len(out) == 2
+    a = out[0]
+    assert a["title"] == "Software Engineer"
+    assert a["company"] == "Acme Sdn Bhd"
+    assert a["location"] == "Kuala Lumpur, Malaysia"
+    assert a["remote"] == "remote"
+    assert a["link"] == "https://www.linkedin.com/comm/jobs/view/4012345678"
+    assert a["source"] == "linkedin.com"
+    b = out[1]
+    assert b["title"] == "Junior Backend Developer"
+    assert b["company"] == "Beta Tech"
+    assert b["remote"] == ""
+
+
+def test_parse_linkedin_strips_tracking_query():
+    out = jobs.parse_digest("linkedin.com", LINKEDIN_BODY)
+    assert all("?" not in p["link"] for p in out)
+
+
+def test_parse_indeed_digest():
+    out = jobs.parse_digest("indeed.com", INDEED_BODY)
+    assert len(out) == 2
+    a = out[0]
+    assert a["title"] == "Full Stack Developer"
+    assert a["company"] == "Gamma Solutions"
+    assert a["location"] == "Kuala Lumpur"
+    assert a["link"] == "https://my.indeed.com/rc/clk?jk=abc123&from=ja"
+    b = out[1]
+    assert b["title"] == "DevOps Engineer (Hybrid)"
+    assert b["remote"] == "hybrid"
+
+
+def test_parse_glassdoor_digest():
+    out = jobs.parse_digest("glassdoor.com", GLASSDOOR_BODY)
+    assert len(out) == 1
+    assert out[0]["title"] == "Data Engineer"
+    assert out[0]["company"] == "Epsilon Analytics"
+    assert out[0]["remote"] == "remote"
+
+
+def test_parse_digest_unknown_source():
+    assert jobs.parse_digest("example.com", LINKEDIN_BODY) == []
+
+
+def test_parse_digest_duplicate_link_once():
+    body = ("Software Engineer\nAcme · KL\n"
+            "View job <https://www.linkedin.com/comm/jobs/view/1?a=1>\n"
+            "Same again\nAcme · KL\n"
+            "View job <https://www.linkedin.com/comm/jobs/view/1?a=2>\n")
+    out = jobs.parse_digest("linkedin.com", body)
+    assert len(out) == 1
+
+
+def test_parse_digest_link_without_title_skipped():
+    body = "<https://www.linkedin.com/comm/jobs/view/1>\n"
+    assert jobs.parse_digest("linkedin.com", body) == []
+
+
+def test_parse_digest_garbage_returns_empty():
+    assert jobs.parse_digest("linkedin.com", "hello\nworld\n") == []
+
+
+def test_match_sender():
+    senders = ["linkedin.com", "indeed.com", "glassdoor.com"]
+    assert jobs.match_sender(
+        "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>", senders) == "linkedin.com"
+    assert jobs.match_sender(
+        "Indeed <alert@match.indeed.com>", senders) == "indeed.com"   # subdomain
+    assert jobs.match_sender("Mom <mom@example.com>", senders) is None
+    assert jobs.match_sender("", senders) is None
+    assert jobs.match_sender("no-angle-brackets", senders) is None
