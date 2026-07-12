@@ -193,3 +193,27 @@ def parse_digest(source: str, text: str) -> list[dict]:
         out.append({"title": title, "company": company, "location": location,
                     "remote": remote, "link": link, "source": source})
     return out
+
+
+# ---- scan pass (the only Gmail-touching function) -----------------------------
+
+def scan_alerts(data_dir: Path, conf: dict) -> int:
+    """One silent scan: list recent messages, keep those from configured
+    job-alert senders, parse each body, insert new postings. One email's
+    failure never aborts the batch. Returns the number of postings added."""
+    import voice  # noqa: F401 — sys.path setup for .claude/scripts
+    from integrations import gmail_int  # type: ignore
+    senders = conf.get("job_alert_senders", [])
+    days = int(conf.get("job_alert_lookback_days", 3))
+    added = 0
+    for msg in gmail_int.list_recent(days=days, max_results=50):
+        source = match_sender(msg.get("from", ""), senders)
+        if not source:
+            continue
+        try:
+            body = gmail_int.get_body(msg["id"])
+            added += add_postings(data_dir, parse_digest(source, body))
+        except Exception as exc:
+            print(f"[jobs] digest parse failed for {msg.get('id')}: {exc}", flush=True)
+            continue
+    return added

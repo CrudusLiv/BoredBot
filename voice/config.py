@@ -120,6 +120,10 @@ DEFAULTS: dict[str, Any] = {
     "downloads_watch_exts": [
         ".pdf", ".pptx", ".ppt", ".docx", ".png", ".jpg", ".jpeg",
     ],
+    # Job alerts (email-digest job tracker; Jobs panel in the orb UI)
+    "job_alerts_enabled": False,           # opt-in: scan Gmail for job-alert digests
+    "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],
+    "job_alert_lookback_days": 3,
     # Clap detector
     "clap_enabled": False,
     "clap_threshold": 0.7,

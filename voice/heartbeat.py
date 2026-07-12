@@ -915,8 +915,23 @@ class Heartbeat:
         except Exception as _e:
             print(f"[heartbeat] downloads triage error: {_e}", flush=True)
 
+    def _check_job_alerts(self) -> None:
+        """Scan Gmail for job-alert digests and accumulate postings into the
+        jobs store. Silent by design — no notice fires; the Jobs panel in the
+        orb UI is checked on the user's own schedule."""
+        from voice import config as cfg
+        from voice import jobs
+        conf = cfg.load()
+        if not conf.get("job_alerts_enabled", False):
+            return
+        try:
+            jobs.scan_alerts(cfg.get_data_dir(), conf)
+        except Exception as _e:
+            print(f"[heartbeat] job alerts error: {_e}", flush=True)
+
     def _run_scheduled(self) -> None:
         for task in (self._process_inbox, self._check_downloads,
+                     self._check_job_alerts,
                      self._morning_briefing, self._evening_wrap,
                      self._check_nudges, self._check_profile_triggers,
                      self._check_calendar_sync, self._check_github_digest,

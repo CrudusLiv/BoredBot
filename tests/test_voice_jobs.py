@@ -202,3 +202,120 @@ def test_parse_digest_normalizes_onsite():
     assert len(out) == 1
     assert out[0]["remote"] == "onsite"
     assert out[0]["location"] == "Kuala Lumpur"   # trailing (On-site) stripped
+
+
+# ---- scan_alerts ------------------------------------------------------------
+
+class _FakeGmail:
+    def __init__(self, msgs, bodies, fail_body_ids=()):
+        self._msgs, self._bodies = msgs, bodies
+        self._fail = set(fail_body_ids)
+        self.list_calls = []
+
+    def list_recent(self, days=7, max_results=30):
+        self.list_calls.append({"days": days, "max_results": max_results})
+        return self._msgs
+
+    def get_body(self, msg_id):
+        if msg_id in self._fail:
+            raise RuntimeError("boom")
+        return self._bodies.get(msg_id, "")
+
+
+JOBS_CONF = {
+    "job_alerts_enabled": True,
+    "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],
+    "job_alert_lookback_days": 3,
+}
+
+
+def _patch_gmail(monkeypatch, fake):
+    import integrations.gmail_int as gi
+    monkeypatch.setattr(gi, "list_recent", fake.list_recent)
+    monkeypatch.setattr(gi, "get_body", fake.get_body)
+
+
+def test_scan_alerts_adds_from_matching_sender(tmp_path, monkeypatch):
+    fake = _FakeGmail(
+        [{"id": "m1", "from": "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>"},
+         {"id": "m2", "from": "Mom <mom@example.com>"}],
+        {"m1": LINKEDIN_BODY},
+    )
+    _patch_gmail(monkeypatch, fake)
+    added = jobs.scan_alerts(tmp_path, JOBS_CONF)
+    assert added == 2
+    assert fake.list_calls == [{"days": 3, "max_results": 50}]
+    assert len(jobs.load_jobs(tmp_path)) == 2
+
+
+def test_scan_alerts_one_bad_email_does_not_abort(tmp_path, monkeypatch):
+    fake = _FakeGmail(
+        [{"id": "bad", "from": "a@indeed.com"},
+         {"id": "ok", "from": "b@linkedin.com"}],
+        {"ok": LINKEDIN_BODY}, fail_body_ids={"bad"},
+    )
+    _patch_gmail(monkeypatch, fake)
+    assert jobs.scan_alerts(tmp_path, JOBS_CONF) == 2   # 'ok' still parsed
+
+
+def test_scan_alerts_second_pass_adds_nothing(tmp_path, monkeypatch):
+    fake = _FakeGmail([{"id": "m1", "from": "x@linkedin.com"}], {"m1": LINKEDIN_BODY})
+    _patch_gmail(monkeypatch, fake)
+    assert jobs.scan_alerts(tmp_path, JOBS_CONF) == 2
+    assert jobs.scan_alerts(tmp_path, JOBS_CONF) == 0
+
+
+# ---- config defaults + heartbeat gate ----------------------------------------
+
+from voice import config as cfg
+from voice.heartbeat import Heartbeat
+
+
+def test_config_job_alert_defaults():
+    # assert on DEFAULTS, not load() — the installed user config merges into
+    # load() and would make this flaky on a machine with the feature enabled
+    assert cfg.DEFAULTS["job_alerts_enabled"] is False
+    assert cfg.DEFAULTS["job_alert_senders"] == ["linkedin.com", "indeed.com", "glassdoor.com"]
+    assert cfg.DEFAULTS["job_alert_lookback_days"] == 3
+
+
+def _hb() -> Heartbeat:
+    return Heartbeat(interval_minutes=30, idle_fn=lambda: None)
+
+
+def test_check_job_alerts_disabled_no_scan(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "load", lambda: dict(JOBS_CONF, job_alerts_enabled=False))
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    calls = []
+    monkeypatch.setattr(jobs, "scan_alerts", lambda *a: calls.append(a))
+    _hb()._check_job_alerts()
+    assert calls == []
+
+
+def test_check_job_alerts_enabled_scans_silently(tmp_path, monkeypatch):
+    import voice.heartbeat as hb_mod
+    monkeypatch.setattr(cfg, "load", lambda: dict(JOBS_CONF))
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    posts = []
+    monkeypatch.setattr(hb_mod, "_post",
+                        lambda text, level="INFO", meta=None: posts.append(text))
+    calls = []
+    monkeypatch.setattr(jobs, "scan_alerts", lambda d, c: calls.append(d) or 5)
+    _hb()._check_job_alerts()
+    assert calls == [tmp_path]
+    assert posts == []                    # silent: no notice even when jobs found
+
+
+def test_check_job_alerts_survives_scan_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(cfg, "load", lambda: dict(JOBS_CONF))
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(jobs, "scan_alerts",
+                        lambda *a: (_ for _ in ()).throw(RuntimeError("gmail down")))
+    _hb()._check_job_alerts()             # must not raise
+
+
+def test_check_job_alerts_registered_in_scheduled():
+    hb = _hb()
+    import inspect
+    src = inspect.getsource(hb._run_scheduled)
+    assert "_check_job_alerts" in src
