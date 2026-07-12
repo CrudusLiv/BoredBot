@@ -481,17 +481,8 @@ async def calendar_events() -> JSONResponse:
         try:
             import sys
             sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-            from integrations.gcal_int import handle_query  # type: ignore
-            result = handle_query(["upcoming", "--days", "7", "--json"])
-            if isinstance(result, str):
-                import json as _j
-                try:
-                    return _j.loads(result)
-                except Exception:
-                    return {"events": [], "raw": result}
-            if isinstance(result, list):
-                return {"events": result}
-            return result if isinstance(result, dict) else {"events": []}
+            from integrations.gcal_int import upcoming  # type: ignore
+            return {"events": upcoming(days=7)}
         except Exception as exc:
             return {"error": str(exc), "events": []}
 

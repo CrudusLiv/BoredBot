@@ -63,6 +63,10 @@ def handle_query(argv: list[str]) -> int:
     p = sub.add_parser("upcoming")
     p.add_argument("--days", type=int, default=14)
     p.add_argument("--max", type=int, default=50)
+    # Accept --json after the subcommand too (`gcal upcoming --json`), matching
+    # the documented CLI shape; argparse routes post-subcommand flags here.
+    # SUPPRESS so the subparser's default doesn't clobber a pre-subcommand --json.
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     json_out = args.json
 
