@@ -2482,6 +2482,7 @@ function _jobsFiltered() {
 
 async function _jobAction(id, action, btn) {
   const out = document.getElementById('jobs-output');
+  const prevLabel = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
     let r;
@@ -2507,7 +2508,7 @@ async function _jobAction(id, action, btn) {
   } catch (err) {
     if (out) out.innerHTML = paneErr(err.message);
   } finally {
-    if (btn) { btn.disabled = false; }
+    if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
 
