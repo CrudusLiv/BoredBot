@@ -33,6 +33,7 @@ core = [
     "pydantic==2.13.4",
     "h11==0.16.0",
     "httpx==0.28.1",
+    "python-multipart==0.0.30",  # FastAPI UploadFile/Form endpoints (ui_server upload_file)
     # AI
     "anthropic==0.100.0",
     # STT
