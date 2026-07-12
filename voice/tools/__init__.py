@@ -90,6 +90,11 @@ _register("update_profile_app_state",
     "Use when asked to remember/change where an app opens for a profile. "
     "Args: profile(str), alias(str), cwd(str).",
     update_profile_app_state)
+from voice.deadlines import complete_deadline
+_register("complete_deadline",
+    "Mark a deadline as completed — moves its row from Active to Done in DEADLINES.md "
+    "so alerts stop. REQUIRES CONFIRMATION. Args: query(str) — a few words from the deadline title.",
+    complete_deadline)
 from voice.tools.study import grade_card_tool, review_cards
 _register("review_cards",
     "Fetch spaced-repetition flashcards due for review today. Use when asked to 'quiz me' "

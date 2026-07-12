@@ -936,12 +936,27 @@ class Heartbeat:
         except Exception as _e:
             print(f"[heartbeat] job alerts error: {_e}", flush=True)
 
+    def _check_deadline_import(self) -> None:
+        """Calendar events that look like deadlines (per the keyword list)
+        become nogcal: rows in DEADLINES.md, so threshold alerts cover them."""
+        from voice import config as cfg
+        from voice import deadlines
+        conf = cfg.load()
+        if not conf.get("deadline_import_enabled", True):
+            return
+        days = int(conf.get("deadline_import_lookahead_days", 30))
+        events = _fetch_events(days=days, max_results=100)
+        added = deadlines.import_from_events(events, conf.get("deadline_import_keywords"))
+        if added:
+            _post(("Deadlines from calendar: " + "; ".join(added))[:160])
+
     def _run_scheduled(self) -> None:
         for task in (self._process_inbox, self._check_downloads,
                      self._check_job_alerts,
                      self._morning_briefing, self._evening_wrap,
                      self._check_nudges, self._check_profile_triggers,
                      self._check_calendar_sync, self._check_github_digest,
+                     self._check_deadline_import,
                      self._check_deadline_thresholds, self._check_ambient_notices,
                      self._check_habits, self._check_git_todo_summary,
                      self._check_build_watch, self._check_spaced_repetition):

@@ -114,6 +114,13 @@ DEFAULTS: dict[str, Any] = {
     "build_watch_repo": "",
     "spaced_repetition_enabled": True,
     "review_reminder_time": "10:00",
+    # GCal → DEADLINES.md import (reverse of the vault→GCal push)
+    "deadline_import_enabled": True,
+    "deadline_import_keywords": [
+        "due", "deadline", "submission", "submit", "assignment", "assessment",
+        "exam", "quiz", "test", "project", "presentation",
+    ],
+    "deadline_import_lookahead_days": 30,
     # Downloads triage
     "downloads_triage_enabled": False,     # opt-in: watch Downloads, suggest filing
     "downloads_watch_folders": [],         # empty => resolves to [~/Downloads] at runtime
