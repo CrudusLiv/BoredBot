@@ -23,6 +23,7 @@ import contextlib
 import io
 import json
 import queue as _queue_mod
+import re
 import threading
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -148,8 +149,14 @@ def _fetch_events(days: int = 1, max_results: int = 10) -> list[dict]:
         return []
 
 
+# A real deadline row: `- [nogcal:] YYYY-MM-DD — course — title` (same shape
+# core/imminent.py parses). Anything else in DEADLINES.md is prose/instructions
+# and must never be spoken as a deadline.
+_DEADLINE_ROW_RE = re.compile(r"^[-*]\s*(?:nogcal:\s*)?\d{4}-\d{2}-\d{2}\s+[—–-]\s+\S")
+
+
 def _fetch_deadlines() -> list[str]:
-    """Return non-header deadline lines from DEADLINES.md. [] if no vault configured."""
+    """Return deadline rows from DEADLINES.md. [] if no vault configured."""
     try:
         from voice import config as cfg
         vault = cfg.get_vault_dir()
@@ -161,7 +168,7 @@ def _fetch_deadlines() -> list[str]:
         return [
             ln.strip()
             for ln in p.read_text(encoding="utf-8").splitlines()
-            if ln.strip() and not ln.strip().startswith(("#", ">", "`"))
+            if _DEADLINE_ROW_RE.match(ln.strip())
         ]
     except Exception:
         return []
