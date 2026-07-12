@@ -14,10 +14,6 @@ Usage:
 
     py query.py vault inbox
 
-    py query.py discord recent [--hours 24]
-    py query.py discord bot
-    py query.py discord prune
-
 Add --json to most subcommands for machine-readable output.
 
 """
@@ -26,12 +22,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Windows consoles often use cp1252, which can't print emoji that show up in
+# email subjects / event titles; replace unprintable chars instead of crashing.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
+
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "integrations"))
 
 from integrations import _env  # noqa: F401, E402  -- loads .env
 from integrations import (  # noqa: E402
-    discord_int,
     gcal_int,
     github_int,
     gmail_int,
@@ -44,7 +45,6 @@ DISPATCH = {
     "gcal": gcal_int.handle_query,
     "gmail": gmail_int.handle_query,
     "vault": vault_fs.handle_query,
-    "discord": discord_int.handle_query,
 }
 
 
