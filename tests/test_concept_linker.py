@@ -1,8 +1,14 @@
+import os
+
 import pytest
 import json
 from pathlib import Path
 from scripts.concept_linker import extract_concepts_from_lecture, link_concepts_in_lecture
 
+@pytest.mark.skipif(
+    not os.environ.get("ANTHROPIC_API_KEY"),
+    reason="extract_concepts_from_lecture calls the live Anthropic API",
+)
 def test_extract_concepts():
     """Test extracting concepts from lecture text."""
     lecture_text = """

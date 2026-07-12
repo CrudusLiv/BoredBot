@@ -11,7 +11,9 @@ from voice.heartbeat import Heartbeat
 
 
 def test_config_has_downloads_defaults():
-    conf = cfg.load()
+    # Assert on DEFAULTS, not load(): load() merges the user's installed
+    # config, where these toggles may legitimately differ.
+    conf = cfg.DEFAULTS
     assert conf["downloads_triage_enabled"] is False
     assert conf["downloads_watch_folders"] == []
     assert ".pdf" in conf["downloads_watch_exts"]

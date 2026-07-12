@@ -1,4 +1,5 @@
 import pytest
+from datetime import date, timedelta
 from pathlib import Path
 from scripts.ambient_notifier import (
     rule_dependency_gap,
@@ -9,9 +10,12 @@ from scripts.ambient_notifier import (
 
 def test_dependency_gap_rule():
     """Test detecting when prerequisites are missing."""
+    # The rule only looks at deadlines within the next 14 days, so the
+    # fixture date must be relative to today (a hardcoded date rots).
+    soon = (date.today() + timedelta(days=7)).isoformat()
     vault_state = {
         "deadlines": {
-            "2026-06-20": {"title": "Data Structures Assignment", "topics": ["graph-theory"]}
+            soon: {"title": "Data Structures Assignment", "topics": ["graph-theory"]}
         },
         "lectures_completed": ["recursion", "arrays"],
         "topics_to_lectures": {

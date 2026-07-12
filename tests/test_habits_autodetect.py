@@ -65,10 +65,13 @@ def test_sleep_morning_check_before_7am(monkeypatch):
 # ── _finance_entry_today ─────────────────────────────────────────────────────
 
 def test_finance_entry_today_file_modified(tmp_vault, monkeypatch):
-    finance_file = tmp_vault / "finance" / "2026-06.md"
+    # _finance_entry_today compares the file's real mtime date to "today",
+    # so the fixture must use the actual KL date — a frozen date rots once
+    # the wall clock moves past it.
+    today = habits._today_kl()
+    finance_file = tmp_vault / "finance" / f"{today[:7]}.md"
     finance_file.write_text("entry", encoding="utf-8")
     monkeypatch.setattr(habits, "VAULT", tmp_vault)
-    monkeypatch.setattr(habits, "_today_kl", lambda: "2026-06-15")
     assert habits._finance_entry_today() is True
 
 
