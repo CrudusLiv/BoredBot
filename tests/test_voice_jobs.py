@@ -389,3 +389,11 @@ def test_draft_application_llm_failure(draft_env, monkeypatch, tmp_path):
     res = jobs.draft_application(jobs.job_id(P1["link"]))
     assert res["ok"] is False and writes == []
     assert jobs.get_job(tmp_path, jobs.job_id(P1["link"]))["status"] == "new"
+
+
+def test_draft_application_non_utf8_resume(draft_env, tmp_path):
+    vault, writes, _ = draft_env
+    (vault / "profile" / "RESUME.md").write_bytes(b"\xff\xfeR\x00esume")   # not UTF-8
+    res = jobs.draft_application(jobs.job_id(P1["link"]))
+    assert res["ok"] is False and "RESUME.md" in res["error"]
+    assert writes == []

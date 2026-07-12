@@ -253,7 +253,7 @@ def draft_application(jid: str) -> dict:
         return {"ok": False, "error": "no vault configured"}
     try:
         resume = (vault / "profile" / "RESUME.md").read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, ValueError):
         resume = ""
     if not resume:
         return {"ok": False, "error":
