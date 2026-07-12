@@ -217,3 +217,63 @@ def scan_alerts(data_dir: Path, conf: dict) -> int:
             print(f"[jobs] digest parse failed for {msg.get('id')}: {exc}", flush=True)
             continue
     return added
+
+
+# ---- application drafter (manual trigger only — POST /cmd/jobs/draft) ---------
+
+_DRAFT_SYSTEM = (
+    "You write tailored job-application emails. Use only facts from the "
+    "candidate's resume note — never invent experience, employers, dates, or "
+    "qualifications. Output only the email: a Subject: line, a greeting, 2-3 "
+    "short paragraphs matching the resume to the posting, and a sign-off. "
+    "No commentary, no placeholders."
+)
+
+
+def _slug(text: str) -> str:
+    import re as _re
+    s = _re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s or "job"
+
+
+def draft_application(jid: str) -> dict:
+    """Draft a tailored application email for one stored posting into
+    drafts/active/ for manual review. Never sends anything; the only
+    side effects are the draft file and the status flip to 'drafted'."""
+    from voice import config as cfg
+    from voice import llm
+    import voice.tools.workspace as workspace
+
+    data_dir = cfg.get_data_dir()
+    job = get_job(data_dir, jid)
+    if job is None:
+        return {"ok": False, "error": "unknown job id"}
+    vault = cfg.get_vault_dir()
+    if vault is None:
+        return {"ok": False, "error": "no vault configured"}
+    try:
+        resume = (vault / "profile" / "RESUME.md").read_text(encoding="utf-8").strip()
+    except OSError:
+        resume = ""
+    if not resume:
+        return {"ok": False, "error":
+                "profile/RESUME.md is missing or empty — fill it in before drafting"}
+    prompt = (
+        "Job posting:\n"
+        f"  Title: {job['title']}\n"
+        f"  Company: {job['company']}\n"
+        f"  Location: {job['location']}\n"
+        f"  Remote: {job['remote'] or 'unstated'}\n"
+        f"  Link: {job['link']}\n\n"
+        f"Candidate resume note:\n{resume}\n\n"
+        "Write the application email for this posting."
+    )
+    text = llm.call(prompt, system_prompt=_DRAFT_SYSTEM)
+    if not text:
+        return {"ok": False, "error": "LLM backend returned no draft"}
+    name = f"{_slug(job['company'])}-{_slug(job['title'])}.md"
+    result = workspace.write_draft(name, text)
+    if not result.startswith("Wrote"):
+        return {"ok": False, "error": result}
+    update_status(data_dir, jid, "drafted")
+    return {"ok": True, "name": name, "message": result}

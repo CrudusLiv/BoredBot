@@ -319,3 +319,73 @@ def test_check_job_alerts_registered_in_scheduled():
     import inspect
     src = inspect.getsource(hb._run_scheduled)
     assert "_check_job_alerts" in src
+
+
+# ---- draft_application --------------------------------------------------------
+
+RESUME = "## Skills\nPython, FastAPI\n## Experience\nVesper (personal project)"
+
+
+@pytest.fixture
+def draft_env(tmp_path, monkeypatch):
+    """Vault with a filled RESUME.md, one stored job, mocked LLM + write_draft."""
+    vault = tmp_path / "vault"
+    (vault / "profile").mkdir(parents=True)
+    (vault / "profile" / "RESUME.md").write_text(RESUME, encoding="utf-8")
+    monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(cfg, "get_vault_dir", lambda: vault)
+    jobs.add_postings(tmp_path, [P1])
+    import voice.tools.workspace as ws
+    writes: list[tuple] = []
+    monkeypatch.setattr(ws, "write_draft",
+                        lambda name, text: writes.append((name, text)) or
+                        f"Wrote {len(text)} bytes to drafts/active/{name}.")
+    llm_calls: list[dict] = []
+    from voice import llm
+    monkeypatch.setattr(llm, "call",
+                        lambda prompt, **kw: llm_calls.append({"prompt": prompt, **kw})
+                        or "Dear Hiring Manager, ...")
+    return vault, writes, llm_calls
+
+
+def test_draft_application_happy_path(draft_env, tmp_path):
+    vault, writes, llm_calls = draft_env
+    jid = jobs.job_id(P1["link"])
+    res = jobs.draft_application(jid)
+    assert res["ok"] is True
+    assert res["name"] == "acme-software-engineer.md"
+    assert writes and writes[0][0] == "acme-software-engineer.md"
+    assert "Dear Hiring Manager" in writes[0][1]
+    prompt = llm_calls[0]["prompt"]
+    assert "Software Engineer" in prompt and "Python, FastAPI" in prompt
+    assert jobs.get_job(tmp_path, jid)["status"] == "drafted"
+
+
+def test_draft_application_unknown_id(draft_env):
+    assert jobs.draft_application("nope") == {"ok": False, "error": "unknown job id"}
+
+
+def test_draft_application_missing_resume(draft_env, tmp_path):
+    vault, writes, _ = draft_env
+    (vault / "profile" / "RESUME.md").unlink()
+    res = jobs.draft_application(jobs.job_id(P1["link"]))
+    assert res["ok"] is False
+    assert "RESUME.md" in res["error"]
+    assert writes == []                   # no file written
+    assert jobs.get_job(tmp_path, jobs.job_id(P1["link"]))["status"] == "new"
+
+
+def test_draft_application_empty_resume(draft_env, tmp_path):
+    vault, writes, _ = draft_env
+    (vault / "profile" / "RESUME.md").write_text("  \n", encoding="utf-8")
+    res = jobs.draft_application(jobs.job_id(P1["link"]))
+    assert res["ok"] is False and writes == []
+
+
+def test_draft_application_llm_failure(draft_env, monkeypatch, tmp_path):
+    vault, writes, _ = draft_env
+    from voice import llm
+    monkeypatch.setattr(llm, "call", lambda *a, **k: "")   # backend down
+    res = jobs.draft_application(jobs.job_id(P1["link"]))
+    assert res["ok"] is False and writes == []
+    assert jobs.get_job(tmp_path, jobs.job_id(P1["link"]))["status"] == "new"
