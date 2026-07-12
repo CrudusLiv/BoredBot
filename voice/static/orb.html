@@ -902,6 +902,7 @@ body.paused #conn-status { display: block; }
       <button class="ptab" data-tab="calendar">Cal</button>
       <button class="ptab" data-tab="apps">Apps</button>
       <button class="ptab" data-tab="profiles">Profiles</button>
+      <button class="ptab" data-tab="jobs">Jobs</button>
       <button class="ptab" data-tab="workspace" data-requires="vault">Workspace</button>
       <button class="ptab" data-tab="settings">Cfg</button>
     </div>
@@ -1055,6 +1056,28 @@ body.paused #conn-status { display: block; }
       </div>
     </form>
     <div id="profiles-output" class="panel-output"></div>
+  </div>
+
+  <div id="ptab-jobs" class="ptab-content">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+      <select id="jobs-status-filter" class="settings-select" style="width:auto; flex:none;">
+        <option value="all">All</option>
+        <option value="new">New</option>
+        <option value="drafted">Drafted</option>
+        <option value="applied">Applied</option>
+        <option value="dismissed">Dismissed</option>
+      </select>
+      <input id="jobs-text-filter" class="settings-input" type="text"
+             placeholder="filter title/company" style="flex:1; min-width:120px;" autocomplete="off" />
+      <button class="pill-btn" id="jobs-refresh-btn">refresh</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="jobs-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr id="jobs-head"></tr></thead>
+        <tbody id="jobs-body"></tbody>
+      </table>
+    </div>
+    <div id="jobs-output" class="panel-output" style="margin-top:8px;"></div>
   </div>
 
   <div id="ptab-workspace" class="ptab-content">
@@ -1717,6 +1740,7 @@ let lastStutter = 0;
       if (t === 'settings') loadSettingsPanel();
       if (t === 'apps') loadApps();
       if (t === 'profiles') loadProfiles();
+      if (t === 'jobs') loadJobs();
       if (t === 'workspace') loadWorkspace();
     }
   }
@@ -1744,6 +1768,7 @@ let lastStutter = 0;
       if (tab.dataset.tab === 'settings') loadSettingsPanel();
       if (tab.dataset.tab === 'apps') loadApps();
       if (tab.dataset.tab === 'profiles') loadProfiles();
+      if (tab.dataset.tab === 'jobs') loadJobs();
       if (tab.dataset.tab === 'workspace') loadWorkspace();
     });
   });
@@ -2411,6 +2436,150 @@ async function _saveSetting(key, value, hintEl) {
   } catch (_) { return false; }
 }
 
+// ── Jobs panel ───────────────────────────────────────────────────────────────
+// Table of job-alert postings accumulated by the heartbeat scan
+// (voice/jobs.py). Sortable columns, status + free-text filters; row actions
+// call /cmd/jobs/draft (LLM draft into drafts/active/), /cmd/jobs/update.
+// "All" hides dismissed rows — pick the Dismissed filter to see them.
+const JOBS_COLS = [
+  { key: 'title',      label: 'Title' },
+  { key: 'company',    label: 'Company' },
+  { key: 'location',   label: 'Location' },
+  { key: 'remote',     label: 'Mode' },
+  { key: 'source',     label: 'Source' },
+  { key: 'status',     label: 'Status' },
+  { key: 'first_seen', label: 'Seen' },
+];
+let _jobsRows = [];
+let _jobsSort = { key: 'first_seen', dir: -1 };
+
+async function loadJobs() {
+  const out = document.getElementById('jobs-output');
+  try {
+    const r = await vfetch('/cmd/jobs/list');
+    const d = await r.json();
+    _jobsRows = d.jobs || [];
+    renderJobs();
+    if (out) out.textContent = '';
+  } catch (err) {
+    if (out) out.innerHTML = paneErr(err.message, "Jobs won't load.");
+  }
+}
+
+function _jobsFiltered() {
+  const status = document.getElementById('jobs-status-filter').value;
+  const q = document.getElementById('jobs-text-filter').value.trim().toLowerCase();
+  let rows = _jobsRows.slice();
+  if (status === 'all') rows = rows.filter(j => j.status !== 'dismissed');
+  else rows = rows.filter(j => j.status === status);
+  if (q) rows = rows.filter(j =>
+    (j.title || '').toLowerCase().includes(q) ||
+    (j.company || '').toLowerCase().includes(q));
+  const { key, dir } = _jobsSort;
+  rows.sort((a, b) => String(a[key] || '').localeCompare(String(b[key] || '')) * dir);
+  return rows;
+}
+
+async function _jobAction(id, action, btn) {
+  const out = document.getElementById('jobs-output');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    let r;
+    if (action === 'draft') {
+      r = await vfetch('/cmd/jobs/draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+    } else {
+      r = await vfetch('/cmd/jobs/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: action }),
+      });
+    }
+    const d = await r.json();
+    if (r.ok) {
+      if (out) out.textContent = action === 'draft'
+        ? `Draft written: drafts/active/${d.name}` : '';
+      await loadJobs();
+    } else if (out) {
+      out.innerHTML = paneErr(errText(d), "That didn't work.");
+    }
+  } catch (err) {
+    if (out) out.innerHTML = paneErr(err.message);
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
+function renderJobs() {
+  const head = document.getElementById('jobs-head');
+  const body = document.getElementById('jobs-body');
+  if (!head || !body) return;
+  head.innerHTML = '';
+  JOBS_COLS.forEach(col => {
+    const th = document.createElement('th');
+    th.style.cssText = 'text-align:left; padding:6px 8px; cursor:pointer; ' +
+      'border-bottom:1px solid rgba(255,255,255,0.12); white-space:nowrap;';
+    const arrow = _jobsSort.key === col.key ? (_jobsSort.dir > 0 ? ' ↑' : ' ↓') : '';
+    th.textContent = col.label + arrow;
+    th.addEventListener('click', () => {
+      if (_jobsSort.key === col.key) _jobsSort.dir *= -1;
+      else _jobsSort = { key: col.key, dir: 1 };
+      renderJobs();
+    });
+    head.appendChild(th);
+  });
+  head.appendChild(document.createElement('th'));   // actions column
+
+  const rows = _jobsFiltered();
+  body.innerHTML = '';
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = JOBS_COLS.length + 1;
+    td.className = 'notices-empty';
+    td.style.padding = '10px 8px';
+    td.textContent = 'Nothing here. Either the scan found nothing, or you cleared it all.';
+    tr.appendChild(td); body.appendChild(tr);
+    return;
+  }
+  rows.forEach(j => {
+    const tr = document.createElement('tr');
+    JOBS_COLS.forEach(col => {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.06);';
+      if (col.key === 'title' && j.link) {
+        const a = document.createElement('a');
+        a.href = j.link; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = j.title || '(untitled)';
+        a.style.color = 'inherit';
+        td.appendChild(a);
+      } else if (col.key === 'first_seen') {
+        td.textContent = String(j.first_seen || '').slice(0, 10);
+      } else {
+        td.textContent = j[col.key] || '';
+      }
+      tr.appendChild(td);
+    });
+    const act = document.createElement('td');
+    act.style.cssText = 'padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.06); ' +
+      'white-space:nowrap; display:flex; gap:4px;';
+    [['Draft', 'draft'], ['Applied', 'applied'], ['Dismiss', 'dismissed']].forEach(([label, action]) => {
+      const b = document.createElement('button');
+      b.className = 'pill-btn';
+      b.textContent = label;
+      b.addEventListener('click', () => _jobAction(j.id, action, b));
+      act.appendChild(b);
+    });
+    tr.appendChild(act);
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById('jobs-refresh-btn')?.addEventListener('click', loadJobs);
+document.getElementById('jobs-status-filter')?.addEventListener('change', renderJobs);
+document.getElementById('jobs-text-filter')?.addEventListener('input', renderJobs);
+
 // Curated "Activity awareness" group appended to the Cfg tab: an enable toggle
 // (activity_awareness_enabled) + an editable chip list of exe names
 // (silence_when_running). Exes come from a detected-apps picker (/cmd/apps/scan,
@@ -2558,6 +2727,119 @@ async function _renderDownloadsTriage(conf, container) {
   container.appendChild(group);
 }
 
+// "Job alerts" group on the Cfg tab: enable toggle (job_alerts_enabled, gates
+// voice/heartbeat.py _check_job_alerts), editable sender-domain chip list
+// (job_alert_senders — same chip pattern as silence_when_running), and a
+// lookback-days number field (job_alert_lookback_days).
+async function _renderJobAlerts(conf, container) {
+  let senders = Array.isArray(conf.job_alert_senders) ? conf.job_alert_senders.slice() : [];
+
+  const group = document.createElement('div');
+  group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
+
+  const header = document.createElement('div');
+  header.className = 'settings-field-label';
+  header.textContent = 'Job alerts';
+  header.style.cssText = 'font-weight:600; margin-bottom:10px;';
+  group.appendChild(header);
+
+  const toggleWrap = document.createElement('label');
+  toggleWrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer;';
+  const toggle = document.createElement('input');
+  toggle.type = 'checkbox';
+  toggle.checked = conf.job_alerts_enabled === true;
+  const toggleText = document.createElement('span');
+  toggleText.className = 'settings-field-label';
+  toggleText.textContent = 'Track job-alert emails (Jobs tab)';
+  const toggleHint = document.createElement('span');
+  toggleHint.className = 'settings-save-hint';
+  toggleWrap.append(toggle, toggleText, toggleHint);
+  group.appendChild(toggleWrap);
+  toggle.addEventListener('change', () => _saveSetting('job_alerts_enabled', toggle.checked, toggleHint));
+
+  const chipsEl = document.createElement('div');
+  chipsEl.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;';
+  group.appendChild(chipsEl);
+
+  const listHint = document.createElement('div');
+  listHint.className = 'settings-save-hint';
+  const persist = () => _saveSetting('job_alert_senders', senders, listHint);
+
+  function renderChips() {
+    chipsEl.innerHTML = '';
+    if (!senders.length) {
+      const empty = document.createElement('div');
+      empty.className = 'notices-empty';
+      empty.textContent = 'No sender domains. Add one below.';
+      chipsEl.appendChild(empty);
+      return;
+    }
+    senders.forEach((s, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'profile-chip';
+      chip.style.cssText = 'display:inline-flex; align-items:center; gap:6px;';
+      chip.append(document.createTextNode(s));
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '✕';
+      x.style.cssText = 'background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:12px; line-height:1;';
+      x.addEventListener('click', () => { senders.splice(i, 1); renderChips(); persist(); });
+      chip.appendChild(x);
+      chipsEl.appendChild(chip);
+    });
+  }
+
+  const addRow = document.createElement('div');
+  addRow.style.cssText = 'display:flex; gap:6px; align-items:center;';
+  const domInput = document.createElement('input');
+  domInput.className = 'settings-input';
+  domInput.type = 'text';
+  domInput.placeholder = 'sender domain (e.g. linkedin.com)';
+  domInput.style.flex = '1';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'pill-btn';
+  addBtn.textContent = 'add';
+  addRow.append(domInput, addBtn);
+  group.append(addRow, listHint);
+
+  function addDomain(raw) {
+    const dom = (raw || '').trim().toLowerCase().replace(/^@/, '');
+    if (!dom || senders.includes(dom)) return;
+    senders.push(dom);
+    renderChips();
+    persist();
+  }
+  addBtn.addEventListener('click', () => { addDomain(domInput.value); domInput.value = ''; });
+  domInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addDomain(domInput.value); domInput.value = ''; }
+  });
+
+  const daysWrap = document.createElement('div');
+  daysWrap.style.cssText = 'margin-top:10px;';
+  const daysLbl = document.createElement('div');
+  daysLbl.className = 'settings-field-label';
+  daysLbl.textContent = 'Lookback (days)';
+  const daysInput = document.createElement('input');
+  daysInput.className = 'settings-input';
+  daysInput.type = 'number';
+  daysInput.min = '1';
+  daysInput.value = String(conf.job_alert_lookback_days ?? 3);
+  const daysHint = document.createElement('div');
+  daysHint.className = 'settings-save-hint';
+  daysWrap.append(daysLbl, daysInput, daysHint);
+  group.appendChild(daysWrap);
+  const saveDays = () => {
+    const v = parseInt(daysInput.value, 10);
+    if (Number.isFinite(v) && v >= 1) _saveSetting('job_alert_lookback_days', v, daysHint);
+  };
+  daysInput.addEventListener('change', saveDays);
+  daysInput.addEventListener('blur', saveDays);
+
+  renderChips();
+  container.appendChild(group);
+}
+
 async function loadSettingsPanel() {
   const llmEl = document.getElementById('settings-llm-status');
   if (llmEl) {
@@ -2669,6 +2951,7 @@ async function loadSettingsPanel() {
     applyEngineVisibility();
     await _renderActivityAwareness(conf, fieldsEl);
     await _renderDownloadsTriage(conf, fieldsEl);
+    await _renderJobAlerts(conf, fieldsEl);
   } catch (_) {
     fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
   }
