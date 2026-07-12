@@ -38,6 +38,9 @@ Endpoints:
   GET  /cmd/settings    → full config JSON
   POST /cmd/settings    → patch one config key JSON
   GET  /cmd/notices     → recent proactive notices JSON
+  GET  /cmd/jobs/list   → job-alert postings store JSON
+  POST /cmd/jobs/update → set one posting's status JSON
+  POST /cmd/jobs/draft  → draft application email into drafts/active/ JSON
   GET  /cmd/drafts      → list entries (typed, drillable) under drafts/active/<dir> JSON
   GET  /cmd/drafts/content → read_note("drafts/active/" + name) JSON
   GET  /cmd/scratch     → list files under scratch/<dir> JSON
@@ -370,6 +373,47 @@ async def downloads_dismiss(body: _DownloadAction) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+# ── Job alerts (Jobs panel) ──────────────────────────────────────────────────────
+
+@app.get("/cmd/jobs/list")
+async def jobs_list() -> JSONResponse:
+    from voice import config as cfg
+    from voice import jobs
+    return JSONResponse({"jobs": jobs.load_jobs(cfg.get_data_dir())})
+
+
+class _JobUpdate(BaseModel):
+    id: str
+    status: str
+
+
+@app.post("/cmd/jobs/update", dependencies=[Depends(_require_token)])
+async def jobs_update(body: _JobUpdate) -> JSONResponse:
+    from voice import config as cfg
+    from voice import jobs
+    if body.status not in jobs.STATUSES:
+        return JSONResponse({"error": f"invalid status '{body.status}'"}, status_code=400)
+    if not jobs.update_status(cfg.get_data_dir(), body.id, body.status):
+        return JSONResponse({"error": "unknown job id"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+class _JobDraft(BaseModel):
+    id: str
+
+
+@app.post("/cmd/jobs/draft", dependencies=[Depends(_require_token)])
+async def jobs_draft(body: _JobDraft) -> JSONResponse:
+    import asyncio as _asyncio
+    from voice import jobs
+    # draft_application blocks on the LLM call (up to ~90s) — keep it off
+    # the event loop so the orb UI stays responsive while drafting.
+    result = await _asyncio.to_thread(jobs.draft_application, body.id)
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=400)
+    return JSONResponse(result)
+
+
 # ── App-launch profiles ──────────────────────────────────────────────────────
 # UI-only CRUD (no voice-callable create/edit/delete — matches how app
 # approval itself has no voice path). GET is open; state-changing POSTs are
@@ -585,6 +629,7 @@ _SETTINGS_ALLOWED = {
     "clap_enabled", "clap_threshold",
     "activity_awareness_enabled", "silence_when_running",
     "downloads_triage_enabled",
+    "job_alerts_enabled", "job_alert_senders", "job_alert_lookback_days",
 }
 
 
