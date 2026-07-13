@@ -46,7 +46,7 @@ def list_recent(days: int = 7, max_results: int = 30) -> list[dict]:
         for msg in resp.json().get("value", []):
             received_raw = msg.get("receivedDateTime", "")
             try:
-                received = datetime.strptime(received_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                received = datetime.fromisoformat(received_raw.replace("Z", "+00:00"))
             except ValueError:
                 continue
             if received < cutoff:

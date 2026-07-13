@@ -7,8 +7,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".claude" / "scripts"))
 sys.path.insert(0, str(ROOT / ".claude" / "scripts" / "integrations"))
@@ -88,6 +86,43 @@ def test_list_recent_returns_empty_on_request_error():
         assert oi.list_recent() == []
 
 
+def test_list_recent_returns_empty_on_json_parse_error():
+    import importlib
+    import integrations.outlook_int as oi
+    importlib.reload(oi)
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.side_effect = ValueError("bad json")
+    with patch.object(oi, "_get_token", return_value="tok"), \
+         patch.object(oi.requests, "get", return_value=resp):
+        assert oi.list_recent() == []
+
+
+def test_list_recent_includes_message_with_fractional_seconds():
+    import importlib
+    import integrations.outlook_int as oi
+    importlib.reload(oi)
+
+    messages = [
+        {
+            "id": "m1",
+            "subject": "Assignment due",
+            "from": {"emailAddress": {"address": "prof@helplive.edu.my", "name": "Prof X"}},
+            "receivedDateTime": "2026-07-11T08:23:45.1234567Z",
+            "bodyPreview": "Please submit by Friday",
+        },
+    ]
+    resp = _make_messages_response(messages)
+    with patch.object(oi, "_get_token", return_value="tok"), \
+         patch.object(oi.requests, "get", return_value=resp):
+        items = oi.list_recent(days=7, max_results=30)
+
+    assert len(items) == 1
+    assert items[0]["id"] == "m1"
+    assert items[0]["subject"] == "Assignment due"
+    assert items[0]["date"] == "2026-07-11T08:23:45.1234567Z"
+
+
 def test_get_body_returns_empty_without_token():
     import importlib
     import integrations.outlook_int as oi
@@ -130,6 +165,18 @@ def test_get_body_returns_empty_on_request_error():
     importlib.reload(oi)
     with patch.object(oi, "_get_token", return_value="tok"), \
          patch.object(oi.requests, "get", side_effect=oi.requests.RequestException("boom")):
+        assert oi.get_body("m1") == ""
+
+
+def test_get_body_returns_empty_on_json_parse_error():
+    import importlib
+    import integrations.outlook_int as oi
+    importlib.reload(oi)
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.side_effect = ValueError("bad json")
+    with patch.object(oi, "_get_token", return_value="tok"), \
+         patch.object(oi.requests, "get", return_value=resp):
         assert oi.get_body("m1") == ""
 
 
