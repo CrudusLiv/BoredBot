@@ -12,6 +12,8 @@ Usage:
 
     py query.py gmail recent [--days 7] [--max 30]
 
+    py query.py outlook recent [--days 7] [--max 30]
+
     py query.py vault inbox
 
 Add --json to most subcommands for machine-readable output.
@@ -36,6 +38,7 @@ from integrations import (  # noqa: E402
     gcal_int,
     github_int,
     gmail_int,
+    outlook_int,
     registry,
     vault_fs,
 )
@@ -44,6 +47,7 @@ DISPATCH = {
     "github": github_int.handle_query,
     "gcal": gcal_int.handle_query,
     "gmail": gmail_int.handle_query,
+    "outlook": outlook_int.handle_query,
     "vault": vault_fs.handle_query,
 }
 
