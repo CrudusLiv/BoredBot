@@ -21,7 +21,7 @@ def _stub_habits(monkeypatch, *, auto_checked=None, nudge_due=False, unchecked=N
     mod.mark_nudged = lambda: marked.append(True)
     monkeypatch.setitem(sys.modules, "core.habits", mod)
     pkg = sys.modules.get("core") or types.ModuleType("core")
-    pkg.habits = mod
+    monkeypatch.setattr(pkg, "habits", mod, raising=False)
     monkeypatch.setitem(sys.modules, "core", pkg)
     return marked
 
@@ -31,7 +31,7 @@ def _stub_pushes(monkeypatch, pushes=None):
     mod.recent_pushes = lambda days=1: (pushes or [])
     monkeypatch.setitem(sys.modules, "integrations.github_int", mod)
     pkg = sys.modules.get("integrations") or types.ModuleType("integrations")
-    pkg.github_int = mod
+    monkeypatch.setattr(pkg, "github_int", mod, raising=False)
     monkeypatch.setitem(sys.modules, "integrations", pkg)
 
 

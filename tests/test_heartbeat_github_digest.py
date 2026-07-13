@@ -23,7 +23,7 @@ def _stub_github_int(monkeypatch, events):
     mod.recent_pr_events = lambda since=None: events
     monkeypatch.setitem(sys.modules, "integrations.github_int", mod)
     pkg = sys.modules.get("integrations") or types.ModuleType("integrations")
-    pkg.github_int = mod
+    monkeypatch.setattr(pkg, "github_int", mod, raising=False)
     monkeypatch.setitem(sys.modules, "integrations", pkg)
 
 
@@ -86,7 +86,7 @@ def test_fetch_error_does_not_raise(tmp_path, monkeypatch):
     mod.recent_pr_events = _boom
     monkeypatch.setitem(sys.modules, "integrations.github_int", mod)
     pkg = sys.modules.get("integrations") or types.ModuleType("integrations")
-    pkg.github_int = mod
+    monkeypatch.setattr(pkg, "github_int", mod, raising=False)
     monkeypatch.setitem(sys.modules, "integrations", pkg)
     hb = Heartbeat(interval_minutes=30, idle_fn=lambda: None)
     hb._check_github_digest()  # must not raise
