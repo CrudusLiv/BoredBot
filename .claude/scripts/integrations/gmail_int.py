@@ -5,11 +5,11 @@ import argparse
 import base64
 import json
 import sys
-from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from google_auth import get_credentials  # noqa: E402
+from _html_text import html_to_text as _html_to_text  # noqa: E402
 
 
 def _service():
@@ -58,52 +58,6 @@ def list_recent(days: int = 7, max_results: int = 30) -> list[dict]:
             "snippet": msg.get("snippet", ""),
         })
     return out
-
-
-_BLOCK_TAGS = {"p", "div", "br", "tr", "li", "td", "h1", "h2", "h3", "h4", "table"}
-
-
-class _HtmlText(HTMLParser):
-    """Minimal HTML → text: block tags become newlines, <a href> URLs are
-    kept inline as `anchor text <url>` so digest parsers can find job links."""
-
-    def __init__(self):
-        super().__init__()
-        self.out: list[str] = []
-        self._skip = 0
-        self._href = ""
-
-    def handle_starttag(self, tag, attrs):
-        if tag in ("script", "style"):
-            self._skip += 1
-        if tag in _BLOCK_TAGS:
-            self.out.append("\n")
-        if tag == "a":
-            self._href = dict(attrs).get("href") or ""
-
-    def handle_endtag(self, tag):
-        if tag in ("script", "style") and self._skip:
-            self._skip -= 1
-        if tag == "a" and self._href:
-            self.out.append(f" <{self._href}>")
-            self._href = ""
-        if tag in _BLOCK_TAGS:
-            self.out.append("\n")
-
-    def handle_data(self, data):
-        if not self._skip:
-            self.out.append(data)
-
-
-def _html_to_text(html: str) -> str:
-    p = _HtmlText()
-    try:
-        p.feed(html)
-        p.close()
-    except Exception:
-        return html
-    lines = (ln.strip() for ln in "".join(p.out).splitlines())
-    return "\n".join(ln for ln in lines if ln)
 
 
 def _walk_parts(payload: dict):
