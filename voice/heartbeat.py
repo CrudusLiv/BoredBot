@@ -154,9 +154,14 @@ def _fetch_events(days: int = 1, max_results: int = 10) -> list[dict]:
 # and must never be spoken as a deadline.
 _DEADLINE_ROW_RE = re.compile(r"^[-*]\s*(?:nogcal:\s*)?\d{4}-\d{2}-\d{2}\s+[—–-]\s+\S")
 
+# Markdown bullet + the nogcal: sync marker — file plumbing, never spoken text.
+_DEADLINE_PREFIX_RE = re.compile(r"^[-*]\s*(?:nogcal:\s*)?")
+
 
 def _fetch_deadlines() -> list[str]:
-    """Return deadline rows from DEADLINES.md. [] if no vault configured."""
+    """Return deadline rows from DEADLINES.md as display text (bullet and
+    nogcal: marker stripped — every consumer speaks or shows them).
+    [] if no vault configured."""
     try:
         from voice import config as cfg
         vault = cfg.get_vault_dir()
@@ -166,7 +171,7 @@ def _fetch_deadlines() -> list[str]:
         if not p.exists():
             return []
         return [
-            ln.strip()
+            _DEADLINE_PREFIX_RE.sub("", ln.strip())
             for ln in p.read_text(encoding="utf-8").splitlines()
             if _DEADLINE_ROW_RE.match(ln.strip())
         ]
@@ -1002,15 +1007,26 @@ class Heartbeat:
                 parts.append(f"{unread} notice{'s' if unread != 1 else ''} waiting.")
         else:
             parts = ["Good morning."]
+        # The 24h fetch window straddles midnight, so tomorrow's all-day
+        # events land in it — bucket by actual start date or the briefing
+        # calls tomorrow's birthday "today".
         events = _fetch_events(days=1, max_results=5)
-        if events:
-            strs = []
-            for e in events[:3]:
-                t = e.get("start", "")[11:16] if "T" in e.get("start", "") else "all day"
-                strs.append(f"{e.get('summary', '(no title)')} at {t}")
-            parts.append(f"Today: {', '.join(strs)}.")
+        today_strs: list[str] = []
+        tomorrow_strs: list[str] = []
+        for e in events:
+            start = e.get("start", "")
+            if "T" in start:
+                label = f"{e.get('summary', '(no title)')} at {start[11:16]}"
+            else:
+                label = f"{e.get('summary', '(no title)')} (all day)"
+            bucket = today_strs if start[:10] == str(today) else tomorrow_strs
+            bucket.append(label)
+        if today_strs:
+            parts.append(f"Today: {', '.join(today_strs[:3])}.")
         else:
             parts.append("No events today.")
+        if tomorrow_strs:
+            parts.append(f"Tomorrow: {', '.join(tomorrow_strs[:3])}.")
 
         deadlines = _fetch_deadlines()
         if deadlines:
@@ -1043,8 +1059,12 @@ class Heartbeat:
         events = _fetch_events(days=2, max_results=10)
         tmr = [e for e in events if e.get("start", "")[:10] == str(tomorrow)]
         if tmr:
-            t = tmr[0].get("start", "")[11:16] if "T" in tmr[0].get("start", "") else "all day"
-            parts.append(f"Tomorrow starts with {tmr[0].get('summary', '(no title)')} at {t}.")
+            first = tmr[0]
+            summary = first.get("summary", "(no title)")
+            if "T" in first.get("start", ""):
+                parts.append(f"Tomorrow starts with {summary} at {first['start'][11:16]}.")
+            else:
+                parts.append(f"Tomorrow: {summary}, all day.")
         else:
             parts.append("Nothing scheduled for tomorrow.")
 

@@ -30,9 +30,10 @@ def _vault(tmp_path, monkeypatch, text=DEADLINES_MD):
 def test_returns_only_dated_rows(tmp_path, monkeypatch):
     _vault(tmp_path, monkeypatch)
     lines = hb_mod._fetch_deadlines()
+    # Display text: bullet and nogcal: marker stripped — these get spoken.
     assert lines == [
-        "- 2099-01-01 — CS101 — Assignment 1",
-        "- nogcal: 2099-02-02 — DIP209 — Capstone draft",
+        "2099-01-01 — CS101 — Assignment 1",
+        "2099-02-02 — DIP209 — Capstone draft",
     ]
 
 

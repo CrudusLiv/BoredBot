@@ -826,18 +826,6 @@ body.paused #conn-status { display: block; }
 .ptab { flex: none; text-align: left; padding: 8px 10px; font-size: 10px; }
 .ptab-content { grid-column: 2; grid-row: 3; padding: 18px 26px 24px; }
 
-/* single-column fallback: nav becomes a horizontal scroll rail on top */
-@media (max-width: 900px) {
-  #side-panel { grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto minmax(0, 1fr); }
-  #panel-header, #tab-divider { grid-column: 1; }
-  #tab-rail { grid-column: 1; grid-row: 3; flex-direction: row; overflow-x: auto; overflow-y: hidden;
-    padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--line-dim); }
-  .tab-group { display: none; }
-  .ptab { white-space: nowrap; }
-  .ptab-content { grid-column: 1; grid-row: 4; }
-}
-
 /* ═══ Readability pass: the HUD micro-type stays outside; inside the modules
    screen, text is for reading — larger sizes, calmer tracking, and each
    logical block bounded in its own card so panes read in sections. ═══ */
@@ -877,6 +865,20 @@ body.paused #conn-status { display: block; }
   background: rgba(255,255,255,.025); border: 1px solid var(--line-dim);
   border-radius: var(--radius-md); padding: 16px 18px; }
 #side-panel .study-row:last-child { padding-bottom: 16px; }
+
+/* single-column fallback: nav becomes a horizontal scroll rail on top.
+   Must stay LAST — the workspace/readability #side-panel rules above share
+   its specificity, so source order is what lets this win on small screens. */
+@media (max-width: 900px) {
+  #side-panel { grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr); }
+  #panel-header, #tab-divider { grid-column: 1; }
+  #tab-rail { grid-column: 1; grid-row: 3; flex-direction: row; overflow-x: auto; overflow-y: hidden;
+    padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--line-dim); }
+  .tab-group { display: none; }
+  .ptab { white-space: nowrap; }
+  .ptab-content { grid-column: 1; grid-row: 4; padding: 16px 16px 20px; }
+}
 </style>
 </head>
 <body>
