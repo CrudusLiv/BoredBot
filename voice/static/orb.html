@@ -744,6 +744,13 @@ body.paused #conn-status { display: block; }
 #side-panel .habit-row.done .habit-name { color: var(--accent); }
 #side-panel .habits-meta { color: var(--text-dim); border-top-color: var(--line-dim); }
 
+/* jobs table — cells inherit, so set readable colors here */
+#jobs-table { color: var(--text); }
+#jobs-table th { color: var(--text-dim); font-family: var(--mono);
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 500; }
+#jobs-table a { color: var(--text); }
+#jobs-table a:hover { color: var(--accent); }
+
 /* settings fields */
 #side-panel .settings-input, #side-panel .settings-select { border-radius: var(--radius-sm);
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border); color: var(--text);
@@ -2620,7 +2627,6 @@ function renderJobs() {
         const a = document.createElement('a');
         a.href = j.link; a.target = '_blank'; a.rel = 'noopener';
         a.textContent = j.title || '(untitled)';
-        a.style.color = 'inherit';
         td.appendChild(a);
       } else if (col.key === 'first_seen') {
         td.textContent = String(j.first_seen || '').slice(0, 10);
@@ -2630,15 +2636,17 @@ function renderJobs() {
       tr.appendChild(td);
     });
     const act = document.createElement('td');
-    act.style.cssText = 'padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.06); ' +
-      'white-space:nowrap; display:flex; gap:4px;';
+    act.style.cssText = 'padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.06); white-space:nowrap;';
+    const actWrap = document.createElement('div');
+    actWrap.style.cssText = 'display:flex; gap:4px;';
     [['Draft', 'draft'], ['Applied', 'applied'], ['Dismiss', 'dismissed']].forEach(([label, action]) => {
       const b = document.createElement('button');
       b.className = 'pill-btn';
       b.textContent = label;
       b.addEventListener('click', () => _jobAction(j.id, action, b));
-      act.appendChild(b);
+      actWrap.appendChild(b);
     });
+    act.appendChild(actWrap);
     tr.appendChild(act);
     body.appendChild(tr);
   });
