@@ -41,7 +41,10 @@ def _authority() -> str:
 def _load_cache() -> "msal.SerializableTokenCache":
     cache = msal.SerializableTokenCache()
     if TOKEN_CACHE_PATH.exists():
-        cache.deserialize(TOKEN_CACHE_PATH.read_text(encoding="utf-8"))
+        try:
+            cache.deserialize(TOKEN_CACHE_PATH.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"msal_auth: corrupted token cache, starting fresh: {exc}", file=sys.stderr)
     return cache
 
 
@@ -65,25 +68,30 @@ def get_token(scopes: list[str] | None = None) -> str | None:
         return None
 
     scopes = scopes or DEFAULT_SCOPES
-    cache = _load_cache()
-    app = msal.PublicClientApplication(client_id, authority=_authority(), token_cache=cache)
 
-    result = None
-    accounts = app.get_accounts()
-    if accounts:
-        result = app.acquire_token_silent(scopes, account=accounts[0])
+    try:
+        cache = _load_cache()
+        app = msal.PublicClientApplication(client_id, authority=_authority(), token_cache=cache)
 
-    if not result:
-        flow = app.initiate_device_flow(scopes)
-        if "user_code" not in flow and "message" not in flow:
-            print(f"msal_auth: device flow init failed: {flow.get('error_description', flow)}", file=sys.stderr)
+        result = None
+        accounts = app.get_accounts()
+        if accounts:
+            result = app.acquire_token_silent(scopes, account=accounts[0])
+
+        if not result:
+            flow = app.initiate_device_flow(scopes)
+            if "user_code" not in flow and "message" not in flow:
+                print(f"msal_auth: device flow init failed: {flow.get('error_description', flow)}", file=sys.stderr)
+                return None
+            print(flow.get("message", "Approve the sign-in request in your browser."), file=sys.stderr)
+            result = app.acquire_token_by_device_flow(flow)
+
+        _save_cache(cache)
+
+        if not result or "access_token" not in result:
+            print(f"msal_auth: token acquisition failed: {result.get('error_description', result) if result else 'no result'}", file=sys.stderr)
             return None
-        print(flow.get("message", "Approve the sign-in request in your browser."), file=sys.stderr)
-        result = app.acquire_token_by_device_flow(flow)
-
-    _save_cache(cache)
-
-    if not result or "access_token" not in result:
-        print(f"msal_auth: token acquisition failed: {result.get('error_description', result) if result else 'no result'}", file=sys.stderr)
+        return result["access_token"]
+    except Exception as exc:
+        print(f"msal_auth: unexpected error: {exc}", file=sys.stderr)
         return None
-    return result["access_token"]

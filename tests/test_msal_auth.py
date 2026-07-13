@@ -95,3 +95,48 @@ def test_get_token_returns_none_on_device_flow_failure(monkeypatch):
         token = ma.get_token(scopes=["Mail.Read"])
 
     assert token is None
+
+
+def test_get_token_returns_none_on_msal_exception(monkeypatch, capsys):
+    import importlib
+    import integrations.msal_auth as ma
+    importlib.reload(ma)
+    monkeypatch.setenv("OUTLOOK_CLIENT_ID", "fake-client-id")
+
+    # Simulate PublicClientApplication raising an exception
+    with patch.object(ma.msal, "PublicClientApplication", side_effect=RuntimeError("Network error")):
+        token = ma.get_token(scopes=["Mail.Read"])
+
+    assert token is None
+    captured = capsys.readouterr()
+    assert "msal_auth: unexpected error:" in captured.err
+    assert "Network error" in captured.err
+
+
+def test_get_token_handles_corrupted_cache(monkeypatch, capsys):
+    import importlib
+    import integrations.msal_auth as ma
+    importlib.reload(ma)
+    monkeypatch.setenv("OUTLOOK_CLIENT_ID", "fake-client-id")
+
+    # Mock SerializableTokenCache to raise on deserialize if the cache file exists
+    mock_cache = MagicMock()
+    mock_cache.deserialize.side_effect = ValueError("Invalid cache format")
+    mock_cache.has_state_changed = False
+
+    mock_app = MagicMock()
+    mock_app.get_accounts.return_value = [{"username": "test@example.com"}]
+    mock_app.acquire_token_silent.return_value = {"access_token": "cached-tok"}
+
+    with patch.object(ma, "TOKEN_CACHE_PATH") as mock_path:
+        mock_path.exists.return_value = True
+        mock_path.read_text.return_value = "corrupted data"
+
+        with patch.object(ma.msal, "SerializableTokenCache", return_value=mock_cache):
+            with patch.object(ma.msal, "PublicClientApplication", return_value=mock_app):
+                token = ma.get_token(scopes=["Mail.Read"])
+
+    # Should succeed by treating corrupted cache as empty
+    assert token == "cached-tok"
+    captured = capsys.readouterr()
+    assert "msal_auth: corrupted token cache, starting fresh:" in captured.err
