@@ -6,6 +6,7 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).parent))
 import requests  # noqa: E402
@@ -70,7 +71,7 @@ def get_body(msg_id: str) -> str:
         return ""
     try:
         resp = requests.get(
-            f"{GRAPH_BASE}/me/messages/{msg_id}",
+            f"{GRAPH_BASE}/me/messages/{quote(msg_id, safe='')}",
             headers={"Authorization": f"Bearer {token}"},
             params={"$select": "body"},
             timeout=15,

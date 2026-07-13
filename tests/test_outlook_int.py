@@ -159,6 +159,23 @@ def test_get_body_passes_through_text_content():
         assert oi.get_body("m1") == "plain body"
 
 
+def test_get_body_url_encodes_msg_id_with_slash():
+    import importlib
+    import integrations.outlook_int as oi
+    importlib.reload(oi)
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {"body": {"contentType": "text", "content": "plain body"}}
+    msg_id = "AAMkAG/1234+abc="
+    with patch.object(oi, "_get_token", return_value="tok"), \
+         patch.object(oi.requests, "get", return_value=resp) as mock_get:
+        oi.get_body(msg_id)
+
+    called_url = mock_get.call_args[0][0]
+    assert "/" not in called_url.split("/me/messages/", 1)[1]
+    assert "AAMkAG%2F1234%2Babc%3D" in called_url
+
+
 def test_get_body_returns_empty_on_request_error():
     import importlib
     import integrations.outlook_int as oi
