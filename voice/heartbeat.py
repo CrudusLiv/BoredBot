@@ -213,13 +213,22 @@ def _check_deadlines() -> list[str]:
     return []
 
 
+# Notices carried over from the previous _tick() — in-memory only (a restart
+# just re-baselines, same as _prev_procs/_away_since), so a slow tick doesn't
+# re-toast the identical calendar/email/deadline notice it already posted.
+_last_tick_notices: set[str] = set()
+
+
 def _tick() -> None:
+    global _last_tick_notices
     notices: list[str] = []
     notices.extend(_check_calendar())
     notices.extend(_check_email())
     notices.extend(_check_deadlines())
     for text in notices:
-        _post(text)
+        if text not in _last_tick_notices:
+            _post(text)
+    _last_tick_notices = set(notices)
 
 
 def process_inbox_once() -> None:
