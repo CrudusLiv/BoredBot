@@ -119,6 +119,108 @@ Remote - Malaysia
 """
 
 
+# Real bodies, captured verbatim from Gmail (2026-07-14). The layouts the
+# parser must actually survive: LinkedIn pads the block with a badge line
+# between location and link; Indeed packs "Company - Location" on one line and
+# follows it with salary / badge / description / age noise.
+
+REAL_LINKEDIN_BODY = """\
+Your job alert for web developer in 50250
+New jobs match your preferences.
+Manage alerts: https://www.linkedin.com/comm/jobs/alerts?lipi=urn%3Ali
+
+Full Stack Developer
+Maxis
+Kuala Lumpur
+
+This company is actively hiring
+View job: https://www.linkedin.com/comm/jobs/view/4420904704/?trackingId=dNHDebG2
+
+---------------------------------------------------------
+
+
+Application Engineer
+NTT DATA, Inc.
+Kelab Darul Ehsan
+
+This company is actively hiring
+View job: https://www.linkedin.com/comm/jobs/view/4409294046/?trackingId=UJDmrRv3
+
+---------------------------------------------------------
+
+See all jobs on LinkedIn:  https://www.linkedin.com/comm/jobs/search-results/?keywords=web
+"""
+
+REAL_INDEED_BODY = """\
+Indeed Job Alert
+23 new internship it jobs in Kuala Lumpur
+
+Jobs 1-23 of 23 new jobs
+See matching results on Indeed: https://malaysia.indeed.com/jobs?q=internship+it&from=ja
+
+
+IT Internship (Immediate Intake)
+Micro Technology Solution Sdn Bhd - Kuala Lumpur
+RM 800 a month
+Easily apply
+Windows OS setup and configuration. Windows Server setup and implementation.
+3 days ago
+https://malaysia.indeed.com/rc/clk/dl?jk=c53499ff0c489971&from=ja
+
+Technology Internship Programme Malaysia 2026
+Standard Chartered - Kuala Lumpur
+Be available to start the internship in August 2026. A structured induction.
+6 days ago
+https://malaysia.indeed.com/rc/clk/dl?jk=aa0057747201043a&from=ja
+"""
+
+
+def test_parse_real_linkedin_badge_line_does_not_shift_fields():
+    """The 'This company is actively hiring' badge sits between the location
+    and the link; it must not push title/company/location down a slot."""
+    out = jobs.parse_digest("linkedin.com", REAL_LINKEDIN_BODY)
+    assert len(out) == 2
+    a, b = out
+    assert a["title"] == "Full Stack Developer"
+    assert a["company"] == "Maxis"
+    assert a["location"] == "Kuala Lumpur"
+    assert b["title"] == "Application Engineer"
+    assert b["company"] == "NTT DATA, Inc."
+    assert b["location"] == "Kelab Darul Ehsan"
+
+
+def test_parse_real_linkedin_never_captures_badge_or_header():
+    out = jobs.parse_digest("linkedin.com", REAL_LINKEDIN_BODY)
+    junk = {"This company is actively hiring", "New jobs match your preferences.",
+            "Your job alert for web developer in 50250"}
+    for p in out:
+        assert not junk & {p["title"], p["company"], p["location"]}
+
+
+def test_parse_real_indeed_splits_company_and_location():
+    """Indeed puts 'Company - Location' on one line, then trails the block with
+    salary / 'Easily apply' / description prose / '3 days ago' noise."""
+    out = jobs.parse_digest("indeed.com", REAL_INDEED_BODY)
+    assert len(out) == 2
+    a, b = out
+    assert a["title"] == "IT Internship (Immediate Intake)"
+    assert a["company"] == "Micro Technology Solution Sdn Bhd"
+    assert a["location"] == "Kuala Lumpur"
+    assert b["title"] == "Technology Internship Programme Malaysia 2026"
+    assert b["company"] == "Standard Chartered"
+    assert b["location"] == "Kuala Lumpur"
+
+
+def test_parse_real_indeed_never_captures_noise():
+    out = jobs.parse_digest("indeed.com", REAL_INDEED_BODY)
+    for p in out:
+        vals = {p["title"], p["company"], p["location"]}
+        assert "Easily apply" not in vals
+        assert "RM 800 a month" not in vals
+        assert not any(v.endswith("ago") for v in vals)
+        assert not any(". " in v for v in vals)      # no description prose
+
+
 def test_parse_linkedin_digest():
     out = jobs.parse_digest("linkedin.com", LINKEDIN_BODY)
     assert len(out) == 2
