@@ -42,10 +42,13 @@ def _match_killswitch(text: str) -> str | None:
 
 
 def _apply_killswitch(action: str) -> str:
+    """Pausing makes Vesper fully deaf, so the 'resume' phrase can never be
+    heard by voice — resume is the orb's pause button or the tray's Resume item.
+    The phrase stays configured because it still works from the text UI."""
     from voice import killswitch
     killswitch.set_paused(action == "pause")
     if action == "pause":
-        return "Standing down. Proactive systems paused."
+        return "Standing down. Say nothing more — use the tray to bring me back."
     return "Back online."
 
 
@@ -61,8 +64,8 @@ def _start_proactive_speaker(
             except queue.Empty:
                 continue
             try:
-                from voice import config as cfg, killswitch
-                if cfg.is_quiet_hours() or killswitch.is_paused():
+                from voice import config as cfg, silence
+                if cfg.is_quiet_hours() or silence.is_silenced():
                     continue
                 from voice.tts import speak
                 speak(text)
@@ -95,7 +98,7 @@ def _run_smoke_test() -> None:
         "voice.audit", "voice.heartbeat", "voice.safety", "voice.memory",
         "voice.tray", "voice.ui_server",
         "voice.app_scanner", "voice.approved_apps", "voice.tools",
-        "voice.confirm", "voice.killswitch", "voice.usage",
+        "voice.confirm", "voice.killswitch", "voice.silence", "voice.usage",
         "voice.clap_detector",
     ]
     failed = []
@@ -320,6 +323,7 @@ def run() -> None:
                         break
 
             if args.voice:
+                from voice import silence
                 from voice.audio import record_ptt
                 from voice.stt import transcribe
                 from voice.tts import stop_speaking
@@ -335,6 +339,12 @@ def run() -> None:
                         if not _wakeword_event.wait(timeout=5.0):
                             continue
                         _wakeword_event.clear()
+                        # Silence can engage between detection and here (and the
+                        # clap barge-in sets this event directly). Never open the
+                        # mic while silenced.
+                        if silence.is_silenced():
+                            _wakeword_ready.set()
+                            continue
                         stop_speaking()
                         print("[wake] triggered — listening …", flush=True)
                         if conf.get("ui_enabled", False):
@@ -372,7 +382,9 @@ def run() -> None:
                             _msg = _apply_killswitch(_ks_action)
                             print(f"vesper: {_msg}")
                             from voice.tts import speak
-                            speak(_msg, on_done=_wakeword_ready.set)
+                            # force: the acknowledgement is the one line that has
+                            # to be heard despite the silence it announces.
+                            speak(_msg, on_done=_wakeword_ready.set, force=True)
                             _emit({"type": "state", "value": "idle"})
                             continue
                         print(f"[STT] {user_text!r}")
@@ -406,6 +418,9 @@ def run() -> None:
                         continue
 
                 # PTT path (used when wakeword is off or fell back)
+                if silence.is_silenced():
+                    time.sleep(0.5)
+                    continue
                 _emit({"type": "state", "value": "listening"})
                 audio = record_ptt(key=conf.get("ptt_key", "space"), on_press=stop_speaking)
                 if audio is None:
@@ -434,7 +449,7 @@ def run() -> None:
                 print(f"vesper: {_msg}")
                 if args.voice and not cfg.is_quiet_hours():
                     from voice.tts import speak
-                    speak(_msg)
+                    speak(_msg, force=True)
                 continue
 
             print("vesper: ", end="", flush=True)

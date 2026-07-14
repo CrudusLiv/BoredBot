@@ -40,12 +40,24 @@ _active_utterance: "Utterance | None" = None
 _utterance_lock = threading.Lock()
 
 
-def speak(text: str, on_done=None) -> None:
+def speak(text: str, on_done=None, force: bool = False) -> None:
     """Synthesise and play in a daemon thread (non-blocking).
 
     on_done: optional zero-arg callable fired after playback ends or fails.
              Pass _wakeword_ready.set here instead of calling it after speak().
+    force:   Speak even while silenced. Reserved for the killswitch
+             acknowledgement — the one line that has to be heard *because*
+             she is going quiet.
+
+    Otherwise the text is dropped while silenced, but on_done still fires:
+    callers hang the wake-word ready_event off it, so skipping it would strand
+    the listener.
     """
+    from voice import silence
+    if not force and silence.is_silenced():
+        if on_done:
+            on_done()
+        return
     threading.Thread(target=_play, args=(text, on_done), daemon=True).start()
 
 
@@ -195,12 +207,20 @@ class Utterance:
 
 
 def begin_utterance(on_done=None) -> Utterance:
-    """Start a pipelined utterance, cancelling any previous one."""
+    """Start a pipelined utterance, cancelling any previous one.
+
+    While silenced, hand back an already-cancelled utterance: feed() drops every
+    sentence and on_done has already fired, so callers stream into it as usual
+    without needing their own gate."""
     global _active_utterance
+    from voice import silence
     with _utterance_lock:
         if _active_utterance is not None:
             _active_utterance.cancel()
         utt = Utterance(on_done)
+        if silence.is_silenced():
+            utt.cancel()
+            return utt
         _active_utterance = utt
         return utt
 

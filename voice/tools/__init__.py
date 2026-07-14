@@ -49,7 +49,7 @@ _register("filter_subscriptions",
     "Identify newsletter/subscription emails. Args: days(int, default 3).",
     filter_subscriptions)
 _register("search_vault",
-    "Search notes and lectures by meaning. Use for any question about saved notes. Args: query(str), top_k(int, default 5).",
+    "Search notes by meaning. Use for any question about saved notes. Args: query(str), top_k(int, default 5).",
     search_vault)
 _register("read_note",
     "Read a specific vault note by relative path. Args: path(str).",
@@ -81,7 +81,7 @@ _register("launch_app",
     _launch_app_fn)
 from voice.tools.activate_profile import activate_profile
 _register("activate_profile",
-    "Activate a named app-launch profile (a pre-defined group of apps), e.g. 'start study mode'. "
+    "Activate a named app-launch profile (a pre-defined group of apps), e.g. 'start focus mode'. "
     "REQUIRES CONFIRMATION — approving launches every app in the profile in one step. Args: name(str).",
     activate_profile)
 from voice.tools.profile_state import update_profile_app_state
@@ -95,12 +95,3 @@ _register("complete_deadline",
     "Mark a deadline as completed — moves its row from Active to Done in DEADLINES.md "
     "so alerts stop. REQUIRES CONFIRMATION. Args: query(str) — a few words from the deadline title.",
     complete_deadline)
-from voice.tools.study import grade_card_tool, review_cards
-_register("review_cards",
-    "Fetch spaced-repetition flashcards due for review today. Use when asked to 'quiz me' "
-    "or 'review flashcards'. Ask each question aloud, listen to the answer, then call grade_card. No args.",
-    review_cards)
-_register("grade_card",
-    "Record whether the user answered a review card correctly, after you've judged their spoken "
-    "answer against the card's stored answer. Args: card_id(str), correct(bool).",
-    grade_card_tool)

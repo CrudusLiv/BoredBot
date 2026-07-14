@@ -23,24 +23,24 @@ def _ev(title, date="2099-07-20"):
 # ── filter_deadline_events ────────────────────────────────────────────────────
 
 def test_filter_matches_keywords_case_insensitive():
-    events = [_ev("FYP Submission"), _ev("Ginny bday"), _ev("CS101 EXAM")]
+    events = [_ev("Passport Renewal"), _ev("Ginny bday"), _ev("Electric BILL")]
     out = dl.filter_deadline_events(events, dl.DEFAULT_KEYWORDS)
-    assert [t for _, t in out] == ["FYP Submission", "CS101 EXAM"]
+    assert [t for _, t in out] == ["Passport Renewal", "Electric BILL"]
 
 
 def test_filter_uses_word_boundaries():
-    # "test" must not match "Contest"; "due" must not match "residue"
-    events = [_ev("Contest stream"), _ev("Residue check"), _ev("Physics test")]
+    # "bill" must not match "Billboard"; "due" must not match "residue"
+    events = [_ev("Billboard shoot"), _ev("Residue check"), _ev("Phone bill")]
     out = dl.filter_deadline_events(events, dl.DEFAULT_KEYWORDS)
-    assert [t for _, t in out] == ["Physics test"]
+    assert [t for _, t in out] == ["Phone bill"]
 
 
 def test_filter_takes_date_prefix_of_datetime_start():
     out = dl.filter_deadline_events(
-        [{"summary": "Quiz 2", "start": "2099-07-21T14:00:00+08:00"}],
+        [{"summary": "Visa application", "start": "2099-07-21T14:00:00+08:00"}],
         dl.DEFAULT_KEYWORDS,
     )
-    assert out == [("2099-07-21", "Quiz 2")]
+    assert out == [("2099-07-21", "Visa application")]
 
 
 # ── merge_events ──────────────────────────────────────────────────────────────

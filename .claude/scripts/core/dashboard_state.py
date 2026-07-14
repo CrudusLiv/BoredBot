@@ -25,7 +25,6 @@ STATE_FILE = PROJECT_DIR / ".claude" / "data" / "dashboard_state.json"
 DEFAULT_STATE: dict[str, Any] = {
     "heartbeat": {"last_status": None, "last_tick_ts": 0},
     "deadlines": {},
-    "lectures": {},
     "pr_activity": {},
     "next3": {"thread_id": None, "message_id": None},
 }

@@ -66,13 +66,6 @@ def _feed_title_body(kind: str, payload: dict) -> tuple[str, str]:
         titles = [i.get("title", "") for i in items[:3]]
         return "Next 3 deadlines", ", ".join(t for t in titles if t) or "—"
 
-    if kind == "lecture_new":
-        title = (payload.get("title") or "(untitled)").strip()
-        name = (payload.get("name") or "").strip()
-        tldr = payload.get("tldr") or []
-        body = f"{name} — {tldr[0]}" if name and tldr else (name or (tldr[0] if tldr else ""))
-        return title, body
-
     if kind == "morning_digest":
         ts = payload.get("ts")
         now = datetime.fromtimestamp(ts, tz=_KL) if ts else datetime.now(_KL)

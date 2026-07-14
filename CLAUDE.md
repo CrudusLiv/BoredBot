@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Vesper is a personal second brain. Two layers live here:
 
-1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk or wake-word audio, Deepgram STT, edge-tts TTS, multi-turn brain via `claude -p` subprocess. The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, ambient vault notices, GitHub PRs, habits). Run with `py -m voice --wakeword`.
+1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk or wake-word audio, Deepgram STT, edge-tts TTS, multi-turn brain via `claude -p` subprocess. The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice --wakeword`.
 2. **Claude Code agent system** — `.claude/scripts/`, `.claude/hooks/`, and `.claude/settings.json` are the running agent layer (memory reflection, vector indexing, integrations).
 
-The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. The morning-digest webhook post in `.claude/scripts/memory_reflect.py` still uses `core/dashboard.py` + `integrations/discord_webhook.py`, so those two modules stay.
+The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. `core/dashboard.py` + `integrations/discord_webhook.py` are likewise dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today.
 
 The personal vault (notes, schedules, finances) lives locally at `Dynamous/Memory/` — gitignored. Each machine keeps its own vault.
 
@@ -42,7 +42,7 @@ py .claude/scripts/query.py status
 # Pull data
 py .claude/scripts/query.py github pr-list <owner/repo>
 py .claude/scripts/query.py gcal upcoming --days 14
-py .claude/scripts/query.py vault inbox
+py .claude/scripts/query.py gmail recent --days 7
 ```
 
 Add `--json` to most subcommands for machine-readable output.
@@ -128,12 +128,10 @@ User settings (quiet hours, feature toggles, heartbeat interval, activity awaren
 
 ## Vault write rules
 
-- **Never delete** files under `Dynamous/Memory/` — except inside `inbox/_processed/`, where the lecture-summarizer deletes source files after a verified summary write
+- **Never delete** files under `Dynamous/Memory/`.
 - **`drafts/active/` is writable, confirmation-free.** `write_draft(name, text)` (`voice/tools/workspace.py`) writes/overwrites `drafts/active/<name>` — no confirmation prompt, and writing a draft never sends or finalizes anything; it's staging only. Only `active/` is reachable this way — moving a draft to `sent/`/`expired/` is a manual/other-tool action, not something `write_draft` does.
 - **`scratch/` is Vesper's own working space** — non-authored, freely overwritable via `write_scratch(path, text)`, and **not indexed by note-search**.
 - Neither `drafts/` nor `scratch/` is ever auto-deleted or auto-moved — cleanup is manual, by the user.
-- **Inbox drop zone**: `Dynamous/Memory/inbox/` — new `.pptx`/`.pdf` files trigger the lecture-summarizer skill
-- `inbox/_processed/` is gitignored (sources are deleted after summarisation; the folder stays as a `.gitkeep` placeholder)
 
 ## Skills
 
@@ -141,8 +139,5 @@ Skills live in `.claude/skills/<name>/SKILL.md`:
 
 | Skill | Purpose |
 |-------|---------|
-| `deadline-tracker` | Parse and track deadlines from documents |
-| `lecture-summarizer` | Convert `.pptx`/`.pdf` lectures into structured Obsidian notes |
-| `concept-wiki` | Cross-reference concepts from lectures into `concepts/` wiki pages |
 | `note-search` | Hybrid semantic + keyword search over the vault |
 | `vault-structure` | Vault layout, Obsidian conventions, read/write rules |

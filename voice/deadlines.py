@@ -13,8 +13,8 @@ import re
 from typing import Iterable
 
 DEFAULT_KEYWORDS = [
-    "due", "deadline", "submission", "submit", "assignment", "assessment",
-    "exam", "quiz", "test", "project", "presentation",
+    "due", "deadline", "submission", "submit", "payment", "bill",
+    "renewal", "expires", "application", "interview", "appointment",
 ]
 
 # `- [nogcal:] YYYY-MM-DD — rest [✓ done YYYY-MM-DD]`

@@ -1,4 +1,4 @@
-"""Walk projects/ and lectures/, call wikilinks.add_sibling_wikilinks on every
+"""Walk projects/, call wikilinks.add_sibling_wikilinks on every
 note. Idempotent — safe to re-run. Designed to be invoked after a manual
 restructure of either folder."""
 from __future__ import annotations
@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts"))
 from memory import wikilinks  # noqa: E402
 
 VAULT = PROJECT_DIR / "Dynamous" / "Memory"
-ROOTS = [VAULT / "projects", VAULT / "lectures"]
+ROOTS = [VAULT / "projects"]
 
 
 def main() -> int:

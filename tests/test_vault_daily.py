@@ -79,17 +79,11 @@ def test_append_line_and_block_coexist(tmp_vault):
 
 # --- CLI ---
 
-def test_cli_habit(tmp_vault, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["daily.py", "habit", "Lecture engagement"])
-    daily_mod._cli()
-    assert "Habit: Lecture engagement" in _daily_file(tmp_vault).read_text(encoding="utf-8")
-
-
-def test_cli_commit_assignment(tmp_vault, monkeypatch):
+def test_cli_commit_work(tmp_vault, monkeypatch):
     monkeypatch.setattr(sys, "argv",
-        ["daily.py", "commit", "assignment", "CrudusLiv/Vesper", "fix auth bug"])
+        ["daily.py", "commit", "work", "CrudusLiv/Vesper", "fix auth bug"])
     daily_mod._cli()
-    assert "Commit [assignment]: CrudusLiv/Vesper — fix auth bug" in \
+    assert "Commit [work]: CrudusLiv/Vesper — fix auth bug" in \
         _daily_file(tmp_vault).read_text(encoding="utf-8")
 
 
@@ -98,16 +92,6 @@ def test_cli_commit_personal(tmp_vault, monkeypatch):
         ["daily.py", "commit", "personal", "CrudusLiv/myrepo", "update readme"])
     daily_mod._cli()
     assert "Commit [personal]: CrudusLiv/myrepo — update readme" in \
-        _daily_file(tmp_vault).read_text(encoding="utf-8")
-
-
-def test_cli_lecture(tmp_vault, monkeypatch):
-    monkeypatch.setattr(sys, "argv", [
-        "daily.py", "lecture", "CS101", "Sorting Algorithms",
-        "lectures/CS101/2026-05-28_sorting",
-    ])
-    daily_mod._cli()
-    assert "Lecture: CS101 — Sorting Algorithms → [[lectures/CS101/2026-05-28_sorting]]" in \
         _daily_file(tmp_vault).read_text(encoding="utf-8")
 
 

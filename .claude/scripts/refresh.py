@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Manual refresh -- gather a snapshot from integrations and write vault state files.
 
-No LLM calls, no notifications, no habits. Just data gather + vault write.
+No LLM calls, no notifications. Just data gather + vault write.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts" / "integrations"))
 
 import _env  # noqa: F401, E402
 
-from core import inbox, snapshot, vault_state_writer  # noqa: E402
+from core import snapshot, vault_state_writer  # noqa: E402
 
 KL = timezone(timedelta(hours=8))
 
@@ -36,13 +36,6 @@ def main() -> int:
     dt = datetime.now(tz=KL).strftime("%H:%M · %Y-%m-%d")
     lines.append(f"Last refresh: {dt}")
 
-    for summary in inbox.process_new_files():
-        rel = summary["path"].relative_to(VAULT).as_posix()
-        label = "Lecture summarised" if summary["type"] == "lecture" else "Project filed"
-        lines.append(f"  {label}: {summary['title']} → {rel}")
-
-    inbox.refresh_daily_timeline()
-
     prev_saved = snapshot.load_state()
     # Skip the GitHub API call: it dominates the refresh latency (~19s vs
     # ~150ms for everything else) and the scheduled 30-min heartbeat already
@@ -51,7 +44,6 @@ def main() -> int:
     curr = {
         "timestamp": time.time(),
         "github":  (prev_saved or {}).get("github") or {},
-        "inbox":   snapshot._safe(snapshot._snapshot_inbox),
     }
     # Preserve the scheduled heartbeat run time so the dashboard "Last ran"
     # shows when the heartbeat actually fired, not when the user hit Refresh.
@@ -61,12 +53,9 @@ def main() -> int:
     snapshot.save_state(curr)
 
     github = curr.get("github") or {}
-    inbox_state = curr.get("inbox") or {}
 
     github_detail = "(unavailable — carried from last heartbeat)" if github.get("error") else f"{github.get('push_count', 0)} pushes"
-    inbox_detail  = "(error)" if inbox_state.get("error") else f"{inbox_state.get('count', 0)} files"
     lines.append(f"  GitHub:  {github_detail}")
-    lines.append(f"  Inbox:   {inbox_detail}")
     lines.append("Done.")
 
     _write_log(lines)

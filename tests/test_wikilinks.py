@@ -89,18 +89,18 @@ def test_self_link_skipped(tmp_path):
     assert "[[a]]" not in a.read_text(encoding="utf-8")
 
 
-def test_category_root_blocks_cross_course_links(tmp_path):
-    """A note in lectures/DIP215/ must NOT link to lectures/Kotlin/."""
+def test_category_root_blocks_cross_project_links(tmp_path):
+    """A note in projects/Alpha/ must NOT link to projects/Beta/."""
     wl = _import_wikilinks()
-    dip215 = tmp_path / "lectures" / "DIP215" / "static_methods.md"
-    kotlin = tmp_path / "lectures" / "Kotlin" / "functions.md"
-    _write_note(dip215)
-    _write_note(kotlin)
-    wl.add_sibling_wikilinks(dip215)
-    text_dip = dip215.read_text(encoding="utf-8")
-    text_kt = kotlin.read_text(encoding="utf-8")
-    assert "[[functions]]" not in text_dip
-    assert "[[static_methods]]" not in text_kt
+    alpha = tmp_path / "projects" / "Alpha" / "static_methods.md"
+    beta = tmp_path / "projects" / "Beta" / "functions.md"
+    _write_note(alpha)
+    _write_note(beta)
+    wl.add_sibling_wikilinks(alpha)
+    text_alpha = alpha.read_text(encoding="utf-8")
+    text_beta = beta.read_text(encoding="utf-8")
+    assert "[[functions]]" not in text_alpha
+    assert "[[static_methods]]" not in text_beta
 
 
 def test_project_assessment_links_preserved(tmp_path):

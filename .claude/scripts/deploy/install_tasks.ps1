@@ -116,7 +116,7 @@ Register-Task `
     -Trigger $reflectTrigger `
     -Action $reflectAction `
     -Settings (New-CommonSettings) `
-    -Description 'Second Brain daily reflection. Promotes durable items from yesterday daily log into MEMORY.md and rolls HABITS.md.'
+    -Description 'Second Brain daily reflection. Promotes durable items from yesterday daily log into MEMORY.md.'
 
 # ----- vesper-index: every 10 min, all day -----
 # [TimeSpan]::MaxValue serialises to an out-of-range ISO duration that Task

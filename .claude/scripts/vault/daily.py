@@ -55,30 +55,18 @@ def _cli() -> None:
     parser = argparse.ArgumentParser(prog="vault/daily.py")
     sub = parser.add_subparsers(dest="cmd")
 
-    lec = sub.add_parser("lecture")
-    lec.add_argument("course")
-    lec.add_argument("topic")
-    lec.add_argument("note_path")
-
     com = sub.add_parser("commit")
-    com.add_argument("kind", choices=["assignment", "personal"])
+    com.add_argument("kind", choices=["work", "personal"])
     com.add_argument("repo")
     com.add_argument("message")
-
-    hab = sub.add_parser("habit")
-    hab.add_argument("pillar")
 
     alr = sub.add_parser("alert")
     alr.add_argument("title")
     alr.add_argument("body")
 
     args = parser.parse_args()
-    if args.cmd == "lecture":
-        append_line(f"Lecture: {args.course} — {args.topic} → [[{args.note_path}]]")
-    elif args.cmd == "commit":
+    if args.cmd == "commit":
         append_line(f"Commit [{args.kind}]: {args.repo} — {args.message}")
-    elif args.cmd == "habit":
-        append_line(f"Habit: {args.pillar}")
     elif args.cmd == "alert":
         append_line(f"Alert: {args.title} — {args.body}")
     else:

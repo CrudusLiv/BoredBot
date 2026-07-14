@@ -60,17 +60,6 @@ INTEGRATIONS: list[Integration] = [
         requires_env=["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
         notes="Shares OAuth token with Google Calendar. First run opens browser for consent.",
     ),
-    Integration(
-        name="vault",
-        description="Local vault filesystem -- inbox watcher for new .pptx and .pdf",
-        notes="No auth needed.",
-    ),
-    Integration(
-        name="outlook",
-        description="Outlook/M365 university mail (read-only)",
-        requires_env=["OUTLOOK_CLIENT_ID"],
-        notes="MSAL device-code flow -- first run prints a URL + code to approve in a browser.",
-    ),
 ]
 
 

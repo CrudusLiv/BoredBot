@@ -23,8 +23,8 @@ PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolv
 VAULT = PROJECT_DIR / "Dynamous" / "Memory"
 
 # What to index. Anything outside these is ignored.
-INCLUDE_FILES = ["SOUL.md", "USER.md", "MEMORY.md", "HEARTBEAT.md", "HABITS.md"]
-INCLUDE_DIRS = ["lectures", "projects", "research", "goals", "daily", "drafts/sent"]
+INCLUDE_FILES = ["SOUL.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"]
+INCLUDE_DIRS = ["projects", "research", "goals", "daily", "drafts/sent"]
 
 
 def file_hash(path: Path) -> str:

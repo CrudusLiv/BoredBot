@@ -33,7 +33,7 @@ py -m voice --smoke-test # import every module and exit — no audio hardware ne
 py -m voice --version    # print the installed version
 ```
 
-Open `http://localhost:7070` (Edge `--app` mode recommended) for the orb UI, if `ui_enabled` is set in `voice/config.json`. The HUD is a galaxy/atomic motif around the orb — rounded glass panels, a drifting parallax starfield, and orbiting status indicators — with state/usage readouts on the left and a **Modules** button (bottom-right) for chat, notices, finance, habits, study, calendar, apps, and settings.
+Open `http://localhost:7070` (Edge `--app` mode recommended) for the orb UI, if `ui_enabled` is set in `voice/config.json`. The HUD is a galaxy/atomic motif around the orb — rounded glass panels, a drifting parallax starfield, and orbiting status indicators — with state/usage readouts on the left and a **Modules** button (bottom-right) for chat, notices, finance, calendar, jobs, workspace, apps, profiles, and settings.
 
 Scroll down (or press →) to dock the orb into the corner and maximize the notices feed into a centered panel; scroll up, press ←, or hit Esc to bring the orb back.
 

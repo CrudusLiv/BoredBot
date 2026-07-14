@@ -35,7 +35,7 @@ KL = timezone(timedelta(hours=8))
 VAULT_NAME = "Memory"  # Folder under Dynamous/ holding all notes.
 
 # Kinds never written to the web feed (Discord-thread-internal or always-noise).
-_FEED_SKIP: frozenset[str] = frozenset({"deadline_reply", "lecture_reply", "vesper_reply"})
+_FEED_SKIP: frozenset[str] = frozenset({"deadline_reply", "vesper_reply"})
 # Kinds that fire a Windows toast in addition to the feed write.
 _TOAST_KINDS: frozenset[str] = frozenset({"deadline_24h", "deadline_overdue", "error"})
 
@@ -117,7 +117,6 @@ ROUTES: dict[str, str] = {
     "deadline_24h":     "DISCORD_HOOK_DEADLINES",
     "deadline_overdue": "DISCORD_HOOK_DEADLINES",
     "next3":            "DISCORD_HOOK_DEADLINES",
-    "lecture_new":      "DISCORD_HOOK_LECTURES",
     "pr_opened":        "DISCORD_HOOK_PR_ACTIVITY",
     "pr_merged":        "DISCORD_HOOK_PR_ACTIVITY",
     "pr_comment":       "DISCORD_HOOK_PR_ACTIVITY",
@@ -129,13 +128,11 @@ ROUTES: dict[str, str] = {
     "morning_digest":   "DISCORD_HOOK_DAILY",
     "evening_nudge":    "DISCORD_HOOK_DAILY",
     "daily_digest":     "DISCORD_HOOK_DAILY",
-    "email_uni":        "DISCORD_HOOK_EMAIL_UNI",
     "email_personal":   "DISCORD_HOOK_EMAIL_PERSONAL",
     # Slice 7: in-thread chat replies. Routed by the thread's origin
     # channel (a reply in a deadline thread goes back via the deadlines
-    # webhook with thread_id=...; same for lectures).
+    # webhook with thread_id=...).
     "deadline_reply":   "DISCORD_HOOK_DEADLINES",
-    "lecture_reply":    "DISCORD_HOOK_LECTURES",
 }
 
 
@@ -153,11 +150,9 @@ def format_embed(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         return _format_deadline(kind, payload)
     if kind == "next3":
         return _format_next3(payload)
-    if kind == "lecture_new":
-        return _format_lecture_new(payload)
     if kind in ("morning_digest", "evening_nudge", "daily_digest"):
         return _format_daily(kind, payload)
-    if kind in ("deadline_reply", "lecture_reply"):
+    if kind == "deadline_reply":
         return _format_thread_reply(payload)
     if kind in ("pr_opened", "pr_merged", "pr_comment"):
         return _format_pr_event(kind, payload)
@@ -372,54 +367,6 @@ def _format_thread_reply(p: dict[str, Any]) -> dict[str, Any]:
     if len(text) > 2000:
         text = text[:1997] + "..."
     return {"content": text}
-
-
-def _format_lecture_new(p: dict[str, Any]) -> dict[str, Any]:
-    """Forum-thread starter for a freshly-summarised lecture.
-
-    payload keys (required): name (course), title, tldr (list), vault_path, source
-    payload keys (optional): date (YYYY-MM-DD), study_cards (int)
-
-    Optional keys drive three inline fields; omitting them suppresses the
-    corresponding field so older callers keep working unchanged."""
-    title = (p.get("title") or "(untitled)").strip()
-    course = (p.get("name") or "").strip()
-    tldr = p.get("tldr") or []
-    vault_path = p.get("vault_path") or ""
-    source = (p.get("source") or "").strip()
-    date = (p.get("date") or "").strip()
-    study_cards = p.get("study_cards")
-
-    bullets = (
-        "\n".join(f"- {b}" for b in tldr[:3])
-        if tldr else "_(no Key concepts section)_"
-    )
-    if len(bullets) > 4000:
-        bullets = bullets[:3997] + "..."
-
-    fields: list[dict] = []
-    if course:
-        fields.append({"name": "Course", "value": course, "inline": True})
-    if date:
-        fields.append({"name": "Date", "value": date, "inline": True})
-    if isinstance(study_cards, int) and not isinstance(study_cards, bool):
-        fields.append({"name": "Study cards", "value": str(study_cards), "inline": True})
-
-    embed = _vesper_embed(
-        title=title,
-        description=bullets,
-        color=0x3498DB,
-        channel_label="Lectures",
-        vault_path=vault_path or None,
-        fields=fields or None,
-        ts=p.get("ts"),
-    )
-    if source:
-        embed["footer"]["text"] = (
-            f"{embed['footer']['text']}  ·  source: {source}"
-        )[:2048]
-    thread_name = f"[{course}] {title}" if course else title
-    return {"embeds": [embed], "thread_name": thread_name[:100]}
 
 
 def _next3_dot(days: Any) -> str:

@@ -3,7 +3,7 @@
 ## Identity
 
 **Name:** Vesper  
-**Purpose:** Voice-first personal AI study partner and daily assistant for CrudusLiv.
+**Purpose:** Voice-first personal AI daily assistant for CrudusLiv.
 
 ## Audience
 
@@ -12,7 +12,7 @@ Solo — just CrudusLiv. Per-user state design not required for this build.
 ## First Three Capabilities
 
 1. **Email triage** — Prioritize inbox by urgency, summarize threads, identify and batch subscriptions/newsletters.
-2. **Lecture processing** — Voice-triggered access to existing lecture summaries in the vault; launch the lecture-summarizer skill for new uploads.
+2. **Note recall** — Voice-triggered semantic search over the vault; read, append, and draft notes.
 3. **General chat** — Rubber duck for thinking through problems, journaling/logging thoughts at end of day, quick lookups and questions.
 
 ## Personality
@@ -82,7 +82,7 @@ Config: `voice/config.json` — no code change required for tuning.
 `voice/static/orb.html` — Three.js particle orb with WebSocket state events.  
 Launch: `py -m voice --voice` (or `--wakeword`), then open `http://localhost:7070` in Edge `--app` mode.
 
-Sidebar panels: Finance, Habits, Study (concept explainer, quiz, study planner, research synthesizer, weekly progress). Drag `.pdf`/`.pptx` onto the orb to drop into inbox.
+Sidebar panels: Chat, Notices, Finance, Calendar, Jobs, Workspace, Apps, Profiles, Config.
 
 ## Discord bot
 

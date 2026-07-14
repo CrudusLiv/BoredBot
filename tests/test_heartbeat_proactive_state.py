@@ -13,26 +13,22 @@ def test_new_state_fields_default_empty(tmp_path, monkeypatch):
     hb = Heartbeat(interval_minutes=30, idle_fn=lambda: None)
     assert hb._seen_pr_event_ids == []
     assert hb._deadline_fired == {}
-    assert hb._seen_ambient_ids == []
 
 
 def test_new_state_fields_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "get_data_dir", lambda: tmp_path)
     hb = Heartbeat(interval_minutes=30, idle_fn=lambda: None)
     hb._seen_pr_event_ids = ["open:owner/repo:1"]
-    hb._deadline_fired = {"CS101|Assignment 1|2026-08-01": ["72h", "24h"]}
-    hb._seen_ambient_ids = ["abc123"]
+    hb._deadline_fired = {"Passport renewal|2026-08-01": ["72h", "24h"]}
     hb._save_state()
 
     raw = json.loads((tmp_path / "heartbeat_state.json").read_text(encoding="utf-8"))
     assert raw["seen_pr_event_ids"] == ["open:owner/repo:1"]
-    assert raw["deadline_fired"] == {"CS101|Assignment 1|2026-08-01": ["72h", "24h"]}
-    assert raw["seen_ambient_ids"] == ["abc123"]
+    assert raw["deadline_fired"] == {"Passport renewal|2026-08-01": ["72h", "24h"]}
 
     hb2 = Heartbeat(interval_minutes=30, idle_fn=lambda: None)
     assert hb2._seen_pr_event_ids == ["open:owner/repo:1"]
-    assert hb2._deadline_fired == {"CS101|Assignment 1|2026-08-01": ["72h", "24h"]}
-    assert hb2._seen_ambient_ids == ["abc123"]
+    assert hb2._deadline_fired == {"Passport renewal|2026-08-01": ["72h", "24h"]}
 
 
 def test_git_todo_done_date_defaults_none_and_round_trips(tmp_path, monkeypatch):

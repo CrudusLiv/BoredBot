@@ -98,8 +98,20 @@ def start(port: int = 7070, on_quit: Callable | None = None) -> None:
         if on_quit:
             on_quit()
 
+    def _toggle_pause(icon, item):
+        from voice import killswitch
+        killswitch.toggle()
+        icon.update_menu()
+
+    def _is_paused(item) -> bool:
+        from voice import killswitch
+        return killswitch.is_paused()
+
     menu = pystray.Menu(
         pystray.MenuItem("Open Vesper", _open, default=True),
+        # A paused Vesper is fully deaf, so she cannot hear "resume duties" —
+        # this item and the orb's pause button are the only ways back.
+        pystray.MenuItem("Paused (deaf & mute)", _toggle_pause, checked=_is_paused),
         pystray.MenuItem("Restart Vesper", _restart),
         pystray.MenuItem("Stop until next logon", _stop_until_logon),
     )

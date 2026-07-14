@@ -2,10 +2,15 @@
 
 Paused = a marker file exists at get_data_dir()/killswitch.paused, so the
 state survives restarts with zero config-merge complexity. While paused:
+  - the wake-word thread stops detecting and the microphone is never opened
+  - nothing is spoken, proactive or conversational
   - heartbeat skips ticks and scheduled briefings/nudges
   - confirmation-gated tools are auto-denied
-  - proactive TTS is dropped
-Normal conversation (listen -> brain -> reply) keeps working.
+
+Paused means fully deaf and mute, so the `resume duties` phrase cannot be heard.
+Resume from the orb's pause button or the tray's Paused item. voice/silence.py
+is the predicate every mic and speaker path actually checks; it ORs this state
+together with the heartbeat's busy (silence_when_running) state.
 """
 from __future__ import annotations
 

@@ -14,15 +14,35 @@ Backend 2: vosk keyword spotter  ← use this for "vesper"
 IMPORTANT: the sounddevice stream is *closed* before callback() fires so
 that record_vad() can open its own stream. If ready_event is passed the
 wakeword thread waits for it before reopening — set it after VAD finishes.
+
+While voice.silence says Vesper is silenced (killswitch paused, or a
+silence_when_running process is up) the stream is not opened at all — being
+"fully deaf" has to mean the microphone is closed, not merely that detections
+are discarded.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Callable
 
 SAMPLE_RATE = 16_000
 CHUNK_SIZE = 1280  # ~80 ms at 16 kHz — openwakeword's recommended chunk
+
+# How long to poll while silenced before re-checking whether we may listen again.
+_SILENCE_POLL_S = 0.5
+
+
+def _keyword_hit(text: str, keyword: str) -> bool:
+    """True only when `keyword` appears as a whole word.
+
+    Substring matching made "vespers" and "vesperine" wake her; vosk's restricted
+    grammar force-aligns unrelated audio onto the nearest in-grammar token, so a
+    loose match fires constantly on speech that was never the wake word."""
+    if not text or not keyword:
+        return False
+    return re.search(rf"(?<!\w){re.escape(keyword.lower())}(?!\w)", text.lower()) is not None
 
 
 def listen(
@@ -76,12 +96,21 @@ def listen(
         return
 
     score_key = list(oww.models.keys())[0]
+    from voice import silence
 
     while stop_event is None or not stop_event.is_set():
+        if silence.is_silenced():
+            time.sleep(_SILENCE_POLL_S)
+            continue
+
         buf: list[float] = []
         fired = False
+        went_silent = False
 
         def _cb(indata, frames, time_info, status):  # noqa: ARG001
+            if mute_event and mute_event.is_set():
+                buf.clear()  # never feed Vesper's own voice to the model
+                return
             buf.extend(indata[:, 0].tolist())
 
         # Open stream; break inner loop when wake word fires (closes stream).
@@ -90,6 +119,9 @@ def listen(
             blocksize=CHUNK_SIZE, callback=_cb,
         ):
             while stop_event is None or not stop_event.is_set():
+                if silence.is_silenced():
+                    went_silent = True
+                    break  # close the mic for the duration of the silence
                 if len(buf) < CHUNK_SIZE:
                     time.sleep(0.02)
                     continue
@@ -103,6 +135,8 @@ def listen(
                     fired = True
                     break  # exits inner loop → with-block closes the stream
 
+        if went_silent:
+            continue  # reopen once silence lifts
         if not fired:
             break  # stop_event was set
 
@@ -157,19 +191,32 @@ def listen_vosk(
             stop_event.set()
         return
 
+    from voice import config as _cfg, silence
+
     kw = keyword.lower()
     grammar = json.dumps([kw, "[unk]"])
+    cooldown_s = float(_cfg.load().get("wakeword_cooldown_s", 1.5))
     print(f"[wakeword] listening for '{kw}'")
 
     CHUNK = 4000  # ~250 ms at 16 kHz
 
     while stop_event is None or not stop_event.is_set():
+        if silence.is_silenced():
+            time.sleep(_SILENCE_POLL_S)
+            continue
+
         rec = KaldiRecognizer(model, SAMPLE_RATE, grammar)
         buf: list[bytes] = []
         fired = False
+        went_silent = False
+        # Room echo and the tail of Vesper's own reply keep arriving after
+        # playback ends, so stay deaf for cooldown_s past the last muted block.
+        deaf_until = [0.0]
 
         def _cb(indata, frames, time_info, status):  # noqa: ARG001
             if mute_event and mute_event.is_set():
+                buf.clear()
+                deaf_until[0] = time.monotonic() + cooldown_s
                 return
             buf.append(bytes(indata))
 
@@ -179,15 +226,24 @@ def listen_vosk(
                 dtype="int16", channels=1, callback=_cb,
             ):
                 while stop_event is None or not stop_event.is_set():
+                    if silence.is_silenced():
+                        went_silent = True
+                        break  # close the mic for the duration of the silence
                     if not buf:
                         time.sleep(0.02)
                         continue
                     data = buf.pop(0)
-                    if rec.AcceptWaveform(data):
-                        text = json.loads(rec.Result()).get("text", "").lower()
-                    else:
-                        text = json.loads(rec.PartialResult()).get("partial", "").lower()
-                    if kw in text:
+                    if time.monotonic() < deaf_until[0]:
+                        rec.Reset()  # drop half-decoded audio from her own voice
+                        continue
+                    # Final results only. Partial hypotheses under a restricted
+                    # grammar surface the keyword constantly on speech that the
+                    # final result then resolves to [unk] — that was the false-wake
+                    # source. Costs the length of one end-of-utterance pause.
+                    if not rec.AcceptWaveform(data):
+                        continue
+                    text = json.loads(rec.Result()).get("text", "")
+                    if _keyword_hit(text, kw):
                         fired = True
                         break  # exits inner loop → closes RawInputStream
         except Exception as exc:
@@ -196,6 +252,8 @@ def listen_vosk(
                 stop_event.set()
             return
 
+        if went_silent:
+            continue  # reopen once silence lifts
         if not fired:
             break  # stop_event was set
 

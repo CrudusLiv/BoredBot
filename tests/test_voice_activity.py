@@ -128,7 +128,7 @@ def test_enters_busy_and_suppresses(env, monkeypatch):
     _drive(monkeypatch, hb, [{"game.exe"}])
     assert hb._busy is True
     assert hb._busy_proc == "game.exe"
-    assert hb_mod._OUTPUT_SUPPRESSED is True
+    assert hb_mod._output_suppressed() is True
 
 
 def test_speak_held_while_busy(env, monkeypatch):
@@ -147,7 +147,7 @@ def test_exit_busy_delivers_digest_with_unread(env, monkeypatch):
     hb = _mk(env)
     _drive(monkeypatch, hb, [{"game.exe"}, set()])
     assert hb._busy is False
-    assert hb_mod._OUTPUT_SUPPRESSED is False
+    assert hb_mod._output_suppressed() is False
     assert any(p.startswith("You're back from game.exe") and "1 notice waiting" in p for p in posts)
 
 
@@ -164,7 +164,7 @@ def test_disabled_never_enters_busy(env, monkeypatch):
     hb = _mk(env)
     _drive(monkeypatch, hb, [{"game.exe"}])
     assert hb._busy is False
-    assert hb_mod._OUTPUT_SUPPRESSED is False
+    assert hb_mod._output_suppressed() is False
 
 
 def test_still_busy_tracks_surviving_process(env, monkeypatch):

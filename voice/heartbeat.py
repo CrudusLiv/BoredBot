@@ -29,7 +29,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from voice import git_digest, spaced_repetition, test_runner, todo_tracker
+from voice import git_digest, test_runner, todo_tracker
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,17 +66,22 @@ def _trim_notices(notices: Path) -> None:
         pass  # trimming is best-effort; never block posting a notice
 
 
-# Output suppression — set True by the heartbeat while a "busy" process
-# (silence_when_running) is active. _post() then skips the intrusive OS tray
-# toast and _speak() skips proactive speech, while the notice still lands in the
-# jsonl log + web UI so a digest can surface it on return. Module-level because
-# _post is a module function, not a Heartbeat method.
-_OUTPUT_SUPPRESSED = False
+# Output suppression while a "busy" process (silence_when_running) is active.
+# The flag lives in voice.silence because it gates far more than the heartbeat:
+# the wake-word mic and every TTS path read the same predicate. Here it only
+# means _post() skips the intrusive OS tray toast and _speak() skips proactive
+# speech, while the notice still lands in the jsonl log + web UI so a digest can
+# surface it on return.
 
 
 def _set_output_suppressed(value: bool) -> None:
-    global _OUTPUT_SUPPRESSED
-    _OUTPUT_SUPPRESSED = bool(value)
+    from voice import silence
+    silence.set_busy(value)
+
+
+def _output_suppressed() -> bool:
+    from voice import silence
+    return silence.is_busy()
 
 
 def _post(text: str, level: str = "INFO", meta: dict | None = None) -> None:
@@ -100,7 +105,7 @@ def _post(text: str, level: str = "INFO", meta: dict | None = None) -> None:
         ui_server.post_event({"type": "notice", **entry})
     except Exception:
         pass
-    if not _OUTPUT_SUPPRESSED:
+    if not _output_suppressed():
         try:
             from voice import tray
             title = "Vesper [!]" if level == "URGENT" else "Vesper"
@@ -231,58 +236,6 @@ def _tick() -> None:
     _last_tick_notices = set(notices)
 
 
-def process_inbox_once() -> None:
-    """Run one inbox-processing pass immediately (outside the heartbeat's own
-    tick cadence). Shared by Heartbeat._process_inbox and the downloads-triage
-    file endpoint, so approving a download doesn't wait for the next slow tick."""
-    from voice import config as cfg
-    conf = cfg.load()
-    if not conf.get("inbox_processing_enabled", True):
-        return
-    if cfg.get_vault_dir() is None:
-        return
-    try:
-        import sys
-        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-        from core import inbox, deadlines  # type: ignore
-
-        summaries = inbox.process_new_files()
-        all_deadlines: list[dict] = []
-        for summary in summaries:
-            stype = summary.get("type")
-            if stype == "lecture":
-                label = "Lecture summarised"
-            elif stype == "screenshot":
-                label = "Screenshot OCR'd"
-            else:
-                label = "Project filed"
-            bucket = summary.get("name", "")
-            if summary.get("subcategory"):
-                bucket += f" / {summary['subcategory']}"
-            title = summary.get("title", "")
-            _post(f"{label}: {bucket} — {title}" if bucket else f"{label}: {title}")
-            if summary.get("roadmap_notice"):
-                _post(summary["roadmap_notice"])
-            if summary.get("type") == "lecture":
-                try:
-                    from agents import quiz_generator  # type: ignore
-                    from voice import spaced_repetition as sr
-                    cards = quiz_generator.run(from_path=str(summary["path"]))
-                    if cards:
-                        sr.add_cards(summary.get("name", ""), cards)
-                except Exception as _e:
-                    print(f"[heartbeat] quiz generation error: {_e}", flush=True)
-            all_deadlines.extend(summary.get("deadlines") or [])
-
-        promoted = deadlines.promote(all_deadlines)
-        if promoted:
-            _post(f"Promoted {promoted} deadline{'s' if promoted != 1 else ''} to DEADLINES.md")
-
-        inbox.refresh_daily_timeline()
-    except Exception as _e:
-        print(f"[heartbeat] inbox processing error: {_e}", flush=True)
-
-
 class Heartbeat:
     """Background daemon thread. Calls _tick() each interval and schedules
     proactive spoken briefings when speak_queue is provided."""
@@ -335,12 +288,10 @@ class Heartbeat:
         # Migrated proactive-check dedup state (Phase 1 of the roadmap migration).
         self._seen_pr_event_ids: list[str] = list(state.get("seen_pr_event_ids", []))
         self._deadline_fired: dict[str, list[str]] = dict(state.get("deadline_fired", {}))
-        self._seen_ambient_ids: list[str] = list(state.get("seen_ambient_ids", []))
         self._git_todo_done_date: date | None = _parse_date(state.get("git_todo_date"))
         self._build_watch_done_date: date | None = _parse_date(state.get("build_watch_date"))
         self._last_test_ok: bool | None = state.get("last_test_ok")
         self._last_workflow_conclusion: str | None = state.get("last_workflow_conclusion")
-        self._review_reminder_done_date: date | None = _parse_date(state.get("review_reminder_date"))
 
     @staticmethod
     def _state_path() -> Path:
@@ -362,12 +313,10 @@ class Heartbeat:
             "idle_return_fired": self._last_idle_return_fired.isoformat() if self._last_idle_return_fired else None,
             "seen_pr_event_ids": self._seen_pr_event_ids,
             "deadline_fired": self._deadline_fired,
-            "seen_ambient_ids": self._seen_ambient_ids,
             "git_todo_date": str(self._git_todo_done_date) if self._git_todo_done_date else None,
             "build_watch_date": str(self._build_watch_done_date) if self._build_watch_done_date else None,
             "last_test_ok": self._last_test_ok,
             "last_workflow_conclusion": self._last_workflow_conclusion,
-            "review_reminder_date": str(self._review_reminder_done_date) if self._review_reminder_done_date else None,
         }
         try:
             p = self._state_path()
@@ -379,7 +328,7 @@ class Heartbeat:
             print(f"[heartbeat] state save failed: {_e}", flush=True)
 
     def _speak(self, text: str) -> None:
-        if _OUTPUT_SUPPRESSED:
+        if _output_suppressed():
             return  # busy (silence_when_running active) — hold proactive speech
         if self._speak_queue is not None and self._proactive_tts:
             try:
@@ -736,75 +685,6 @@ class Heartbeat:
         if changed:
             self._save_state()
 
-    def _check_ambient_notices(self) -> None:
-        """Vault-pattern notifications (dependency gaps, synthesis
-        readiness) — migrated from scripts/ambient_notifier.py's Discord
-        posting; scan/collect logic is unchanged, dedup id scheme (md5 of
-        rule:content) matches the old code exactly."""
-        import hashlib
-        from voice import config as cfg
-        conf = cfg.load()
-        if not conf.get("ambient_notifier_enabled", True):
-            return
-        vault = cfg.get_vault_dir()
-        if vault is None:
-            return
-        try:
-            import sys
-            sys.path.insert(0, str(_ROOT / "scripts"))
-            import ambient_notifier  # type: ignore
-            state = ambient_notifier.scan_vault_state(vault)
-            notifications = ambient_notifier.collect_notifications(state)
-        except Exception as _e:
-            print(f"[heartbeat] ambient_notifier error: {_e}", flush=True)
-            return
-
-        changed = False
-        for note in notifications:
-            nid = hashlib.md5(f"{note.get('rule', '')}:{note.get('content', '')}".encode()).hexdigest()
-            if nid in self._seen_ambient_ids:
-                continue
-            _post(note.get("content", ""))
-            if nid not in self._seen_ambient_ids:
-                self._seen_ambient_ids.append(nid)
-            changed = True
-
-        if changed:
-            if len(self._seen_ambient_ids) > 200:
-                self._seen_ambient_ids = self._seen_ambient_ids[-200:]
-            self._save_state()
-
-    def _check_habits(self) -> None:
-        """Habit auto-check + late-day nudge (migrated from the old
-        heartbeat's habits.auto_check()/should_nudge() calls — habits.py's
-        own logic and state files are untouched, only the notify call
-        moves from dashboard.notify() to _post())."""
-        from voice import config as cfg
-        conf = cfg.load()
-        if not conf.get("habits_enabled", True):
-            return
-        if cfg.get_vault_dir() is None:
-            return
-        try:
-            import sys
-            sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-            from core import habits  # type: ignore
-            from integrations import github_int  # type: ignore
-
-            snapshot = {"github": {"items": github_int.recent_pushes(days=1)}}
-            newly = habits.auto_check(snapshot)
-            if newly:
-                _post(f"Habits auto-checked: {', '.join(newly)}")
-
-            if habits.should_nudge():
-                unchecked = habits.unchecked_pillars()
-                if unchecked:
-                    _title, body = habits.nudge_message(unchecked)
-                    _post(body)
-                    habits.mark_nudged()
-        except Exception as _e:
-            print(f"[heartbeat] habits error: {_e}", flush=True)
-
     def _check_git_todo_summary(self) -> None:
         """Once-daily local commit + open-todo digest — genuinely new
         capability, no equivalent existed in the old Discord heartbeat
@@ -878,64 +758,6 @@ class Heartbeat:
 
         self._save_state()
 
-    def _check_spaced_repetition(self) -> None:
-        """Once-daily reminder of due spaced-repetition cards. The actual
-        review conversation happens via the review_cards/grade_card voice
-        tools — this just prompts the user to start one."""
-        from voice import config as cfg
-        conf = cfg.load()
-        if not conf.get("spaced_repetition_enabled", True):
-            return
-
-        now = datetime.now(cfg.get_timezone())
-        today = now.date()
-        if self._review_reminder_done_date == today:
-            return
-        rh, rm = (int(x) for x in conf.get("review_reminder_time", "10:00").split(":"))
-        if now.hour < rh or (now.hour == rh and now.minute < rm):
-            return
-
-        self._review_reminder_done_date = today
-        self._save_state()
-
-        due = spaced_repetition.due_cards()
-        if due:
-            n = len(due)
-            _post(f"{n} flashcard{'s' if n != 1 else ''} due for review. Say \"quiz me\" to start.")
-
-    def _process_inbox(self) -> None:
-        """Classify/summarise new inbox files, promote extracted deadlines,
-        refresh the daily-log timeline (migrated from the old heartbeat's
-        top-of-tick inbox step — inbox.py's logic is unchanged; only the
-        notify call for each summary is new)."""
-        process_inbox_once()
-
-    def _check_downloads(self) -> None:
-        """Suggest filing new Downloads files into the inbox. Never moves —
-        the move happens only via the /cmd/downloads/file endpoint on approval."""
-        from voice import config as cfg
-        from voice import downloads
-        conf = cfg.load()
-        if not conf.get("downloads_triage_enabled", False):
-            return
-        if cfg.get_vault_dir() is None:
-            return                       # nowhere to file to
-        try:
-            folders = conf.get("downloads_watch_folders") or downloads.default_folders()
-            exts = conf.get("downloads_watch_exts", downloads.DEFAULT_EXTS)
-            data_dir = cfg.get_data_dir()
-            seen = downloads.load_seen(data_dir)
-            for cand in downloads.scan_new(folders, exts, seen):
-                _post(
-                    f"You downloaded {cand['name']} — file it into the inbox?",
-                    level="INFO",
-                    meta={"kind": "download_suggestion", "path": cand["path"],
-                          "name": cand["name"]},
-                )
-                downloads.mark_seen(data_dir, cand["path"], cand["mtime"])
-        except Exception as _e:
-            print(f"[heartbeat] downloads triage error: {_e}", flush=True)
-
     def _check_job_alerts(self) -> None:
         """Scan Gmail for job-alert digests and accumulate postings into the
         jobs store. Silent by design — no notice fires; the Jobs panel in the
@@ -965,15 +787,13 @@ class Heartbeat:
             _post(("Deadlines from calendar: " + "; ".join(added))[:160])
 
     def _run_scheduled(self) -> None:
-        for task in (self._process_inbox, self._check_downloads,
-                     self._check_job_alerts,
+        for task in (self._check_job_alerts,
                      self._morning_briefing, self._evening_wrap,
                      self._check_nudges, self._check_profile_triggers,
                      self._check_calendar_sync, self._check_github_digest,
                      self._check_deadline_import,
-                     self._check_deadline_thresholds, self._check_ambient_notices,
-                     self._check_habits, self._check_git_todo_summary,
-                     self._check_build_watch, self._check_spaced_repetition):
+                     self._check_deadline_thresholds,
+                     self._check_git_todo_summary, self._check_build_watch):
             try:
                 task()
             except Exception as _e:

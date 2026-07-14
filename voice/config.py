@@ -94,6 +94,7 @@ DEFAULTS: dict[str, Any] = {
     "wakeword_model": "",
     "wakeword_threshold": 0.5,
     "wakeword_debounce_s": 1.5,
+    "wakeword_cooldown_s": 1.5,     # stay deaf this long after Vesper stops speaking
     # Proactive TTS
     "proactive_tts": True,
     "briefing_enabled": True,
@@ -104,29 +105,18 @@ DEFAULTS: dict[str, Any] = {
     "gcal_sync_enabled": True,
     "github_digest_enabled": True,
     "deadline_threshold_enabled": True,
-    "ambient_notifier_enabled": True,
-    "habits_enabled": True,
-    "inbox_processing_enabled": True,
     "git_todo_summary_enabled": True,
     "git_todo_summary_time": "20:00",
     "build_watch_enabled": True,
     "build_watch_time": "07:30",
     "build_watch_repo": "",
-    "spaced_repetition_enabled": True,
-    "review_reminder_time": "10:00",
     # GCal → DEADLINES.md import (reverse of the vault→GCal push)
     "deadline_import_enabled": True,
     "deadline_import_keywords": [
-        "due", "deadline", "submission", "submit", "assignment", "assessment",
-        "exam", "quiz", "test", "project", "presentation",
+        "due", "deadline", "submission", "submit", "payment", "bill",
+        "renewal", "expires", "application", "interview", "appointment",
     ],
     "deadline_import_lookahead_days": 30,
-    # Downloads triage
-    "downloads_triage_enabled": False,     # opt-in: watch Downloads, suggest filing
-    "downloads_watch_folders": [],         # empty => resolves to [~/Downloads] at runtime
-    "downloads_watch_exts": [
-        ".pdf", ".pptx", ".ppt", ".docx", ".png", ".jpg", ".jpeg",
-    ],
     # Job alerts (email-digest job tracker; Jobs panel in the orb UI)
     "job_alerts_enabled": False,           # opt-in: scan Gmail for job-alert digests
     "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],

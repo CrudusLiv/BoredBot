@@ -14,9 +14,6 @@ PyGithub>=2.1
 google-api-python-client>=2.100
 google-auth-oauthlib>=1.2
 google-auth-httplib2>=0.2
-python-pptx>=0.6
-pypdf>=4.0
-msal>=1.28.0
 requests>=2.31
 
 winotify>=1.1.0
@@ -38,10 +35,6 @@ pystray>=0.19
 customtkinter>=5.2
 psutil>=5.9
 pyinstaller>=6.0
-
-# Phase 2026-06: OCR processing for image-only slides
-easyocr>=1.7
-pdf2image>=1.16
 
 # Voice assistant (Tier 3 — audio/STT/TTS)
 faster-whisper>=1.0

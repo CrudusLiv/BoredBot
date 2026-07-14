@@ -24,9 +24,9 @@ RELATED_END = "<!-- related:end -->"
 
 # Category roots whose direct subfolders are independent subjects/projects,
 # not assessment-like groupings. We DO NOT cross sibling links across these
-# boundaries — otherwise `lectures/DIP215/x.md` links to `lectures/Kotlin/y.md`,
+# boundaries — otherwise `projects/Alpha/x.md` links to `projects/Beta/y.md`,
 # which floods the graph with cross-course noise.
-_CATEGORY_ROOTS = {"lectures", "projects", "research"}
+_CATEGORY_ROOTS = {"projects", "research"}
 
 
 def add_sibling_wikilinks(file_path: Path) -> None:

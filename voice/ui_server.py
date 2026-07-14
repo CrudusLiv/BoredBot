@@ -15,13 +15,6 @@ Endpoints:
   POST /input           → typed text → brain.turn() thread; response via WS
   GET  /cmd/finance     → month_summary() JSON
   POST /cmd/finance     → tracker.log(entry) JSON
-  GET  /cmd/habits      → habits status JSON
-  POST /cmd/habits/check → check_pillar(pillar) JSON
-  POST /cmd/study/explain → concept_explainer.run(topic) text
-  GET  /cmd/study/quiz    → quiz_generator.run() cards JSON
-  GET  /cmd/study/plan    → study_planner.run() text
-  POST /cmd/study/research → research_synthesizer.run(topic) text
-  GET  /cmd/study/progress → progress_monitor.run() text
   GET  /cmd/capabilities → {vault, scripts} availability flags for the UI
   GET  /cmd/llm/status  → active LLM backend/model/availability JSON
   GET  /cmd/llm/detect  → force LLM backend re-detection JSON
@@ -45,7 +38,6 @@ Endpoints:
   GET  /cmd/drafts/content → read_note("drafts/active/" + name) JSON
   GET  /cmd/scratch     → list files under scratch/<dir> JSON
   GET  /cmd/scratch/content → read_note("scratch/" + path) JSON
-  POST /upload          → save .pdf/.pptx to Dynamous/Memory/inbox/
   WS   /ws              → live brain events
 """
 from __future__ import annotations
@@ -57,7 +49,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -151,8 +143,8 @@ async def text_input(body: _TextInput) -> Response:
 @app.get("/cmd/capabilities")
 async def capabilities() -> JSONResponse:
     """Lets the UI hide/gray panels that need infra this install doesn't have,
-    instead of failing on click. vault = Obsidian vault (notes/deadlines/graph/
-    uploads); scripts = .claude/scripts agent layer (finance/habits/study)."""
+    instead of failing on click. vault = Obsidian vault (notes/deadlines/graph);
+    scripts = .claude/scripts agent layer (finance)."""
     from voice import config as cfg
     return JSONResponse({
         "vault": cfg.get_vault_dir() is not None,
@@ -214,44 +206,6 @@ async def finance_log(body: _FinanceEntry) -> JSONResponse:
             return JSONResponse({"message": msg})
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-# ── Habits panel ─────────────────────────────────────────────────────────────
-
-@app.get("/cmd/habits")
-async def habits_status() -> JSONResponse:
-    import sys
-    sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-    try:
-        from core.habits import get_status_data  # type: ignore
-        data = get_status_data()
-        # Pydantic can't serialise the returned dict directly if it has non-JSON types
-        return JSONResponse({
-            "today": data.get("today"),
-            "checked": data.get("checked", {}),
-            "done_count": data.get("done_count", 0),
-            "total": data.get("total", 0),
-            "current_streak": data.get("current_streak", 0),
-            "best_streak": data.get("best_streak", 0),
-        })
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-class _HabitCheck(BaseModel):
-    pillar: str
-
-
-@app.post("/cmd/habits/check", dependencies=[Depends(_require_token)])
-async def habits_check(body: _HabitCheck) -> JSONResponse:
-    import sys
-    sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-    try:
-        from core.habits import check_pillar  # type: ignore
-        changed = check_pillar(body.pillar)
-        return JSONResponse({"checked": changed})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 # ── LLM status ───────────────────────────────────────────────────────────────
@@ -323,54 +277,6 @@ async def apps_revoke(body: _AppRevoke) -> JSONResponse:
         return JSONResponse({"error": "alias or path required"}, status_code=400)
     removed = approved_apps.revoke(target)
     return JSONResponse({"ok": removed})
-
-
-class _DownloadAction(BaseModel):
-    path: str
-
-
-def _download_folders(conf: dict) -> list[str]:
-    from voice import downloads
-    return conf.get("downloads_watch_folders") or downloads.default_folders()
-
-
-@app.post("/cmd/downloads/file", dependencies=[Depends(_require_token)])
-async def downloads_file(body: _DownloadAction) -> JSONResponse:
-    from voice import config as cfg
-    from voice import downloads
-    conf = cfg.load()
-    folders = _download_folders(conf)
-    if not downloads.is_under(body.path, folders):
-        return JSONResponse({"error": "path is outside the watch folders"}, status_code=400)
-    vault = cfg.get_vault_dir()
-    if vault is None:
-        return JSONResponse({"error": "no vault configured"}, status_code=400)
-    result = downloads.file_candidate(body.path, folders, vault / "inbox")
-    if not result.get("ok"):
-        return JSONResponse(result, status_code=400)
-    downloads.mark_seen(cfg.get_data_dir(), body.path, 0.0)   # ensure never re-suggested
-    try:
-        from voice import heartbeat
-        heartbeat.process_inbox_once()   # don't wait for the next slow tick
-    except Exception as _e:
-        print(f"[ui_server] inbox processing after file error: {_e}", flush=True)
-    return JSONResponse(result)
-
-
-@app.post("/cmd/downloads/dismiss", dependencies=[Depends(_require_token)])
-async def downloads_dismiss(body: _DownloadAction) -> JSONResponse:
-    from pathlib import Path
-    from voice import config as cfg
-    from voice import downloads
-    conf = cfg.load()
-    if not downloads.is_under(body.path, _download_folders(conf)):
-        return JSONResponse({"error": "path is outside the watch folders"}, status_code=400)
-    try:
-        mtime = Path(body.path).stat().st_mtime
-    except OSError:
-        mtime = 0.0
-    downloads.mark_seen(cfg.get_data_dir(), body.path, mtime)
-    return JSONResponse({"ok": True})
 
 
 # ── Job alerts (Jobs panel) ──────────────────────────────────────────────────────
@@ -758,126 +664,6 @@ async def history_get(n: int = 50) -> JSONResponse:
                 continue
             messages.append({"role": turn.get("role"), "content": content})
     return JSONResponse({"messages": messages[-n:]})
-
-
-# ── Study panel ──────────────────────────────────────────────────────────────
-
-class _StudyQuery(BaseModel):
-    topic: str
-
-
-def _add_scripts_path() -> None:
-    import sys
-    p = str(_ROOT / ".claude" / "scripts")
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-
-@app.post("/cmd/study/explain", dependencies=[Depends(_require_token)])
-async def study_explain(body: _StudyQuery) -> JSONResponse:
-    import concurrent.futures
-    topic = body.topic.strip()
-    if not topic:
-        return JSONResponse({"error": "topic required"}, status_code=400)
-    def _run():
-        _add_scripts_path()
-        from agents.concept_explainer import run  # type: ignore
-        return run(topic)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        try:
-            return JSONResponse({"result": ex.submit(_run).result(timeout=30)})
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.get("/cmd/study/quiz")
-async def study_quiz() -> JSONResponse:
-    import concurrent.futures
-    def _run():
-        _add_scripts_path()
-        from agents.quiz_generator import run  # type: ignore
-        return run()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        try:
-            return JSONResponse({"cards": ex.submit(_run).result(timeout=30)})
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.get("/cmd/study/plan")
-async def study_plan() -> JSONResponse:
-    import concurrent.futures
-    def _run():
-        _add_scripts_path()
-        from agents.study_planner import run  # type: ignore
-        return run()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        try:
-            return JSONResponse({"result": ex.submit(_run).result(timeout=30)})
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.post("/cmd/study/research", dependencies=[Depends(_require_token)])
-async def study_research(body: _StudyQuery) -> JSONResponse:
-    import concurrent.futures
-    topic = body.topic.strip()
-    if not topic:
-        return JSONResponse({"error": "topic required"}, status_code=400)
-    def _run():
-        _add_scripts_path()
-        from agents.research_synthesizer import run  # type: ignore
-        return run(topic)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        try:
-            return JSONResponse({"result": ex.submit(_run).result(timeout=30)})
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-@app.get("/cmd/study/progress")
-async def study_progress() -> JSONResponse:
-    import concurrent.futures
-    def _run():
-        _add_scripts_path()
-        from agents.progress_monitor import run  # type: ignore
-        return run()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        try:
-            return JSONResponse({"result": ex.submit(_run).result(timeout=30)})
-        except Exception as exc:
-            return JSONResponse({"error": str(exc)}, status_code=500)
-
-
-# ── File upload (Phase C) ─────────────────────────────────────────────────────
-
-_ALLOWED_EXTS = {".pdf", ".pptx"}
-
-
-@app.post("/upload", status_code=202, dependencies=[Depends(_require_token)])
-async def upload_file(file: UploadFile = File(...)) -> Response:
-    from pathlib import Path, PurePosixPath
-    from voice import config as cfg
-    vault = cfg.get_vault_dir()
-    if vault is None:
-        raise HTTPException(400, "no vault configured — set vault_path in settings to enable uploads")
-    if not cfg.vault_writes_safe():
-        raise HTTPException(
-            400,
-            "vault_path does not match the agent layer's write target — refusing upload",
-        )
-    suffix = PurePosixPath(file.filename or "").suffix.lower()
-    if suffix not in _ALLOWED_EXTS:
-        raise HTTPException(400, f"only {_ALLOWED_EXTS} accepted")
-    inbox = vault / "inbox"
-    inbox.mkdir(parents=True, exist_ok=True)
-    basename = Path(file.filename or ("upload" + suffix)).name
-    dest = inbox / basename
-    if not dest.resolve().is_relative_to(inbox.resolve()):
-        raise HTTPException(400, "invalid filename")
-    content = await file.read()
-    dest.write_bytes(content)
-    return Response(status_code=202)
 
 
 @app.websocket("/ws")

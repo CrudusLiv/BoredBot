@@ -5,7 +5,7 @@ heartbeat trigger (un-gated, since it's the user's own prior config firing).
 Storage: %APPDATA%\\Vesper\\profiles.json
   {
     "<profile_id>": {
-      "label": "Study Mode",
+      "label": "Focus Mode",
       "apps": [
         {"alias": "vscode", "cwd": "D:/GitHub/Vesper", "args": ["."]},
         {"alias": "spotify", "cwd": null, "args": []}

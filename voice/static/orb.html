@@ -207,65 +207,20 @@
     white-space: pre-wrap; word-break: break-word; margin-top: 4px;
   }
 
-  /* ── Habits list ──────────────────────────────────── */
-  .habit-row {
-    display: flex; align-items: center; gap: 11px;
-    padding: 9px 8px; border-bottom: 1px solid #141438; cursor: pointer;
-    transition: background var(--dur-soft) var(--ease-soft); border-radius: 8px;
-    animation: driftIn var(--dur-item) var(--ease-soft) both;
-  }
-  .habit-row:hover:not(.done) { background: rgba(100,60,200,0.1); }
-  .habit-row.done { cursor: default; }
-  .habit-check {
-    width: 18px; height: 18px; border-radius: 50%;
-    border: 1px solid #36367a; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 10px; color: transparent;
-    transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft);
-  }
-  .habit-row.done .habit-check { border-color: #99cc33; color: #99cc33; }
-  .habit-name { font-size: 13px; color: #9898cc; letter-spacing: 0.2px; transition: color var(--dur-soft) var(--ease-soft); }
-  .habit-row.done .habit-name { color: #aadd44; }
-  .habits-meta {
-    font-size: 11px; color: #606098; letter-spacing: 0.5px;
-    padding-top: 10px; border-top: 1px solid #141438;
-  }
-
-  /* ── Study panel ──────────────────────────────────── */
-  .study-row {
+  /* ── Panel rows ───────────────────────────────────── */
+  .panel-row {
     display: flex; flex-direction: column; gap: 8px;
     padding: 14px 0; border-bottom: 1px solid #141438;
   }
-  .study-row:last-child { border-bottom: none; padding-bottom: 0; }
-  .study-row-header {
+  .panel-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .panel-row-header {
     display: flex; align-items: center; justify-content: space-between;
   }
-  .study-row-label {
+  .panel-row-label {
     font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
     color: #6868a4; font-weight: 600;
   }
-  .study-output {
-    font-size: 13px; color: #a4a4cc; line-height: 1.75;
-    white-space: pre-wrap; word-break: break-word;
-  }
-  .quiz-card {
-    background: rgba(14,14,36,0.88); border: 1px solid #222256;
-    border-radius: 12px; padding: 13px 15px; margin-bottom: 6px; cursor: pointer;
-    transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft);
-  }
-  .quiz-card:hover { border-color: #444488; background: rgba(22,22,52,0.95); }
-  .quiz-q { font-size: 13px; color: #aaaadd; line-height: 1.65; }
-  .quiz-a {
-    font-size: 13px; color: #aadd44; margin-top: 9px; display: none;
-    line-height: 1.65; border-top: 1px solid #1e1e48; padding-top: 9px;
-  }
-  .quiz-card.revealed .quiz-a { display: block; }
-  .quiz-lvl {
-    font-size: 9px; color: #404070; letter-spacing: 1.5px; margin-top: 5px;
-    text-transform: uppercase;
-  }
 
-  /* ── Drop overlay ─────────────────────────────────── */
   /* ── Notice badge on edge tab ─────────────────── */
   #notice-badge {
     position: absolute; top: 5px; right: 3px;
@@ -313,20 +268,6 @@
     border: 2px solid rgba(119,85,204,0.25); border-top-color: #9977dd;
     border-radius: 50%; animation: spin 0.65s linear infinite;
     vertical-align: middle; margin-left: 4px;
-  }
-
-  #drop-overlay {
-    position: fixed; inset: 0;
-    background: rgba(80,40,200,0.1);
-    border: 2px dashed #5544cc;
-    display: flex; align-items: center; justify-content: center;
-    z-index: 30; opacity: 0; pointer-events: none;
-    transition: opacity var(--dur-soft) var(--ease-soft);
-  }
-  #drop-overlay.active { opacity: 1; pointer-events: all; }
-  #drop-overlay span {
-    font-size: 12px; letter-spacing: 4px; color: #9988ee;
-    text-transform: uppercase; pointer-events: none;
   }
 
   /* ── HUD clock ─────────────────────────────────── */
@@ -673,7 +614,7 @@ body.paused #conn-status { display: block; }
 @keyframes driftIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .ptab-content.active, .ptab-content.active > * { animation: none; }
-  .notice-entry, .cal-event, .habit-row, .app-row, .quiz-card, .chat-bubble, .tool-line { animation: none !important; }
+  .notice-entry, .cal-event, .task-row, .app-row, .chat-bubble, .tool-line { animation: none !important; }
 }
 
 /* search fields → rounded glass input */
@@ -700,23 +641,12 @@ body.paused #conn-status { display: block; }
   background: rgba(106,79,200,.16); box-shadow: 0 0 16px rgba(106,79,200,.18); transform: translateY(-1px); }
 #side-panel .pill-btn:active { transform: none; background: rgba(106,79,200,.24); }
 
-/* quiz cards */
-#side-panel .quiz-card { border-radius: var(--radius-md);
-  background: rgba(14,14,22,.5); border: 1px solid var(--glass-border);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  animation: driftIn var(--dur-item) var(--ease-soft) both;
-  transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft); }
-#side-panel .quiz-card:hover { border-color: var(--core); background: rgba(18,18,28,.65); transform: translateY(-1px); }
-#side-panel .quiz-q { color: var(--text); }
-#side-panel .quiz-a { color: var(--accent); border-top-color: var(--line-dim); }
-#side-panel .quiz-lvl { color: var(--text-dim); }
-
-/* study rows + section labels → mono instrument labels, steel rules */
-#side-panel .study-row { border-bottom: 1px solid var(--line-dim); }
-#side-panel .study-row-label, #side-panel .apps-col-label,
+/* panel rows + section labels → mono instrument labels, steel rules */
+#side-panel .panel-row { border-bottom: 1px solid var(--line-dim); }
+#side-panel .panel-row-label, #side-panel .apps-col-label,
 #side-panel .settings-field-label { color: var(--text-dim); font-family: var(--mono);
   letter-spacing: .16em; font-weight: 500; }
-#side-panel .study-output, #side-panel .panel-output { color: var(--text); }
+#side-panel .panel-output, #side-panel .panel-output { color: var(--text); }
 
 /* notices (overlay only — the feed rail keeps its own styling) */
 #ptab-notices .notice-entry { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
@@ -734,15 +664,14 @@ body.paused #conn-status { display: block; }
 #side-panel .cal-event-time { color: var(--text-dim); }
 #side-panel .cal-event-title { color: var(--text); }
 
-/* habit rows */
-#side-panel .habit-row { border-radius: var(--radius-sm); border-bottom: 1px solid var(--line-dim);
+/* task rows */
+#side-panel .task-row { border-radius: var(--radius-sm); border-bottom: 1px solid var(--line-dim);
   transition: background var(--dur-soft) var(--ease-soft); }
-#side-panel .habit-row:hover:not(.done) { background: rgba(106,79,200,.12); }
-#side-panel .habit-check { border-color: var(--line); transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft); }
-#side-panel .habit-row.done .habit-check { border-color: var(--accent); color: var(--accent); }
-#side-panel .habit-name { color: var(--text); }
-#side-panel .habit-row.done .habit-name { color: var(--accent); }
-#side-panel .habits-meta { color: var(--text-dim); border-top-color: var(--line-dim); }
+#side-panel .task-row:hover:not(.done) { background: rgba(106,79,200,.12); }
+#side-panel .task-check { border-color: var(--line); transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft); }
+#side-panel .task-row.done .task-check { border-color: var(--accent); color: var(--accent); }
+#side-panel .task-name { color: var(--text); }
+#side-panel .task-row.done .task-name { color: var(--accent); }
 
 /* jobs table — cells inherit, so set readable colors here */
 #jobs-table { color: var(--text); }
@@ -844,13 +773,10 @@ body.paused #conn-status { display: block; }
 .ptab-content { padding: 22px 30px 28px; gap: 14px; }
 
 /* body copy: 12-13px → 14px+ */
-#side-panel .panel-output, #side-panel .study-output { font-size: 14.5px; line-height: 1.8; }
+#side-panel .panel-output, #side-panel .panel-output { font-size: 14.5px; line-height: 1.8; }
 #side-panel .chat-bubble { font-size: 14.5px; line-height: 1.65; padding: 11px 15px; }
 #side-panel .bubble-time { font-size: 11px; }
-#side-panel .habit-name { font-size: 14.5px; }
-#side-panel .habits-meta { font-size: 12px; }
-#side-panel .quiz-q, #side-panel .quiz-a { font-size: 14.5px; }
-#side-panel .quiz-lvl { font-size: 10px; }
+#side-panel .task-name { font-size: 14.5px; }
 #side-panel .cal-event { font-size: 13.5px; padding: 12px 14px; }
 #side-panel .cal-event-time { font-size: 11px; }
 #side-panel .app-row-name { font-size: 13.5px; }
@@ -862,16 +788,16 @@ body.paused #conn-status { display: block; }
 #side-panel .chat-empty, #side-panel .notices-empty, #side-panel .pane-empty { font-size: 13.5px; }
 
 /* section headers: readable size + accent tick so the eye can anchor */
-#side-panel .study-row-label, #side-panel .apps-col-label {
+#side-panel .panel-row-label, #side-panel .apps-col-label {
   font-size: 11.5px; letter-spacing: .12em;
   border-left: 2px solid var(--core); padding-left: 8px; }
 #side-panel .settings-field-label { font-size: 11.5px; letter-spacing: .1em; }
 
 /* section cards: bounded blocks instead of one undivided surface */
-#side-panel .study-row, #side-panel .apps-col, #ptab-finance form {
+#side-panel .panel-row, #side-panel .apps-col, #ptab-finance form {
   background: rgba(255,255,255,.025); border: 1px solid var(--line-dim);
   border-radius: var(--radius-md); padding: 16px 18px; }
-#side-panel .study-row:last-child { padding-bottom: 16px; }
+#side-panel .panel-row:last-child { padding-bottom: 16px; }
 
 /* single-column fallback: nav becomes a horizontal scroll rail on top.
    Must stay LAST — the workspace/readability #side-panel rules above share
@@ -988,11 +914,9 @@ body.paused #conn-status { display: block; }
     <button class="ptab" data-tab="notices">Notices</button>
     <span class="tab-group">Life</span>
     <button class="ptab" data-tab="finance" data-requires="scripts">Finance</button>
-    <button class="ptab" data-tab="habits" data-requires="scripts">Habits</button>
     <button class="ptab" data-tab="calendar">Calendar</button>
     <button class="ptab" data-tab="jobs">Jobs</button>
-    <span class="tab-group">Study</span>
-    <button class="ptab" data-tab="study" data-requires="scripts">Study</button>
+    <span class="tab-group">Work</span>
     <button class="ptab" data-tab="workspace" data-requires="vault">Workspace</button>
     <span class="tab-group">System</span>
     <button class="ptab" data-tab="apps">Apps</button>
@@ -1005,8 +929,8 @@ body.paused #conn-status { display: block; }
   </div>
 
   <div id="ptab-notices" class="ptab-content">
-    <div class="study-row-header" style="margin-bottom:10px;">
-      <div class="study-row-label">Notices <span id="feed-count"></span></div>
+    <div class="panel-row-header" style="margin-bottom:10px;">
+      <div class="panel-row-label">Notices <span id="feed-count"></span></div>
       <button id="feed-markall" hidden class="pill-btn" title="Mark all as read">&#10003; all</button>
     </div>
     <div id="notices-list"><div class="notices-empty">Nothing flagged. Don't get used to it.</div></div>
@@ -1025,64 +949,12 @@ body.paused #conn-status { display: block; }
     <div id="finance-output" class="panel-output"></div>
   </div>
 
-  <div id="ptab-habits" class="ptab-content">
-    <div id="habits-list"></div>
-    <div id="habits-meta" class="habits-meta"></div>
-    <div id="habits-output" class="panel-output"></div>
-  </div>
-
-  <div id="ptab-study" class="ptab-content">
-
-    <div class="study-row">
-      <div class="study-row-label">Explain concept</div>
-      <div class="search-bar">
-        <input id="study-explain-input" type="text" placeholder="e.g. dynamic programming" autocomplete="off" />
-        <button class="search-bar-btn" id="study-explain-btn">Explain</button>
-      </div>
-      <div class="study-output" id="study-explain-out"></div>
-    </div>
-
-    <div class="study-row">
-      <div class="study-row-header">
-        <div class="study-row-label">Quiz</div>
-        <button class="pill-btn" id="study-quiz-btn">from latest lecture</button>
-      </div>
-      <div id="study-quiz-cards"></div>
-    </div>
-
-    <div class="study-row">
-      <div class="study-row-header">
-        <div class="study-row-label">Study plan</div>
-        <button class="pill-btn" id="study-plan-btn">generate</button>
-      </div>
-      <div class="study-output" id="study-plan-out"></div>
-    </div>
-
-    <div class="study-row">
-      <div class="study-row-label">Research topic</div>
-      <div class="search-bar">
-        <input id="study-research-input" type="text" placeholder="e.g. reinforcement learning" autocomplete="off" />
-        <button class="search-bar-btn" id="study-research-btn">Research</button>
-      </div>
-      <div class="study-output" id="study-research-out"></div>
-    </div>
-
-    <div class="study-row">
-      <div class="study-row-header">
-        <div class="study-row-label">Weekly progress</div>
-        <button class="pill-btn" id="study-progress-btn">view</button>
-      </div>
-      <div class="study-output" id="study-progress-out"></div>
-    </div>
-
-  </div>
-
   <div id="ptab-calendar" class="ptab-content">
     <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
       <button class="pill-btn" id="cal-refresh-btn">refresh</button>
     </div>
     <div id="calendar-list"></div>
-    <div class="study-row-label" style="margin-top:18px; margin-bottom:8px;">Deadlines</div>
+    <div class="panel-row-label" style="margin-top:18px; margin-bottom:8px;">Deadlines</div>
     <div id="tasks-list"></div>
   </div>
 
@@ -1103,17 +975,17 @@ body.paused #conn-status { display: block; }
   </div>
 
   <div id="ptab-profiles" class="ptab-content">
-    <div class="study-row-label" style="margin-bottom:8px;">Profiles</div>
+    <div class="panel-row-label" style="margin-bottom:8px;">Profiles</div>
     <div id="profiles-list" class="apps-col-list" style="margin-bottom:16px;"></div>
-    <div class="study-row-label" id="profile-form-title" style="margin-bottom:8px;">New profile</div>
+    <div class="panel-row-label" id="profile-form-title" style="margin-bottom:8px;">New profile</div>
     <form id="profile-form">
       <div class="profile-form-row">
         <input id="profile-label" class="settings-input" type="text" placeholder="Label (e.g. Study Mode)" autocomplete="off" />
         <input id="profile-id" class="settings-input" type="text" placeholder="id (auto)" autocomplete="off" />
       </div>
-      <div class="study-row-label" style="margin:12px 0 6px;">Apps</div>
+      <div class="panel-row-label" style="margin:12px 0 6px;">Apps</div>
       <div id="profile-apps-checks" class="profile-checks"></div>
-      <div class="study-row-label" style="margin:12px 0 6px;">Trigger</div>
+      <div class="panel-row-label" style="margin:12px 0 6px;">Trigger</div>
       <div class="profile-form-row">
         <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="manual" checked /> Manual only</label>
         <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="time" /> Auto (time)</label>
@@ -1177,18 +1049,18 @@ body.paused #conn-status { display: block; }
         <div class="apps-col-list" id="workspace-scratch-list"></div>
       </div>
     </div>
-    <div class="study-row-label" style="margin-top:16px; margin-bottom:8px;">Content</div>
-    <div class="study-output" id="workspace-content"></div>
+    <div class="panel-row-label" style="margin-top:16px; margin-bottom:8px;">Content</div>
+    <div class="panel-output" id="workspace-content"></div>
   </div>
 
   <div id="ptab-settings" class="ptab-content">
     <div style="margin-bottom:18px;">
-      <div class="study-row-label" style="margin-bottom:8px;">LLM Backend</div>
+      <div class="panel-row-label" style="margin-bottom:8px;">LLM Backend</div>
       <div id="settings-llm-status" class="panel-output" style="font-size:12px; min-height:16px; margin-bottom:8px;"></div>
       <button class="pill-btn" id="settings-llm-detect">re-detect</button>
     </div>
     <div style="margin-bottom:18px;">
-      <div class="study-row-label" style="margin-bottom:8px;">Weather</div>
+      <div class="panel-row-label" style="margin-bottom:8px;">Weather</div>
       <div id="settings-weather-status" class="panel-output" style="font-size:12px; min-height:16px;"></div>
     </div>
     <div id="settings-fields"></div>
@@ -1197,7 +1069,6 @@ body.paused #conn-status { display: block; }
 </div>
 
 <!-- Drop overlay -->
-<div id="drop-overlay"><span>drop .pdf or .pptx</span></div>
 
 <script src="/static/three.min.js"></script>
 <script>
@@ -1664,8 +1535,6 @@ const PRESENCE_REMARKS = {
   chat:     'Talk if you must. I\'m listening.',
   notices:  'Things I flagged. You\'re welcome.',
   finance:  'Your money. Let\'s get this over with.',
-  habits:   'The streak\'s yours to break.',
-  study:    'Ask. That\'s what I\'m here for.',
   calendar: 'What\'s coming. Don\'t shoot the messenger.',
   apps:     'Apps I\'m allowed to open. Vetted.',
   profiles: 'Groups of apps. One nod launches all of them.',
@@ -1807,7 +1676,6 @@ let lastStutter = 0;
     if (activeTab) {
       const t = activeTab.dataset.tab;
       setPresence(t);
-      if (t === 'habits') loadHabits();
       if (t === 'notices') loadNotices();
       if (t === 'chat') scrollChatToBottom();
       if (t === 'calendar') loadCalendar();
@@ -1835,7 +1703,6 @@ let lastStutter = 0;
       const pane = document.getElementById('ptab-' + tab.dataset.tab);
       if (pane) pane.classList.add('active');
       setPresence(tab.dataset.tab);
-      if (tab.dataset.tab === 'habits') loadHabits();
       if (tab.dataset.tab === 'notices') loadNotices();
       if (tab.dataset.tab === 'chat') scrollChatToBottom();
       if (tab.dataset.tab === 'calendar') loadCalendar();
@@ -1884,153 +1751,8 @@ let lastStutter = 0;
     }
   });
 
-  // Habits: load + render
-  async function loadHabits() {
-    const list = document.getElementById('habits-list');
-    const meta = document.getElementById('habits-meta');
-    const out  = document.getElementById('habits-output');
-    try {
-      const r = await vfetch('/cmd/habits');
-      const d = await r.json();
-      if (d.error) { out.innerHTML = paneErr(errText(d), 'Habits won\'t load.'); list.innerHTML = ''; return; }
-      out.textContent = '';
-      list.innerHTML = '';
-      const checked = d.checked || {};
-      Object.entries(checked).forEach(([name, done]) => {
-        const row = document.createElement('div');
-        row.className = 'habit-row' + (done ? ' done' : '');
-        row.innerHTML = `<div class="habit-check">${done ? '✓' : ''}</div><div class="habit-name">${name}</div>`;
-        if (!done) {
-          row.addEventListener('click', async () => {
-            const res = await vfetch('/cmd/habits/check', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({pillar: name}),
-            });
-            const rd = await res.json();
-            if (rd.checked) loadHabits();
-          });
-        }
-        list.appendChild(row);
-      });
-      const dc  = d.done_count || 0;
-      const tot = d.total || 0;
-      const str = d.current_streak || 0;
-      meta.textContent = `${dc}/${tot} done today · ${str} day streak`;
-    } catch (err) {
-      out.innerHTML = paneErr(err.message, 'Habits won\'t load. Not on me.');
-    }
-  }
 })();
 
-// ── Study panel ────────────────────────────────────────────────────────────
-(function initStudy() {
-  function setOut(id, text) {
-    document.getElementById(id).textContent = text;
-  }
-
-  function withLoading(btn, label, fn) {
-    const orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = label + '<span class="spin-inline"></span>';
-    return fn().finally(() => { btn.disabled = false; btn.innerHTML = orig; });
-  }
-
-  // Explain
-  async function doExplain() {
-    const topic = document.getElementById('study-explain-input').value.trim();
-    if (!topic) return;
-    const btn = document.getElementById('study-explain-btn');
-    await withLoading(btn, 'Explain', async () => {
-      setOut('study-explain-out', '');
-      try {
-        const r = await vfetch('/cmd/study/explain', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({topic}),
-        });
-        const d = await r.json();
-        fillOut('study-explain-out', d, 'Nothing to explain. Give me a topic.');
-      } catch (e) { document.getElementById('study-explain-out').innerHTML = paneErr(e.message); }
-    });
-  }
-  document.getElementById('study-explain-btn').addEventListener('click', doExplain);
-  document.getElementById('study-explain-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); doExplain(); }
-  });
-
-  // Quiz
-  document.getElementById('study-quiz-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('study-quiz-btn');
-    const wrap = document.getElementById('study-quiz-cards');
-    await withLoading(btn, 'from latest lecture', async () => {
-      wrap.innerHTML = '';
-      try {
-        const r = await vfetch('/cmd/study/quiz');
-        const d = await r.json();
-        if (errText(d)) { wrap.innerHTML = paneErr(errText(d), 'Quiz won\'t load.'); return; }
-        (d.cards || []).forEach(card => {
-          const el = document.createElement('div');
-          el.className = 'quiz-card';
-          el.innerHTML =
-            `<div class="quiz-q">${escHtml(card.q)}</div>` +
-            `<div class="quiz-lvl">${escHtml(card.level || '')}</div>` +
-            `<div class="quiz-a">${escHtml(card.a)}</div>`;
-          el.addEventListener('click', () => el.classList.toggle('revealed'));
-          wrap.appendChild(el);
-        });
-        if (!d.cards || !d.cards.length) wrap.innerHTML = paneEmpty('No cards. Nothing to drill yet.');
-      } catch (e) { wrap.innerHTML = paneErr(e.message); }
-    });
-  });
-
-  // Plan
-  document.getElementById('study-plan-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('study-plan-btn');
-    await withLoading(btn, 'generate', async () => {
-      setOut('study-plan-out', '');
-      try {
-        const r = await vfetch('/cmd/study/plan');
-        const d = await r.json();
-        fillOut('study-plan-out', d, 'No plan yet. Nothing to plan around.');
-      } catch (e) { document.getElementById('study-plan-out').innerHTML = paneErr(e.message); }
-    });
-  });
-
-  // Research
-  async function doResearch() {
-    const topic = document.getElementById('study-research-input').value.trim();
-    if (!topic) return;
-    const btn = document.getElementById('study-research-btn');
-    await withLoading(btn, 'Research', async () => {
-      setOut('study-research-out', '');
-      try {
-        const r = await vfetch('/cmd/study/research', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({topic}),
-        });
-        const d = await r.json();
-        fillOut('study-research-out', d, 'Nothing to research. Give me a topic.');
-      } catch (e) { document.getElementById('study-research-out').innerHTML = paneErr(e.message); }
-    });
-  }
-  document.getElementById('study-research-btn').addEventListener('click', doResearch);
-  document.getElementById('study-research-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); doResearch(); }
-  });
-
-  // Progress
-  document.getElementById('study-progress-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('study-progress-btn');
-    await withLoading(btn, 'view', async () => {
-      setOut('study-progress-out', '');
-      try {
-        const r = await vfetch('/cmd/study/progress');
-        const d = await r.json();
-        fillOut('study-progress-out', d, 'No progress logged yet. Get to work.');
-      } catch (e) { document.getElementById('study-progress-out').innerHTML = paneErr(e.message); }
-    });
-  });
-})();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function escHtml(s) {
@@ -2101,32 +1823,6 @@ function scrollChatToBottom() {
   if (hist) hist.scrollTop = hist.scrollHeight;
 }
 
-// Download-suggestion notice actions: File it / Dismiss, wired to
-// voice/ui_server.py POST /cmd/downloads/file and /cmd/downloads/dismiss.
-// Uses the pill-btn look already used for approve/revoke in the Apps panel.
-// The UI never constructs a destination — it only ever echoes back the
-// meta.path the heartbeat already put on the notice.
-function _downloadNoticeActions(meta) {
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex; gap:6px; margin-top:6px;';
-  const post = (url) => vfetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: meta.path }),
-  }).then(() => { row.remove(); }).catch(() => {});
-  const file = document.createElement('button');
-  file.type = 'button';
-  file.className = 'pill-btn';
-  file.textContent = 'File it';
-  file.onclick = () => post('/cmd/downloads/file');
-  const skip = document.createElement('button');
-  skip.type = 'button';
-  skip.className = 'pill-btn';
-  skip.textContent = 'Dismiss';
-  skip.onclick = () => post('/cmd/downloads/dismiss');
-  row.append(file, skip);
-  return row;
-}
 
 // ── Notices feed ────────────────────────────────────────────────────────────
 async function loadNotices() {
@@ -2178,9 +1874,6 @@ async function loadNotices() {
         del.onclick = () => act({ id: n.id || n.ts, delete: true });
         acts.appendChild(del);
         div.appendChild(acts);
-        if (n.meta && n.meta.kind === 'download_suggestion') {
-          div.appendChild(_downloadNoticeActions(n.meta));
-        }
         list.appendChild(div);
       });
     });
@@ -2203,32 +1896,6 @@ async function updateNoticeBadge() {
 updateNoticeBadge();
 setInterval(updateNoticeBadge, 60000);
 
-// ── File drop zone ─────────────────────────────────────────────────────────
-(function initDrop() {
-  const overlay = document.getElementById('drop-overlay');
-  let count = 0;
-  document.addEventListener('dragenter', e => {
-    if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
-      count++; overlay.classList.add('active');
-    }
-  });
-  document.addEventListener('dragleave', () => {
-    if (--count <= 0) { count = 0; overlay.classList.remove('active'); }
-  });
-  document.addEventListener('dragover', e => e.preventDefault());
-  document.addEventListener('drop', async e => {
-    e.preventDefault();
-    count = 0; overlay.classList.remove('active');
-    const files = Array.from(e.dataTransfer.files)
-      .filter(f => /\.(pdf|pptx)$/i.test(f.name));
-    for (const file of files) {
-      const fd = new FormData();
-      fd.append('file', file);
-      await vfetch('/upload', {method: 'POST', body: fd});
-    }
-    if (files.length) setState('thinking');
-  });
-})();
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 (function connect() {
@@ -2482,8 +2149,8 @@ async function loadCalendar() {
     if (!tasks.length) { tasksList.innerHTML = '<div class="notices-empty">No deadlines. For now.</div>'; return; }
     tasks.forEach(t => {
       const row = document.createElement('div');
-      row.className = 'habit-row' + (t.done ? ' done' : '');
-      row.innerHTML = `<div class="habit-check">${t.done ? '✓' : ''}</div><div class="habit-name">${escHtml(t.text)}</div>`;
+      row.className = 'task-row' + (t.done ? ' done' : '');
+      row.innerHTML = `<div class="task-check">${t.done ? '✓' : ''}</div><div class="task-name">${escHtml(t.text)}</div>`;
       tasksList.appendChild(row);
     });
   } catch (_) {
@@ -2777,31 +2444,6 @@ async function _renderActivityAwareness(conf, container) {
   } catch (_) {}
 }
 
-// Downloads-triage enable toggle appended to the Cfg tab: mirrors the
-// activity-awareness enable toggle above (same wrap style, same
-// _saveSetting helper). Persists downloads_triage_enabled, which gates
-// voice/heartbeat.py _check_downloads — the heartbeat task that scans the
-// Downloads folder and posts a download_suggestion notice per new file.
-async function _renderDownloadsTriage(conf, container) {
-  const group = document.createElement('div');
-  group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
-
-  const toggleWrap = document.createElement('label');
-  toggleWrap.style.cssText = 'display:flex; align-items:center; gap:8px; cursor:pointer;';
-  const toggle = document.createElement('input');
-  toggle.type = 'checkbox';
-  toggle.checked = conf.downloads_triage_enabled === true;
-  const toggleText = document.createElement('span');
-  toggleText.className = 'settings-field-label';
-  toggleText.textContent = 'Watch Downloads and suggest filing';
-  const toggleHint = document.createElement('span');
-  toggleHint.className = 'settings-save-hint';
-  toggleWrap.append(toggle, toggleText, toggleHint);
-  group.appendChild(toggleWrap);
-  toggle.addEventListener('change', () => _saveSetting('downloads_triage_enabled', toggle.checked, toggleHint));
-
-  container.appendChild(group);
-}
 
 // "Job alerts" group on the Cfg tab: enable toggle (job_alerts_enabled, gates
 // voice/heartbeat.py _check_job_alerts), editable sender-domain chip list
@@ -3026,7 +2668,6 @@ async function loadSettingsPanel() {
     if (engineCtrl) engineCtrl.addEventListener('change', applyEngineVisibility);
     applyEngineVisibility();
     await _renderActivityAwareness(conf, fieldsEl);
-    await _renderDownloadsTriage(conf, fieldsEl);
     await _renderJobAlerts(conf, fieldsEl);
   } catch (_) {
     fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');

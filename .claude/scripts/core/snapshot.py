@@ -32,7 +32,6 @@ def build_snapshot() -> dict:
     return {
         "timestamp": time.time(),
         "github":   _safe(_snapshot_github),
-        "inbox":    _safe(_snapshot_inbox),
     }
 
 
@@ -43,22 +42,12 @@ def _snapshot_github() -> dict:
     return {"push_count": len(clean), "items": clean[:20]}
 
 
-def _snapshot_inbox() -> dict:
-    from integrations import vault_fs
-    files = vault_fs.list_inbox_new()
-    return {
-        "count": len(files),
-        "files": [str(f.relative_to(PROJECT_DIR)).replace("\\", "/") for f in files],
-    }
-
-
 # ---------- Diff ----------
 
 def diff_snapshot(prev: dict | None, curr: dict) -> dict:
     prev = prev or {}
     return {
-        "new_pushes":      _diff_by_id(prev.get("github", {}), curr.get("github", {}), "items", "sha"),
-        "new_inbox_files": _diff_files(prev.get("inbox", {}),  curr.get("inbox", {})),
+        "new_pushes": _diff_by_id(prev.get("github", {}), curr.get("github", {}), "items", "sha"),
     }
 
 
@@ -72,16 +61,8 @@ def _diff_by_id(prev: dict, curr: dict, list_key: str, id_key: str) -> list:
     return [item for item in (curr.get(list_key) or []) if item.get(id_key) not in prev_ids]
 
 
-def _diff_files(prev: dict, curr: dict) -> list:
-    prev_set = set(prev.get("files") or [])
-    return [f for f in (curr.get("files") or []) if f not in prev_set]
-
-
 def has_changes(diff: dict) -> bool:
-    return any([
-        diff.get("new_pushes"),
-        diff.get("new_inbox_files"),
-    ])
+    return bool(diff.get("new_pushes"))
 
 
 # ---------- State persistence ----------
