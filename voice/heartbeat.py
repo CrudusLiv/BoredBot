@@ -219,8 +219,8 @@ def _check_deadlines() -> list[str]:
 
 
 # Notices carried over from the previous _tick() — in-memory only (a restart
-# just re-baselines, same as _prev_procs/_away_since), so a slow tick doesn't
-# re-toast the identical calendar/email/deadline notice it already posted.
+# just re-baselines, same as _away_since), so a slow tick doesn't re-toast
+# the identical calendar/email/deadline notice it already posted.
 _last_tick_notices: set[str] = set()
 
 
@@ -263,11 +263,8 @@ class Heartbeat:
         # persists so a restart doesn't immediately re-fire the notice.
         self._away_since: datetime | None = None
 
-        # Activity awareness (process-based silence + reactive triggers). All
-        # in-memory — a restart just re-baselines on the next poll, same as
-        # _away_since. _prev_procs starts empty so the first poll baselines
-        # rather than firing "launched" triggers for already-running apps.
-        self._prev_procs: set[str] = set()
+        # Activity awareness (process-based silence). In-memory only — a
+        # restart just re-baselines on the next poll, same as _away_since.
         self._busy: bool = False
         self._busy_since: datetime | None = None
         self._busy_proc: str | None = None
@@ -392,8 +389,8 @@ class Heartbeat:
 
         Away: idle >= threshold → record _away_since (back-dated to when
         idleness actually started). Return: fresh input (idle < 5 s) while
-        away → fire the notice + context profiles, gated by a persisted
-        cooldown so restarts and rapid re-idles don't spam."""
+        away → fire the notice, gated by a persisted cooldown so restarts
+        and rapid re-idles don't spam."""
         from voice import config as cfg
         idle_seconds = self._idle_fn()
         if idle_seconds is None:
@@ -428,64 +425,16 @@ class Heartbeat:
             self._speak(text)
             _post(text)
 
-        try:
-            self._check_context_profiles(conf, away_duration)
-        except Exception as _e:
-            print(f"[heartbeat] context profile error: {_e}", flush=True)
-
-    def _check_context_profiles(self, conf: dict, away_duration: timedelta) -> None:
-        """Fire profiles with a context/idle_return trigger when a
-        return-from-idle event's away duration meets the profile's
-        min_idle_minutes. Like the time triggers, calls profiles.activate()
-        directly (un-gated — the user configured the trigger themselves).
-        Cooldown reuses the profile's own last_fired (minimum 30 min between
-        fires), independent of the global notice cooldown."""
-        from voice import profiles
-
-        now = datetime.now(timezone.utc)
-        for profile_id, profile in profiles.load().items():
-            try:
-                trig = profile.get("trigger") or {}
-                if trig.get("type") != "context" or trig.get("signal") != "idle_return":
-                    continue
-
-                min_minutes = float(trig.get("min_idle_minutes",
-                                             conf.get("idle_return_threshold_minutes", 20)))
-                if away_duration < timedelta(minutes=min_minutes):
-                    continue
-
-                fired_dt = _parse_dt(profile.get("last_fired"))
-                if fired_dt is not None and now - fired_dt < timedelta(minutes=30):
-                    continue  # per-profile cooldown
-            except (AttributeError, TypeError, ValueError):
-                continue  # malformed profile — skip, don't block later ones
-
-            try:
-                result = profiles.activate(profile_id)
-                if result.get("launched"):
-                    label = result.get("profile", profile_id)
-                    text = f"{label} started — launched {', '.join(result['launched'])}."
-                    self._speak(text)
-                    _post(text)
-                if result.get("errors"):
-                    _post(f"{profile.get('label', profile_id)}: {'; '.join(result['errors'])}", level="URGENT")
-            except Exception as exc:
-                print(f"[heartbeat] context profile error for {profile_id}: {exc}", flush=True)
-
     def _check_activity(self) -> None:
-        """One process scan per fast poll, feeding two consumers: the busy-state
-        silence gate and the reactive process triggers. Opt-in and dormant until
-        activity_awareness_enabled. Fails open (activity.running_processes never
-        raises); when disabled we skip entirely and leave _prev_procs stale so a
-        later enable re-baselines instead of firing on already-open apps."""
+        """One process scan per fast poll, feeding the busy-state silence gate.
+        Opt-in and dormant until activity_awareness_enabled. Fails open
+        (activity.running_processes never raises)."""
         from voice import activity, config as cfg
         conf = cfg.load()
         if not conf.get("activity_awareness_enabled", False):
             return
         procs = activity.running_processes()
         self._update_busy_state(conf, procs)
-        self._check_process_triggers(conf, procs)
-        self._prev_procs = procs
 
     def _update_busy_state(self, conf: dict, procs: set[str]) -> None:
         """Enter/exit a 'busy' state when a silence_when_running process appears
@@ -546,46 +495,6 @@ class Heartbeat:
                 f"notice{'s' if unread != 1 else ''} waiting.")
         self._speak(text)
         _post(text)
-
-    def _check_process_triggers(self, conf: dict, procs: set[str]) -> None:
-        """Fire profiles with a `process` trigger. `event: "launched"` is
-        edge-triggered on a newly-appeared exe (procs - prev), naturally firing
-        once per launch; `event: "running"` is level-triggered while the exe is
-        present, guarded by the profile's own 30-min last_fired cooldown. Calls
-        the shared un-gated profiles.activate() like the time/context triggers."""
-        from voice import profiles
-        now = datetime.now(timezone.utc)
-        newly = (procs - self._prev_procs) if self._prev_procs else set()
-        for profile_id, profile in profiles.load().items():
-            try:
-                trig = profile.get("trigger") or {}
-                if trig.get("type") != "process":
-                    continue
-                exe = (trig.get("exe") or "").lower()
-                if not exe:
-                    continue
-                if trig.get("event", "launched") == "launched":
-                    if exe not in newly:
-                        continue
-                else:  # "running"
-                    if exe not in procs:
-                        continue
-                    fired_dt = _parse_dt(profile.get("last_fired"))
-                    if fired_dt is not None and now - fired_dt < timedelta(minutes=30):
-                        continue
-            except (AttributeError, TypeError, ValueError):
-                continue  # malformed profile — skip, don't block later ones
-            try:
-                result = profiles.activate(profile_id)
-                if result.get("launched"):
-                    label = result.get("profile", profile_id)
-                    text = f"{label} started — launched {', '.join(result['launched'])}."
-                    self._speak(text)
-                    _post(text)
-                if result.get("errors"):
-                    _post(f"{profile.get('label', profile_id)}: {'; '.join(result['errors'])}", level="URGENT")
-            except Exception as exc:
-                print(f"[heartbeat] process trigger error for {profile_id}: {exc}", flush=True)
 
     def _check_calendar_sync(self) -> None:
         """Push DEADLINES.md rows / gcal: tags to Google Calendar (migrated
@@ -789,7 +698,7 @@ class Heartbeat:
     def _run_scheduled(self) -> None:
         for task in (self._check_job_alerts,
                      self._morning_briefing, self._evening_wrap,
-                     self._check_nudges, self._check_profile_triggers,
+                     self._check_nudges,
                      self._check_calendar_sync, self._check_github_digest,
                      self._check_deadline_import,
                      self._check_deadline_thresholds,
@@ -944,49 +853,6 @@ class Heartbeat:
                     _post(text, level="URGENT")
             except Exception:
                 continue
-
-    def _check_profile_triggers(self) -> None:
-        """Auto-fire any profile whose `time` trigger is due today. Calls
-        profiles.activate() directly — never dispatch()/safety.py — so this
-        path is un-gated (the user configured the schedule themselves; a
-        voice-triggered activation of the same profile still goes through
-        normal confirmation gating via the activate_profile tool)."""
-        from voice import config as cfg, profiles
-
-        now = datetime.now(cfg.get_timezone())
-        today = now.date()
-        weekday = now.strftime("%a").lower()
-
-        for profile_id, profile in profiles.load().items():
-            trig = profile.get("trigger") or {}
-            if trig.get("type") != "time":
-                continue  # "context" triggers reserved, not implemented
-
-            days = trig.get("days") or ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-            if weekday not in days:
-                continue
-
-            last_fired = profile.get("last_fired")
-            if last_fired and last_fired[:10] == str(today):
-                continue  # already fired today
-
-            try:
-                th, tm = (int(x) for x in trig.get("time", "00:00").split(":"))
-            except ValueError:
-                continue
-
-            if now.hour > th or (now.hour == th and now.minute >= tm):
-                try:
-                    result = profiles.activate(profile_id)
-                    if result.get("launched"):
-                        label = result.get("profile", profile_id)
-                        text = f"{label} started — launched {', '.join(result['launched'])}."
-                        self._speak(text)
-                        _post(text)
-                    if result.get("errors"):
-                        _post(f"{profile.get('label', profile_id)}: {'; '.join(result['errors'])}", level="URGENT")
-                except Exception as exc:
-                    print(f"[heartbeat] profile trigger error for {profile_id}: {exc}", flush=True)
 
     @staticmethod
     def _is_quiet() -> bool:

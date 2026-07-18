@@ -75,21 +75,6 @@ _register("remember_fact",
 _register("forget_fact",
     "Remove a remembered fact. REQUIRES CONFIRMATION. Args: key(str).",
     forget)
-from voice.tools.launch_app import launch_app as _launch_app_fn
-_register("launch_app",
-    "Open an app or set of apps by shortcut name. Use when asked to open, launch, or start an app. Args: name(str).",
-    _launch_app_fn)
-from voice.tools.activate_profile import activate_profile
-_register("activate_profile",
-    "Activate a named app-launch profile (a pre-defined group of apps), e.g. 'start focus mode'. "
-    "REQUIRES CONFIRMATION — approving launches every app in the profile in one step. Args: name(str).",
-    activate_profile)
-from voice.tools.profile_state import update_profile_app_state
-_register("update_profile_app_state",
-    "Set the working directory an app should open in next time a profile launches it. "
-    "Use when asked to remember/change where an app opens for a profile. "
-    "Args: profile(str), alias(str), cwd(str).",
-    update_profile_app_state)
 from voice.deadlines import complete_deadline
 _register("complete_deadline",
     "Mark a deadline as completed — moves its row from Active to Done in DEADLINES.md "

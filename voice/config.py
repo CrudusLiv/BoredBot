@@ -71,7 +71,7 @@ DEFAULTS: dict[str, Any] = {
     "ui_port": 7070,
     "city": "",                     # for weather widget; empty = disabled
     # Safety
-    "requires_confirmation": ["create_note", "append_note", "forget_fact", "launch_app", "activate_profile"],
+    "requires_confirmation": ["create_note", "append_note", "forget_fact"],
     "confirm_timeout_seconds": 30,
     "killswitch_voice_phrases": ["stand down", "pause yourself", "resume duties"],
     # Streaming replies (sentence-by-sentence TTS pipeline)

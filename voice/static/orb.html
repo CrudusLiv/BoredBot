@@ -10,16 +10,16 @@
     --dur-panel: 620ms;
     --dur-item: 550ms;
     --dur-soft: 320ms;
-    --radius-lg: 22px;
-    --radius-md: 16px;
-    --radius-sm: 12px;
-    --glass-bg: rgba(16, 14, 30, 0.5);
-    --glass-bg-raise: rgba(20, 17, 38, 0.62);
-    --glass-border: rgba(255, 255, 255, 0.09);
-    --glass-blur: 18px;
+    --radius-lg: 14px;
+    --radius-md: 10px;
+    --radius-sm: 6px;
+    --glass-bg: rgba(13, 12, 20, 0.9);
+    --glass-bg-raise: rgba(14, 13, 20, 0.96);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 0px;
     /* SOUL-canon tokens — near-black, steel, muted purple, yellow-green accent */
-    --bg: #0a0a0f;
-    --bg-raise: #101018;
+    --bg: #06060a;
+    --bg-raise: #0c0c12;
     --line: #3a3d46;
     --line-dim: #22242c;
     --core: #6a4fc8;
@@ -41,7 +41,7 @@
   body {
     width: 100vw; height: 100vh; overflow: hidden;
     background: radial-gradient(ellipse at center, #0d0d15 0%, #07070b 100%);
-    font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   }
   canvas { display: block; position: fixed; inset: 0; }
   #starfield { z-index: 0; pointer-events: none; }
@@ -114,8 +114,7 @@
     background: rgba(8, 8, 22, 0.97); border-left: 1px solid #24244e;
     transition: right 0.28s cubic-bezier(0.4,0,0.2,1); z-index: 20;
     display: flex; flex-direction: column;
-    backdrop-filter: blur(20px);
-  }
+    }
   #side-panel.open { right: 0; }
 
   /* ── Panel header ─────────────────────────────────── */
@@ -340,29 +339,11 @@
     font-size: 11px; outline: none; flex-shrink: 0;
   }
 
-  /* ── Profiles panel ──────────────────────────────── */
-  .profile-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03);
-    border: 1px solid var(--line-dim); flex-wrap: wrap;
-    animation: driftIn var(--dur-item) var(--ease-soft) both;
-  }
-  .profile-row-main { flex: 1; min-width: 0; }
-  .profile-row-label { font-size: 12px; color: var(--text); }
-  .profile-row-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  /* ── Shared chip style (Activity awareness, Job alerts) ──────────── */
   .profile-chip {
     display: inline-block; font-size: 10px; color: var(--text);
     background: rgba(106,79,200,0.16); border: 1px solid var(--line-dim);
     border-radius: 999px; padding: 2px 8px; margin: 2px 4px 0 0;
-  }
-  .profile-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .profile-row-actions .pill-btn { padding: 4px 10px; font-size: 10px; }
-  .profile-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .profile-form-row .settings-input { flex: 1; min-width: 120px; }
-  .profile-checks { display: flex; flex-wrap: wrap; gap: 10px; }
-  .profile-checks label, .profile-radio {
-    font-size: 11px; color: var(--text); display: inline-flex; align-items: center; gap: 5px;
-    cursor: pointer;
   }
 
 /* SOUL-canon chrome — mechanical console around the orb. Tokens live in
@@ -408,7 +389,7 @@ body::after {
 #panel-edge:hover { color: var(--accent); background: rgba(200,230,76,0.10); border-color: #4a4f3a; transform: translateY(-1px); }
 #side-panel { background: var(--glass-bg-raise); border-left: 1px solid var(--glass-border); }
 #tab-rail { background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: var(--radius-md);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+}
 .ptab { border-radius: var(--radius-sm); font-family: var(--mono); letter-spacing: 0.08em; }
 .ptab.active {
   color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
@@ -575,13 +556,22 @@ body.paused #conn-status { display: block; }
 /* presence strip — Vesper's state dot + a dry per-tab remark */
 #panel-presence { display: flex; align-items: center; gap: 9px;
   padding: 11px 18px 2px; flex-shrink: 0; }
+/* Idle is a hard, quiet dot — no glow, no motion. The ring + orbiting
+   electron are reserved for active states, so the one always-on-screen HUD
+   element reads as "waiting" vs "engaged" at a glance. */
 #presence-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; position: relative;
-  background: var(--core); box-shadow: 0 0 8px rgba(106,79,200,.55);
+  background: var(--text-dim); box-shadow: none;
   transition: background var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
+#presence-dot::before { content: ''; position: absolute; top: 50%; left: 50%;
+  width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  border: 1px solid transparent; opacity: 0;
+  transition: opacity var(--dur-soft) var(--ease-soft), border-color var(--dur-soft) var(--ease-soft); }
 #presence-dot::after { content: ''; position: absolute; top: 50%; left: 50%;
   width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 5px rgba(200,230,76,.7);
-  animation: electron-orbit 3.6s linear infinite; }
+  animation: electron-orbit 3.6s linear infinite; opacity: 0;
+  transition: opacity var(--dur-soft) var(--ease-soft);
+}
 @keyframes electron-orbit {
   from { transform: rotate(0deg) translateX(9px) rotate(0deg); }
   to   { transform: rotate(360deg) translateX(9px) rotate(-360deg); }
@@ -589,10 +579,18 @@ body.paused #conn-status { display: block; }
 @media (prefers-reduced-motion: reduce) {
   #presence-dot::after, #notice-badge.visible::after { animation: none; opacity: .6; }
 }
+#presence-dot.listening::before, #presence-dot.thinking::before,
+#presence-dot.speaking::before, #presence-dot.error::before { opacity: .5; }
+#presence-dot.listening::after, #presence-dot.thinking::after,
+#presence-dot.speaking::after, #presence-dot.error::after { opacity: 1; }
 #presence-dot.listening { background: var(--accent); box-shadow: 0 0 8px rgba(200,230,76,.55); }
+#presence-dot.listening::before { border-color: rgba(200,230,76,.55); }
 #presence-dot.thinking  { background: #a98ef0; box-shadow: 0 0 8px rgba(169,142,240,.55); }
+#presence-dot.thinking::before { border-color: rgba(169,142,240,.55); }
 #presence-dot.speaking  { background: #b7a6ec; box-shadow: 0 0 8px rgba(183,166,236,.45); }
+#presence-dot.speaking::before { border-color: rgba(183,166,236,.45); }
 #presence-dot.error     { background: var(--danger); box-shadow: 0 0 8px rgba(230,86,76,.55); }
+#presence-dot.error::before { border-color: rgba(230,86,76,.55); }
 #presence-remark { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
   color: var(--text-dim); opacity: .85; transition: opacity var(--dur-soft) var(--ease-soft); }
 
@@ -620,7 +618,6 @@ body.paused #conn-status { display: block; }
 /* search fields → rounded glass input */
 #side-panel .search-bar { border-radius: var(--radius-md);
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
 #side-panel .search-bar:focus-within { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
 #side-panel .search-bar input { color: var(--text); font-family: var(--mono); font-size: 12px; }
@@ -634,7 +631,6 @@ body.paused #conn-status { display: block; }
 #side-panel .pill-btn { border-radius: 999px;
   background: rgba(14,14,22,.55); border: 1px solid var(--glass-border); color: var(--text-dim);
   font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft),
     border-color var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft); }
 #side-panel .pill-btn:hover { border-color: var(--core); color: #b9a5f5;
@@ -651,7 +647,6 @@ body.paused #conn-status { display: block; }
 /* notices (overlay only — the feed rail keeps its own styling) */
 #ptab-notices .notice-entry { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
   border-left: 2px solid var(--line); color: var(--text-dim);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
 #ptab-notices .notice-entry.unread { border-left-color: var(--core); color: var(--text); }
 #ptab-notices .notice-entry.urgent { border-left-color: var(--danger); }
@@ -660,7 +655,7 @@ body.paused #conn-status { display: block; }
 /* calendar events */
 #side-panel .cal-event { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
   border-left: 2px solid var(--core);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+}
 #side-panel .cal-event-time { color: var(--text-dim); }
 #side-panel .cal-event-title { color: var(--text); }
 
@@ -684,7 +679,6 @@ body.paused #conn-status { display: block; }
 #side-panel .settings-input, #side-panel .settings-select { border-radius: var(--radius-sm);
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border); color: var(--text);
   font-family: var(--mono); font-size: 12px;
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
 #side-panel .settings-input:focus, #side-panel .settings-select:focus { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
 #side-panel .settings-save-hint { color: var(--text-dim); transition: color var(--dur-soft) var(--ease-soft); }
@@ -692,7 +686,6 @@ body.paused #conn-status { display: block; }
 
 /* apps rows */
 #side-panel .app-row { border-radius: var(--radius-sm); background: rgba(255,255,255,.03); border: 1px solid var(--glass-border);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
 #side-panel .app-row-name { color: var(--text); }
 #side-panel .app-alias-input { border-radius: var(--radius-sm); background: rgba(10,10,16,.6);
@@ -919,8 +912,6 @@ body.paused #conn-status { display: block; }
     <span class="tab-group">Work</span>
     <button class="ptab" data-tab="workspace" data-requires="vault">Workspace</button>
     <span class="tab-group">System</span>
-    <button class="ptab" data-tab="apps">Apps</button>
-    <button class="ptab" data-tab="profiles">Profiles</button>
     <button class="ptab" data-tab="settings">Config</button>
   </div>
 
@@ -956,64 +947,6 @@ body.paused #conn-status { display: block; }
     <div id="calendar-list"></div>
     <div class="panel-row-label" style="margin-top:18px; margin-bottom:8px;">Deadlines</div>
     <div id="tasks-list"></div>
-  </div>
-
-  <div id="ptab-apps" class="ptab-content">
-    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
-      <button class="pill-btn" id="apps-scan-btn">scan</button>
-    </div>
-    <div class="apps-columns">
-      <div class="apps-col">
-        <div class="apps-col-label">Installed</div>
-        <div class="apps-col-list" id="apps-installed-list"></div>
-      </div>
-      <div class="apps-col">
-        <div class="apps-col-label">Approved</div>
-        <div class="apps-col-list" id="apps-approved-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="ptab-profiles" class="ptab-content">
-    <div class="panel-row-label" style="margin-bottom:8px;">Profiles</div>
-    <div id="profiles-list" class="apps-col-list" style="margin-bottom:16px;"></div>
-    <div class="panel-row-label" id="profile-form-title" style="margin-bottom:8px;">New profile</div>
-    <form id="profile-form">
-      <div class="profile-form-row">
-        <input id="profile-label" class="settings-input" type="text" placeholder="Label (e.g. Study Mode)" autocomplete="off" />
-        <input id="profile-id" class="settings-input" type="text" placeholder="id (auto)" autocomplete="off" />
-      </div>
-      <div class="panel-row-label" style="margin:12px 0 6px;">Apps</div>
-      <div id="profile-apps-checks" class="profile-checks"></div>
-      <div class="panel-row-label" style="margin:12px 0 6px;">Trigger</div>
-      <div class="profile-form-row">
-        <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="manual" checked /> Manual only</label>
-        <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="time" /> Auto (time)</label>
-        <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="process" /> When an app runs</label>
-      </div>
-      <div id="profile-trigger-time-fields" hidden>
-        <div class="profile-form-row" style="margin-top:8px;">
-          <input id="profile-trigger-time" class="settings-input" type="time" value="18:00" />
-        </div>
-        <div id="profile-trigger-days" class="profile-checks" style="margin-top:8px;"></div>
-      </div>
-      <div id="profile-trigger-process-fields" hidden>
-        <div class="profile-form-row" style="margin-top:8px;">
-          <input id="profile-trigger-exe" class="settings-input" type="text" list="profile-exe-list"
-                 placeholder="app exe (e.g. code.exe)" autocomplete="off" />
-          <datalist id="profile-exe-list"></datalist>
-          <select id="profile-trigger-event" class="settings-select">
-            <option value="launched">when it launches (once)</option>
-            <option value="running">while it's open (30-min cooldown)</option>
-          </select>
-        </div>
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-        <button type="button" id="profile-form-cancel" class="pill-btn" hidden>cancel edit</button>
-        <button type="submit" class="pill-btn" id="profile-form-submit">create</button>
-      </div>
-    </form>
-    <div id="profiles-output" class="panel-output"></div>
   </div>
 
   <div id="ptab-jobs" class="ptab-content">
@@ -1536,8 +1469,6 @@ const PRESENCE_REMARKS = {
   notices:  'Things I flagged. You\'re welcome.',
   finance:  'Your money. Let\'s get this over with.',
   calendar: 'What\'s coming. Don\'t shoot the messenger.',
-  apps:     'Apps I\'m allowed to open. Vetted.',
-  profiles: 'Groups of apps. One nod launches all of them.',
   workspace: 'Drafts and scratch. Nothing here is sent.',
   settings: 'Knobs and dials. Don\'t break anything.',
 };
@@ -1680,8 +1611,6 @@ let lastStutter = 0;
       if (t === 'chat') scrollChatToBottom();
       if (t === 'calendar') loadCalendar();
       if (t === 'settings') loadSettingsPanel();
-      if (t === 'apps') loadApps();
-      if (t === 'profiles') loadProfiles();
       if (t === 'jobs') loadJobs();
       if (t === 'workspace') loadWorkspace();
     }
@@ -1707,8 +1636,6 @@ let lastStutter = 0;
       if (tab.dataset.tab === 'chat') scrollChatToBottom();
       if (tab.dataset.tab === 'calendar') loadCalendar();
       if (tab.dataset.tab === 'settings') loadSettingsPanel();
-      if (tab.dataset.tab === 'apps') loadApps();
-      if (tab.dataset.tab === 'profiles') loadProfiles();
       if (tab.dataset.tab === 'jobs') loadJobs();
       if (tab.dataset.tab === 'workspace') loadWorkspace();
     });
@@ -2325,9 +2252,8 @@ document.getElementById('jobs-text-filter')?.addEventListener('input', renderJob
 
 // Curated "Activity awareness" group appended to the Cfg tab: an enable toggle
 // (activity_awareness_enabled) + an editable chip list of exe names
-// (silence_when_running). Exes come from a detected-apps picker (/cmd/apps/scan,
-// exe derived from each app's path) plus a free-text field for anything not
-// scanned. The whole list is persisted with one POST /cmd/settings per change.
+// (silence_when_running), added via a free-text field. Persisted with one
+// POST /cmd/settings per change.
 async function _renderActivityAwareness(conf, container) {
   let procs = Array.isArray(conf.silence_when_running) ? conf.silence_when_running.slice() : [];
 
@@ -2388,25 +2314,19 @@ async function _renderActivityAwareness(conf, container) {
     });
   }
 
-  // Add row: detected-apps picker + free-text input + add button
+  // Add row: free-text input + add button
   const addRow = document.createElement('div');
   addRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; align-items:center;';
-  const select = document.createElement('select');
-  select.className = 'settings-select';
-  select.style.flex = '1';
-  const ph = document.createElement('option');
-  ph.value = ''; ph.textContent = 'Detected apps…';
-  select.appendChild(ph);
   const freeInput = document.createElement('input');
   freeInput.className = 'settings-input';
   freeInput.type = 'text';
-  freeInput.placeholder = 'or type exe (e.g. game.exe)';
+  freeInput.placeholder = 'exe name (e.g. game.exe)';
   freeInput.style.flex = '1';
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'pill-btn';
   addBtn.textContent = 'add';
-  addRow.append(select, freeInput, addBtn);
+  addRow.append(freeInput, addBtn);
   group.append(addRow, listHint);
 
   function addExe(raw) {
@@ -2417,8 +2337,8 @@ async function _renderActivityAwareness(conf, container) {
     persist();
   }
   addBtn.addEventListener('click', () => {
-    addExe(select.value || freeInput.value);
-    select.value = ''; freeInput.value = '';
+    addExe(freeInput.value);
+    freeInput.value = '';
   });
   freeInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); addExe(freeInput.value); freeInput.value = ''; }
@@ -2426,22 +2346,6 @@ async function _renderActivityAwareness(conf, container) {
 
   renderChips();
   container.appendChild(group);
-
-  // Populate the detected-apps picker (exe basenames derived from app paths).
-  try {
-    const r = await vfetch('/cmd/apps/scan');
-    const d = await r.json();
-    const seen = new Set();
-    (d.apps || []).forEach(a => {
-      const exe = _exeFromPath(a.path);
-      if (!exe || seen.has(exe)) return;
-      seen.add(exe);
-      const o = document.createElement('option');
-      o.value = exe;
-      o.textContent = a.name && a.name.toLowerCase() !== exe ? `${a.name} — ${exe}` : exe;
-      select.appendChild(o);
-    });
-  } catch (_) {}
 }
 
 
@@ -2690,107 +2594,6 @@ document.getElementById('settings-llm-detect')?.addEventListener('click', async 
   if (btn) btn.disabled = false;
 });
 
-// ── Apps panel ─────────────────────────────────────────────────────────────
-async function loadApps(forceScan) {
-  const installedList = document.getElementById('apps-installed-list');
-  const approvedList  = document.getElementById('apps-approved-list');
-  if (!installedList || !approvedList) return;
-  installedList.innerHTML = '<div class="notices-empty">scanning…</div>';
-  approvedList.innerHTML = '';
-  try {
-    const r = await vfetch('/cmd/apps/scan');
-    const d = await r.json();
-    if (errText(d)) {
-      installedList.innerHTML = paneErr(errText(d), 'Scan failed.');
-      return;
-    }
-    const apps = d.apps || [];
-    installedList.innerHTML = '';
-    approvedList.innerHTML = '';
-    const approvedApps = apps.filter(a => a.approved);
-    const unapprovedApps = apps.filter(a => !a.approved);
-
-    if (!unapprovedApps.length) {
-      installedList.innerHTML = '<div class="notices-empty">Nothing new to approve.</div>';
-    }
-    unapprovedApps.forEach(app => {
-      const row = document.createElement('div');
-      row.className = 'app-row';
-      row.innerHTML =
-        `<span class="app-row-name" title="${escHtml(app.path)}">${escHtml(app.name)}</span>` +
-        `<input class="app-alias-input" placeholder="alias" value="${escHtml(app.name.toLowerCase())}" />` +
-        `<button class="pill-btn">approve</button>`;
-      row.querySelector('button').addEventListener('click', async () => {
-        const alias = row.querySelector('input').value.trim();
-        if (!alias) return;
-        await vfetch('/cmd/apps/approve', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ path: app.path, alias }),
-        });
-        loadApps();
-      });
-      installedList.appendChild(row);
-    });
-
-    if (!approvedApps.length) {
-      approvedList.innerHTML = '<div class="notices-empty">Nothing approved. Cautious. Good.</div>';
-    }
-    approvedApps.forEach(app => {
-      const row = document.createElement('div');
-      row.className = 'app-row';
-      row.innerHTML =
-        `<span class="app-row-name" title="${escHtml(app.path)}">${escHtml(app.voice_alias || app.name)}</span>` +
-        `<button class="pill-btn">revoke</button>`;
-      row.querySelector('button').addEventListener('click', async () => {
-        await vfetch('/cmd/apps/revoke', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ alias: app.voice_alias || app.name }),
-        });
-        loadApps();
-      });
-      approvedList.appendChild(row);
-    });
-  } catch (e) {
-    installedList.innerHTML = paneErr(e.message, 'Scan failed.');
-  }
-}
-document.getElementById('apps-scan-btn')?.addEventListener('click', () => loadApps());
-
-// ── Profiles panel ──────────────────────────────────────────────────────────
-// UI-only CRUD (no voice-callable create/edit/delete — matches app approval's
-// own voice-less trust boundary). Activation itself stays voice/heartbeat-only
-// (voice/tools/activate_profile.py, voice/heartbeat.py) — this panel never
-// activates a profile, only defines one.
-const PROFILE_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
-const PROFILE_DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-let _profileEditingId = null;
-let _profileApprovedAliases = [];
-
-function _profileTriggerSummary(trig) {
-  if (trig && trig.type === 'process') {
-    const evt = trig.event === 'running' ? 'while open' : 'on launch';
-    return `App: ${trig.exe || '?'} (${evt})`;
-  }
-  if (!trig || trig.type !== 'time') return 'Manual only';
-  const days = (trig.days && trig.days.length) ? trig.days : PROFILE_DAYS;
-  let dayLabel;
-  if (days.length === 7) dayLabel = 'every day';
-  else if (days.length === 5 && ['mon','tue','wed','thu','fri'].every(d => days.includes(d))) dayLabel = 'Mon–Fri';
-  else dayLabel = days.map(d => PROFILE_DAY_LABELS[d] || d).join('/');
-  return `Daily ${trig.time || '00:00'} (${dayLabel})`;
-}
-
-function _profileSlug(label) {
-  return label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
-
-// Derive a lowercase exe basename from a full app path (e.g. "...\Code.exe" ->
-// "code.exe"). The apps/scan `name` is a display name, so the exe the activity
-// engine matches against must come from `path`.
-function _exeFromPath(p) {
-  return String(p || '').split(/[\\/]/).pop().toLowerCase();
-}
-
 // Normalise a free-typed exe name: lowercase, and append ".exe" if the user
 // left it off (they match running-process names, which carry ".exe" on Windows).
 function _normExe(name) {
@@ -2798,217 +2601,6 @@ function _normExe(name) {
   if (n && !n.includes('.')) n += '.exe';
   return n;
 }
-
-// Fill a <datalist> with deduped exe options derived from an apps/scan list.
-function _renderExeDatalist(listId, apps) {
-  const dl = document.getElementById(listId);
-  if (!dl) return;
-  const seen = new Set();
-  const opts = [];
-  (apps || []).forEach(a => {
-    const exe = _exeFromPath(a.path);
-    if (!exe || seen.has(exe)) return;
-    seen.add(exe);
-    opts.push({ exe, label: a.name || '' });
-  });
-  opts.sort((x, y) => x.exe.localeCompare(y.exe));
-  dl.innerHTML = '';
-  opts.forEach(({ exe, label }) => {
-    const o = document.createElement('option');
-    o.value = exe;
-    o.textContent = label && label.toLowerCase() !== exe ? `${label} — ${exe}` : exe;
-    dl.appendChild(o);
-  });
-}
-
-async function loadProfiles() {
-  const listEl = document.getElementById('profiles-list');
-  if (!listEl) return;
-  listEl.innerHTML = '<div class="notices-empty">loading…</div>';
-  try {
-    const [profR, appsR] = await Promise.all([
-      vfetch('/cmd/profiles'),
-      vfetch('/cmd/apps/scan'),
-    ]);
-    const profD = await profR.json();
-    if (errText(profD)) { listEl.innerHTML = paneErr(errText(profD), 'Profiles won\'t load.'); return; }
-    const appsD = await appsR.json();
-    _profileApprovedAliases = (appsD.apps || []).filter(a => a.approved).map(a => a.voice_alias || a.name);
-    _renderExeDatalist('profile-exe-list', appsD.apps || []);
-
-    _renderProfileAppChecks('profile-apps-checks', []);
-    _renderProfileDayChecks();
-
-    const profiles = profD.profiles || {};
-    const ids = Object.keys(profiles);
-    listEl.innerHTML = '';
-    if (!ids.length) {
-      listEl.innerHTML = '<div class="notices-empty">No profiles yet. One thing at a time, I guess.</div>';
-    }
-    ids.forEach(id => {
-      const p = profiles[id];
-      const row = document.createElement('div');
-      row.className = 'profile-row';
-      const chips = (p.apps || []).map(a => `<span class="profile-chip">${escHtml(a)}</span>`).join('');
-      row.innerHTML =
-        `<div class="profile-row-main">` +
-          `<div class="profile-row-label">${escHtml(p.label || id)}</div>` +
-          `<div class="profile-row-meta">${escHtml(_profileTriggerSummary(p.trigger))}</div>` +
-          `<div>${chips}</div>` +
-        `</div>` +
-        `<div class="profile-row-actions">` +
-          `<button class="pill-btn" data-act="edit">edit</button>` +
-          `<button class="pill-btn" data-act="delete">delete</button>` +
-        `</div>`;
-      row.querySelector('[data-act="edit"]').addEventListener('click', () => _profileStartEdit(id, p));
-      row.querySelector('[data-act="delete"]').addEventListener('click', () => _profileDelete(id, p));
-      listEl.appendChild(row);
-    });
-  } catch (e) {
-    listEl.innerHTML = paneErr(e.message, 'Profiles won\'t load.');
-  }
-}
-
-function _renderProfileAppChecks(containerId, checkedAliases) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.innerHTML = '';
-  if (!_profileApprovedAliases.length) {
-    el.innerHTML = '<div class="notices-empty">Nothing approved yet. Approve an app in the Apps tab first.</div>';
-    return;
-  }
-  _profileApprovedAliases.forEach(alias => {
-    const label = document.createElement('label');
-    const checked = checkedAliases.includes(alias) ? ' checked' : '';
-    label.innerHTML = `<input type="checkbox" value="${escHtml(alias)}"${checked} /> ${escHtml(alias)}`;
-    el.appendChild(label);
-  });
-}
-
-function _renderProfileDayChecks(checkedDays) {
-  const el = document.getElementById('profile-trigger-days');
-  if (!el) return;
-  const days = checkedDays || ['mon','tue','wed','thu','fri'];  // default: weekdays
-  el.innerHTML = '';
-  PROFILE_DAYS.forEach(d => {
-    const label = document.createElement('label');
-    const checked = days.includes(d) ? ' checked' : '';
-    label.innerHTML = `<input type="checkbox" value="${d}"${checked} /> ${PROFILE_DAY_LABELS[d]}`;
-    el.appendChild(label);
-  });
-}
-
-function _profileResetForm() {
-  _profileEditingId = null;
-  document.getElementById('profile-form-title').textContent = 'New profile';
-  document.getElementById('profile-form-submit').textContent = 'create';
-  document.getElementById('profile-form-cancel').hidden = true;
-  document.getElementById('profile-label').value = '';
-  document.getElementById('profile-id').value = '';
-  document.getElementById('profile-id').disabled = false;
-  document.querySelector('input[name="profile-trigger-kind"][value="manual"]').checked = true;
-  document.getElementById('profile-trigger-time-fields').hidden = true;
-  document.getElementById('profile-trigger-time').value = '18:00';
-  document.getElementById('profile-trigger-process-fields').hidden = true;
-  document.getElementById('profile-trigger-exe').value = '';
-  document.getElementById('profile-trigger-event').value = 'launched';
-  _renderProfileAppChecks('profile-apps-checks', []);
-  _renderProfileDayChecks();
-}
-
-function _profileStartEdit(id, p) {
-  _profileEditingId = id;
-  document.getElementById('profile-form-title').textContent = 'Edit profile';
-  document.getElementById('profile-form-submit').textContent = 'save';
-  document.getElementById('profile-form-cancel').hidden = false;
-  document.getElementById('profile-label').value = p.label || '';
-  document.getElementById('profile-id').value = id;
-  document.getElementById('profile-id').disabled = true;  // id is immutable once created
-  _renderProfileAppChecks('profile-apps-checks', p.apps || []);
-  const trig = p.trigger;
-  const kind = trig && (trig.type === 'time' || trig.type === 'process') ? trig.type : 'manual';
-  document.querySelector(`input[name="profile-trigger-kind"][value="${kind}"]`).checked = true;
-  document.getElementById('profile-trigger-time-fields').hidden = kind !== 'time';
-  document.getElementById('profile-trigger-process-fields').hidden = kind !== 'process';
-  document.getElementById('profile-trigger-time').value = (trig && trig.time) || '18:00';
-  document.getElementById('profile-trigger-exe').value = (trig && trig.exe) || '';
-  document.getElementById('profile-trigger-event').value = (trig && trig.event) || 'launched';
-  _renderProfileDayChecks(trig && trig.days);
-  document.getElementById('profiles-output').textContent = '';
-  document.getElementById('ptab-profiles').scrollTop = 0;
-}
-
-async function _profileDelete(id, p) {
-  if (!confirm(`Delete profile "${p.label || id}"?`)) return;
-  try {
-    await vfetch(`/cmd/profiles/${encodeURIComponent(id)}/delete`, { method: 'POST' });
-    if (_profileEditingId === id) _profileResetForm();
-    loadProfiles();
-  } catch (e) {
-    document.getElementById('profiles-output').innerHTML = paneErr(e.message, 'Delete failed.');
-  }
-}
-
-document.getElementById('profile-form-cancel')?.addEventListener('click', () => _profileResetForm());
-
-document.querySelectorAll('input[name="profile-trigger-kind"]').forEach(radio => {
-  radio.addEventListener('change', () => {
-    const kind = document.querySelector('input[name="profile-trigger-kind"]:checked').value;
-    document.getElementById('profile-trigger-time-fields').hidden = kind !== 'time';
-    document.getElementById('profile-trigger-process-fields').hidden = kind !== 'process';
-  });
-});
-
-document.getElementById('profile-label')?.addEventListener('input', () => {
-  if (_profileEditingId) return;  // id is fixed once editing an existing profile
-  const idField = document.getElementById('profile-id');
-  if (idField.dataset.userEdited === 'true') return;
-  idField.value = _profileSlug(document.getElementById('profile-label').value);
-});
-document.getElementById('profile-id')?.addEventListener('input', e => { e.target.dataset.userEdited = 'true'; });
-
-document.getElementById('profile-form')?.addEventListener('submit', async e => {
-  e.preventDefault();
-  const out = document.getElementById('profiles-output');
-  out.textContent = '';
-  const label = document.getElementById('profile-label').value.trim();
-  const id = document.getElementById('profile-id').value.trim() || _profileSlug(label);
-  const apps = Array.from(document.querySelectorAll('#profile-apps-checks input:checked')).map(i => i.value);
-  if (!label || !id) { out.innerHTML = paneErr(null, 'Label required.'); return; }
-  if (!apps.length) { out.innerHTML = paneErr(null, 'Pick at least one app.'); return; }
-  const kind = document.querySelector('input[name="profile-trigger-kind"]:checked').value;
-  let trigger = null;
-  if (kind === 'time') {
-    const time = document.getElementById('profile-trigger-time').value || '18:00';
-    const days = Array.from(document.querySelectorAll('#profile-trigger-days input:checked')).map(i => i.value);
-    trigger = { type: 'time', time, days: days.length ? days : PROFILE_DAYS };
-  } else if (kind === 'process') {
-    const exe = _normExe(document.getElementById('profile-trigger-exe').value);
-    if (!exe) { out.innerHTML = paneErr(null, 'Enter an app exe (e.g. code.exe).'); return; }
-    const event = document.getElementById('profile-trigger-event').value || 'launched';
-    trigger = { type: 'process', exe, event };
-  }
-  try {
-    let r;
-    if (_profileEditingId) {
-      r = await vfetch(`/cmd/profiles/${encodeURIComponent(_profileEditingId)}/update`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, apps, trigger }),
-      });
-    } else {
-      r = await vfetch('/cmd/profiles', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, label, apps, trigger }),
-      });
-    }
-    const d = await r.json();
-    if (errText(d)) { out.innerHTML = paneErr(errText(d), 'Save failed.'); return; }
-    _profileResetForm();
-    loadProfiles();
-  } catch (e2) {
-    out.innerHTML = paneErr(e2.message, 'Save failed.');
-  }
-});
 
 // ── Workspace panel (drafts/active/ + scratch/) ─────────────────────────────
 // Read-only viewer. Writes happen via the write_draft/write_scratch tools

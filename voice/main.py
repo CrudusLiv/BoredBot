@@ -96,8 +96,7 @@ def _run_smoke_test() -> None:
         "voice.config", "voice.migrate", "voice.brain", "voice.llm",
         "voice.stt", "voice.tts", "voice.wakeword", "voice.audio",
         "voice.audit", "voice.heartbeat", "voice.safety", "voice.memory",
-        "voice.tray", "voice.ui_server",
-        "voice.app_scanner", "voice.approved_apps", "voice.tools",
+        "voice.tray", "voice.ui_server", "voice.tools",
         "voice.confirm", "voice.killswitch", "voice.silence", "voice.usage",
         "voice.clap_detector",
     ]

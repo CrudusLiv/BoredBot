@@ -18,13 +18,6 @@ Endpoints:
   GET  /cmd/capabilities → {vault, scripts} availability flags for the UI
   GET  /cmd/llm/status  → active LLM backend/model/availability JSON
   GET  /cmd/llm/detect  → force LLM backend re-detection JSON
-  GET  /cmd/apps/scan   → installed apps (Start Menu + registry) JSON
-  POST /cmd/apps/approve → approve an app for voice launch JSON
-  POST /cmd/apps/revoke  → revoke an approved app JSON
-  GET  /cmd/profiles    → profiles.load() JSON
-  POST /cmd/profiles    → profiles.create(...) JSON
-  POST /cmd/profiles/{id}/update → profiles.update(...) JSON
-  POST /cmd/profiles/{id}/delete → profiles.delete(...) JSON
   GET  /cmd/calendar    → upcoming events JSON
   GET  /cmd/tasks       → DEADLINES.md checklist JSON
   GET  /cmd/weather     → wttr.in current conditions JSON
@@ -230,55 +223,6 @@ async def llm_detect() -> JSONResponse:
     return JSONResponse({"detected": backend})
 
 
-# ── App launcher ─────────────────────────────────────────────────────────────
-
-@app.get("/cmd/apps/scan")
-async def apps_scan() -> JSONResponse:
-    def _run():
-        from voice.app_scanner import scan_all
-        return [
-            {"name": e.name, "path": e.path, "source": e.source,
-             "approved": e.approved, "voice_alias": e.voice_alias}
-            for e in scan_all()
-        ]
-    loop = asyncio.get_event_loop()
-    try:
-        apps = await loop.run_in_executor(None, _run)
-        return JSONResponse({"apps": apps})
-    except Exception as exc:
-        return JSONResponse({"error": str(exc), "apps": []}, status_code=500)
-
-
-class _AppApprove(BaseModel):
-    path: str
-    alias: str
-
-
-@app.post("/cmd/apps/approve", dependencies=[Depends(_require_token)])
-async def apps_approve(body: _AppApprove) -> JSONResponse:
-    from voice import approved_apps
-    alias = body.alias.strip()
-    if not alias:
-        return JSONResponse({"error": "alias required"}, status_code=400)
-    approved_apps.approve(body.path, alias)
-    return JSONResponse({"ok": True, "alias": alias, "path": body.path})
-
-
-class _AppRevoke(BaseModel):
-    path: str = ""
-    alias: str = ""
-
-
-@app.post("/cmd/apps/revoke", dependencies=[Depends(_require_token)])
-async def apps_revoke(body: _AppRevoke) -> JSONResponse:
-    from voice import approved_apps
-    target = body.alias.strip() or body.path.strip()
-    if not target:
-        return JSONResponse({"error": "alias or path required"}, status_code=400)
-    removed = approved_apps.revoke(target)
-    return JSONResponse({"ok": removed})
-
-
 # ── Job alerts (Jobs panel) ──────────────────────────────────────────────────────
 
 @app.get("/cmd/jobs/list")
@@ -318,65 +262,6 @@ async def jobs_draft(body: _JobDraft) -> JSONResponse:
     if not result.get("ok"):
         return JSONResponse(result, status_code=400)
     return JSONResponse(result)
-
-
-# ── App-launch profiles ──────────────────────────────────────────────────────
-# UI-only CRUD (no voice-callable create/edit/delete — matches how app
-# approval itself has no voice path). GET is open; state-changing POSTs are
-# token-gated, per this file's convention. See voice/profiles.py (Task 6a)
-# for the storage/activation primitives this just exposes over HTTP.
-
-@app.get("/cmd/profiles")
-async def profiles_list() -> JSONResponse:
-    from voice import profiles
-    return JSONResponse({"profiles": profiles.load()})
-
-
-class _ProfileCreate(BaseModel):
-    id: str
-    label: str
-    apps: list[str]
-    trigger: dict | None = None
-
-
-@app.post("/cmd/profiles", dependencies=[Depends(_require_token)])
-async def profiles_create(body: _ProfileCreate) -> JSONResponse:
-    from voice import profiles
-    profile_id = body.id.strip()
-    if not profile_id:
-        return JSONResponse({"error": "id required"}, status_code=400)
-    try:
-        profiles.create(profile_id, body.label, body.apps, body.trigger)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    return JSONResponse({"ok": True, "id": profile_id})
-
-
-class _ProfileUpdate(BaseModel):
-    label: str | None = None
-    apps: list[str] | None = None
-    trigger: dict | None = None
-
-
-@app.post("/cmd/profiles/{profile_id}/update", dependencies=[Depends(_require_token)])
-async def profiles_update(profile_id: str, body: _ProfileUpdate) -> JSONResponse:
-    from voice import profiles
-    # exclude_unset (not exclude_none) so a caller can still explicitly clear
-    # `trigger` back to null (switching a profile to manual-only) — only
-    # fields actually present in the request body are applied.
-    fields = body.model_dump(exclude_unset=True)
-    try:
-        profiles.update(profile_id, **fields)
-    except KeyError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-    return JSONResponse({"ok": True})
-
-
-@app.post("/cmd/profiles/{profile_id}/delete", dependencies=[Depends(_require_token)])
-async def profiles_delete(profile_id: str) -> JSONResponse:
-    from voice import profiles
-    removed = profiles.delete(profile_id)
-    return JSONResponse({"ok": removed})
 
 
 # ── Calendar ─────────────────────────────────────────────────────────────────
