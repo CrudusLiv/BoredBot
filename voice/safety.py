@@ -3,7 +3,9 @@
 Tools listed in config.json `requires_confirmation` must be approved before
 brain.py dispatches them. Approval is routed, in order:
   1. kill switch paused        -> auto-deny
-  2. orb UI has clients        -> in-orb approve/deny card (voice/confirm.py)
+  2. HTTP bridge to ui_server  -> in-orb approve/deny card (voice/confirm.py),
+                                   reachable whether this call runs in-process
+                                   or from a separate subprocess
   3. frozen .exe               -> tkinter dialog
   4. console                   -> [y/N] prompt
 Every path times out to DENY after `confirm_timeout_seconds` so a
