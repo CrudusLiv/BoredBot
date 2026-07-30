@@ -85,7 +85,10 @@ def _http_confirm(tool_name: str, args: dict, timeout_s: float) -> tuple[bool, s
     try:
         with urllib.request.urlopen(req, timeout=timeout_s + 2) as resp:
             data = _json.loads(resp.read())
-        return bool(data["approved"]), str(data["reason"])
+        approved = bool(data["approved"])
+        if approved:
+            return True, "user"
+        return False, ("timeout" if data["reason"] == "timeout" else "cancelled")
     except Exception:
         return None
 

@@ -44,9 +44,32 @@ def test_http_bridge_success_returns_server_decision(monkeypatch):
         def read(self):
             return json.dumps({"approved": True, "reason": "user"}).encode()
 
+    monkeypatch.setenv("VESPER_UI_TOKEN", "test-token")
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _FakeResp())
     approved, reason = safety.confirm_with_reason("create_note", {"path": "x.md"})
     assert (approved, reason) == (True, "user")
+
+
+def test_http_bridge_explicit_deny_normalizes_reason_to_cancelled(monkeypatch):
+    """The orb UI reports raw reason='user' for both approve and explicit
+    deny votes (voice/confirm.py's resolve() always sets pending.reason =
+    'user'). confirm_with_reason's contract says 'user' only ever
+    accompanies approved=True, so an explicit deny must be translated to
+    'cancelled', never passed through verbatim."""
+    class _FakeResp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return json.dumps({"approved": False, "reason": "user"}).encode()
+
+    monkeypatch.setenv("VESPER_UI_TOKEN", "test-token")
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _FakeResp())
+    approved, reason = safety.confirm_with_reason("create_note", {"path": "x.md"})
+    assert (approved, reason) == (False, "cancelled")
 
 
 def test_http_bridge_unreachable_falls_back_to_console(monkeypatch):
