@@ -154,6 +154,30 @@ def test_strict_mcp_config_flag_present(monkeypatch):
     assert "--strict-mcp-config" in captured_cmd["cmd"]
 
 
+def test_prompt_sent_via_stdin_not_argv(monkeypatch):
+    """A prompt positional argv element overflows Windows' ~32K
+    CreateProcess command-line limit once conversation history grows (see
+    _call_claude_cli's existing input=prompt stdin pattern -- stream_mcp
+    must match it instead of putting the prompt on the command line)."""
+    huge_prompt = "x" * 50_000
+    captured = {}
+
+    def _capture_popen(cmd, **kwargs):
+        proc = _fake_popen(_NO_TOOL_CALL_LINES)
+        proc.stdin = MagicMock()
+        captured["cmd"] = cmd
+        captured["proc"] = proc
+        return proc
+
+    monkeypatch.setattr("subprocess.Popen", _capture_popen)
+    list(llm.stream_mcp(huge_prompt, model="haiku"))
+
+    assert huge_prompt not in captured["cmd"]
+    assert "-p" in captured["cmd"]
+    captured["proc"].stdin.write.assert_called_once_with(huge_prompt)
+    captured["proc"].stdin.close.assert_called_once()
+
+
 def test_timeout_expired_kills_process(monkeypatch):
     """If proc.wait(timeout=...) is reached and the process is still late
     (TimeoutExpired), the process must be killed rather than leaking the

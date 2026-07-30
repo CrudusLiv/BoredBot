@@ -15,7 +15,7 @@ import os
 import subprocess
 import urllib.request
 from pathlib import Path
-from threading import Lock, Timer
+from threading import Lock, Thread, Timer
 from typing import Any, Iterator
 
 
@@ -416,7 +416,7 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
     conf = _llm_config()
     effective_model = model or conf.get("claude_cli_model", "sonnet")
     cmd = [
-        "claude", "-p", prompt,
+        "claude", "-p",
         "--setting-sources", "user",
         "--disable-slash-commands",
         "--mcp-config", _mcp_config_json(),
@@ -435,9 +435,25 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
     env.setdefault("MCP_TIMEOUT", "60000")  # ms; headroom over confirm_timeout_seconds
 
     proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", env=env,
     )
+    # The prompt goes over stdin, not argv (matching _call_claude_cli's
+    # input=prompt above) -- Windows' CreateProcess caps the total command
+    # line at ~32K chars, and conversation history (accumulated across up
+    # to max_history_turns turns) plus the system prompt can exceed that on
+    # argv alone. Written from a background thread, not inline, so a
+    # prompt bigger than the OS pipe buffer can't deadlock against the
+    # stdout read loop below.
+    def _feed_stdin() -> None:
+        try:
+            proc.stdin.write(prompt)
+        finally:
+            proc.stdin.close()
+
+    stdin_thread = Thread(target=_feed_stdin, daemon=True)
+    stdin_thread.start()
+
     # Watchdog: proc.wait(timeout=...) in the finally block below only runs
     # AFTER the stdout read loop exits, which itself only happens on EOF --
     # so a subprocess that hangs with stdout still open would otherwise
@@ -501,6 +517,7 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
                               cost_usd=event.get("total_cost_usd"))
     finally:
         watchdog.cancel()
+        stdin_thread.join(timeout=timeout)
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
