@@ -31,11 +31,14 @@ Endpoints:
   GET  /cmd/drafts/content → read_note("drafts/active/" + name) JSON
   GET  /cmd/scratch     → list files under scratch/<dir> JSON
   GET  /cmd/scratch/content → read_note("scratch/" + path) JSON
+  POST /internal/confirm    → cross-process confirm.request() JSON (for MCP-server subprocess)
+  POST /internal/tool-event → cross-process post_event() relay JSON (for MCP-server subprocess)
   WS   /ws              → live brain events
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import secrets
 import threading
 from contextlib import asynccontextmanager
@@ -53,6 +56,7 @@ from pydantic import BaseModel
 # (`?t=` query param). Gates all state-changing endpoints so that no local
 # process or webpage can POST here without having first loaded the orb page.
 TOKEN = secrets.token_urlsafe(32)
+os.environ["VESPER_UI_TOKEN"] = TOKEN
 
 
 async def _require_token(x_vesper_token: str | None = Header(None, alias="X-Vesper-Token")) -> None:
@@ -512,6 +516,29 @@ async def confirm_vote(body: _ConfirmVote) -> JSONResponse:
     if not _confirm.resolve(body.id, body.approve):
         raise HTTPException(404, "confirmation expired or unknown")
     return JSONResponse({"ok": True})
+
+
+class _InternalConfirm(BaseModel):
+    tool: str
+    args: dict
+    timeout_s: float = 30.0
+
+
+@app.post("/internal/confirm", dependencies=[Depends(_require_token)])
+def internal_confirm(body: _InternalConfirm) -> dict:
+    from voice import confirm as _confirm
+    approved, reason = _confirm.request(body.tool, body.args, body.timeout_s)
+    return {"approved": approved, "reason": reason}
+
+
+class _InternalEvent(BaseModel):
+    event: dict
+
+
+@app.post("/internal/tool-event", dependencies=[Depends(_require_token)])
+def internal_tool_event(body: _InternalEvent) -> dict:
+    post_event(body.event)
+    return {"ok": True}
 
 
 class _KillswitchSet(BaseModel):
