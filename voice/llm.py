@@ -16,7 +16,7 @@ import subprocess
 import urllib.request
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Iterator
 
 
 # ---- Config helpers -----------------------------------------------------------
@@ -361,6 +361,142 @@ def _stream_anthropic(prompt: str, system_prompt: str | None,
         msg = s.get_final_message()
         _record_usage("anthropic", model,
                       msg.usage.input_tokens, msg.usage.output_tokens)
+
+
+def _mcp_config_json() -> str:
+    import sys
+    server_path = Path(__file__).parent / "mcp_server.py"
+    return json.dumps({
+        "mcpServers": {
+            "vesper": {"type": "stdio", "command": sys.executable, "args": [str(server_path)]},
+        },
+    })
+
+
+def _parse_tool_result_content(content: Any) -> Any:
+    """Normalize a tool_result content block's `content` field into a
+    plain value. Observed live: a JSON-encoded string wrapping
+    {"result": <value>} (FastMCP's auto-wrap for tools that return a bare
+    str -- every voice/mcp_server.py tool does). Also tolerates the
+    standard Anthropic content-block-list shape (seen from non-MCP tools
+    in the same stream, e.g. the CLI's internal ToolSearch), and passes
+    anything else through unchanged."""
+    if isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            return content
+        if isinstance(parsed, dict) and "result" in parsed:
+            return parsed["result"]
+        return parsed
+    if isinstance(content, list):
+        texts = [b.get("text") for b in content
+                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text")]
+        if texts:
+            return "".join(texts)
+        return content
+    return content
+
+
+def stream_mcp(prompt: str, *, system_prompt: str | None = None,
+               model: str = "", timeout: int = 90) -> Iterator[dict]:
+    """Run one claude -p turn with native MCP tool calling, yielding parsed
+    events: {"kind": "text", "text": str}, {"kind": "tool_call", "name":
+    str, "input": dict}, {"kind": "tool_result", "name": str, "output":
+    Any}, and exactly one final {"kind": "result", "text": str, "usage":
+    dict, "cost_usd": float | None}.
+
+    Only tool_use/tool_result pairs for MCP tools (name prefixed
+    "mcp__", e.g. "mcp__vesper__search_vault_tool") are surfaced as
+    tool_call/tool_result events. This CLI's own deferred-tool-lookup
+    machinery (the "ToolSearch" meta-tool, triggered when a global
+    settings source is loaded) produces its own tool_use/tool_result
+    pair around every not-yet-loaded MCP tool call; that plumbing is
+    silently filtered out here rather than surfaced to callers."""
+    conf = _llm_config()
+    effective_model = model or conf.get("claude_cli_model", "sonnet")
+    cmd = [
+        "claude", "-p", prompt,
+        "--setting-sources", "user",
+        "--disable-slash-commands",
+        "--mcp-config", _mcp_config_json(),
+        "--allowedTools", "mcp__vesper__*",
+        "--model", effective_model,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+    ]
+    if system_prompt:
+        cmd += ["--system-prompt", system_prompt]
+
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)
+    env.setdefault("MCP_TIMEOUT", "60000")  # ms; headroom over confirm_timeout_seconds
+
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", env=env,
+    )
+    result_seen = False
+    pending_tool_names: dict[str, str] = {}
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            etype = event.get("type")
+            if etype == "stream_event":
+                inner = event.get("event", {})
+                if inner.get("type") == "content_block_delta":
+                    delta = inner.get("delta", {})
+                    if delta.get("type") == "text_delta" and delta.get("text"):
+                        yield {"kind": "text", "text": delta["text"]}
+            elif etype == "assistant":
+                for block in event.get("message", {}).get("content", []):
+                    if block.get("type") != "tool_use":
+                        continue
+                    name = block.get("name", "")
+                    if not name.startswith("mcp__"):
+                        continue  # CLI plumbing (e.g. ToolSearch), not a Vesper tool call
+                    tool_use_id = block.get("id")
+                    if tool_use_id:
+                        pending_tool_names[tool_use_id] = name
+                    yield {"kind": "tool_call", "name": name,
+                           "input": block.get("input", {})}
+            elif etype == "user":
+                for block in event.get("message", {}).get("content", []):
+                    if block.get("type") != "tool_result":
+                        continue
+                    tool_use_id = block.get("tool_use_id", "")
+                    name = pending_tool_names.pop(tool_use_id, None)
+                    if name is None:
+                        continue  # not one of our mcp__ tool calls
+                    yield {"kind": "tool_result", "name": name,
+                           "output": _parse_tool_result_content(block.get("content"))}
+            elif etype == "result":
+                result_seen = True
+                yield {
+                    "kind": "result",
+                    "text": event.get("result") or "",
+                    "usage": event.get("usage") or {},
+                    "cost_usd": event.get("total_cost_usd"),
+                }
+                _record_usage("claude_cli", effective_model,
+                              (event.get("usage") or {}).get("input_tokens", 0),
+                              (event.get("usage") or {}).get("output_tokens", 0),
+                              cost_usd=event.get("total_cost_usd"))
+    finally:
+        proc.wait(timeout=timeout)
+        stderr = proc.stderr.read() if proc.stderr else ""
+        if proc.returncode != 0:
+            print(f"[llm.stream_mcp] exit {proc.returncode}: {stderr[:500]}", flush=True)
+        if not result_seen:
+            print("[llm.stream_mcp] stream ended with no result event", flush=True)
 
 
 def get_status() -> dict[str, Any]:
