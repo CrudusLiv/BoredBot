@@ -43,23 +43,49 @@ def confirm_with_reason(tool_name: str, args: dict) -> tuple[bool, str]:
     if len(args_str) > 80:
         args_str = args_str[:77] + "..."
 
-    # Orb UI path — only when at least one client is connected to hear it
-    try:
-        from voice import ui_server
-        ui_connected = ui_server.has_clients()
-    except Exception:
-        ui_connected = False
-    if ui_connected:
-        from voice import confirm as _confirm
-        approved, reason = _confirm.request(tool_name, args, timeout_s)
-        if approved:
-            return True, "user"
-        return False, ("timeout" if reason == "timeout" else "cancelled")
+    # HTTP bridge to the running UI server — works whether this call happens
+    # in-process (brain.py, historically) or from a separate subprocess
+    # (voice/mcp_server.py, spawned fresh per turn by claude -p). Falls
+    # through to the tkinter/console paths on any failure: server not
+    # running (ui_enabled=False), wrong/missing token, or no client
+    # connected to hear the confirm card (server-side has_clients() check).
+    result = _http_confirm(tool_name, args, timeout_s)
+    if result is not None:
+        return result
 
     if getattr(sys, "frozen", False):
         return _tkinter_confirm(tool_name, args_str, timeout_s)
 
     return _console_confirm(tool_name, args_str, timeout_s)
+
+
+def _http_confirm(tool_name: str, args: dict, timeout_s: float) -> tuple[bool, str] | None:
+    """Try the internal HTTP bridge; return None (not True/False) to signal
+    "couldn't reach it, fall back" as distinct from an actual denial."""
+    import json as _json
+    import os
+    import urllib.request
+    from voice import config as cfg
+
+    port = cfg.load().get("ui_port", 7070)
+    token = os.environ.get("VESPER_UI_TOKEN", "")
+    if not token:
+        return None
+    payload = _json.dumps({
+        "tool": tool_name, "args": args, "timeout_s": timeout_s,
+    }).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/internal/confirm",
+        data=payload,
+        headers={"Content-Type": "application/json", "X-Vesper-Token": token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s + 2) as resp:
+            data = _json.loads(resp.read())
+        return bool(data["approved"]), str(data["reason"])
+    except Exception:
+        return None
 
 
 def _tkinter_confirm(tool_name: str, args_str: str, timeout_s: float) -> tuple[bool, str]:
