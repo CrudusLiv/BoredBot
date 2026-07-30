@@ -36,6 +36,7 @@ core = [
     "python-multipart==0.0.30",  # FastAPI UploadFile/Form endpoints (ui_server upload_file)
     # AI
     "anthropic==0.100.0",
+    "mcp==1.28.0",
     # STT
     "faster-whisper==1.2.1",
     "vosk==0.3.45",
