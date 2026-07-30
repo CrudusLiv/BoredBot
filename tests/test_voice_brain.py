@@ -70,3 +70,36 @@ def test_turn_handles_empty_response(brain, monkeypatch):
     chunks = list(brain.turn("hi"))
     assert chunks == ["[couldn't get a response — try again]"]
     assert brain.history == before  # user turn popped back off
+
+
+def test_turn_flushes_trailing_unterminated_fragment(brain, monkeypatch):
+    # "First sentence is complete." is >= stream_min_sentence_chars (24), so
+    # it gets emitted as its own sentence during the loop (emitted becomes
+    # non-empty) before the trailing fragment (no terminal punctuation)
+    # is ever seen.
+    def fake_stream_mcp(prompt, **kw):
+        yield {"kind": "text", "text": "First sentence is complete. "}
+        yield {"kind": "text", "text": "Second incomplete"}
+        yield {"kind": "result", "text": "First sentence is complete. Second incomplete",
+               "usage": {}, "cost_usd": None}
+    monkeypatch.setattr("voice.llm.stream_mcp", fake_stream_mcp)
+
+    chunks = list(brain.turn("hi"))
+    joined = " ".join(chunks)
+
+    assert "First sentence is complete." in joined
+    assert "Second incomplete" in joined
+
+
+def test_turn_mid_stream_exception_keeps_partial_reply(brain, monkeypatch):
+    def fake_stream_mcp(prompt, **kw):
+        yield {"kind": "text", "text": "Partial answer here"}
+        raise RuntimeError("stream broke")
+    monkeypatch.setattr("voice.llm.stream_mcp", fake_stream_mcp)
+
+    chunks = list(brain.turn("hi"))
+    joined = " ".join(chunks)
+
+    assert "Partial answer here" in joined
+    assert "[couldn't get a response — try again]" not in chunks
+    assert brain.history[-1] == {"role": "assistant", "content": "Partial answer here"}

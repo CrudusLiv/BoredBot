@@ -193,17 +193,25 @@ class Brain:
         except Exception as exc:
             print(f"[brain] stream_mcp failed ({exc})", flush=True)
 
-        if buf.strip() and (final_text is None or not emitted):
-            # Trailing partial sentence never flushed by the loop above.
+        if buf.strip():
+            # Trailing partial sentence never flushed by the loop above —
+            # always flush it, regardless of whether earlier sentences were
+            # already emitted or a `result` event ever arrived.
             rest = buf.strip()
             emitted.append(rest)
             yield rest
 
         if final_text is None:
-            yield "[couldn't get a response — try again]"
-            if self.history:
-                self.history.pop()
-            return
+            if emitted:
+                # Partial reply already spoken (stream ended early, e.g. via
+                # exception, before a `result` event arrived) — keep what
+                # arrived rather than re-answering and speaking twice.
+                final_text = " ".join(emitted).strip()
+            else:
+                yield "[couldn't get a response — try again]"
+                if self.history:
+                    self.history.pop()
+                return
 
         self.history.append({"role": "assistant", "content": final_text})
         audit.log("assistant", final_text)
