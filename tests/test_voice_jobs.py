@@ -417,10 +417,9 @@ def test_check_job_alerts_survives_scan_error(tmp_path, monkeypatch):
 
 
 def test_check_job_alerts_registered_in_scheduled():
-    hb = _hb()
-    import inspect
-    src = inspect.getsource(hb._run_scheduled)
-    assert "_check_job_alerts" in src
+    from voice.heartbeat import Heartbeat
+    method_names = [method_name for _name, method_name, _min, _key in Heartbeat._SCHEDULE]
+    assert "_check_job_alerts" in method_names
 
 
 # ---- draft_application --------------------------------------------------------

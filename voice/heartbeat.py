@@ -1,10 +1,18 @@
 """Background heartbeat — posts notices and queues proactive spoken text.
 
 The loop wakes every context_poll_seconds (default 60 s) for the cheap
-idle-return check; the expensive checks below still run on the original
-heartbeat_interval_minutes cadence via a tick counter.
+idle-return check. Two independent things ride that same fast poll:
 
-Per slow tick (every heartbeat_interval_minutes, default 30):
+  - _tick() (calendar/email/deadline notices, dedup'd) stays on the
+    original heartbeat_interval_minutes cadence (default 30) via a tick
+    counter.
+  - _run_scheduled()'s tasks each run on their own interval — see
+    Heartbeat._SCHEDULE. Most default to 30 minutes (unchanged from
+    before this became per-task); gcal_sync and github_digest default to
+    5 minutes, overridable via gcal_sync_interval_minutes /
+    github_digest_interval_minutes.
+
+Per slow tick (_tick(), every heartbeat_interval_minutes, default 30):
   1. Upcoming calendar events (today via gcal_int)
   2. Unread email count (gmail_int)
   3. Upcoming deadlines (DEADLINES.md in the configured vault, if any)
@@ -25,6 +33,7 @@ import json
 import queue as _queue_mod
 import re
 import threading
+import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -240,6 +249,23 @@ class Heartbeat:
     """Background daemon thread. Calls _tick() each interval and schedules
     proactive spoken briefings when speak_queue is provided."""
 
+    # Per-task cadence for _run_scheduled(): (name, method_name,
+    # default_interval_minutes, config_key). config_key, if set, overrides
+    # the default via voice/config.py. Tasks without a config_key keep
+    # today's 30-minute behavior unconditionally.
+    _SCHEDULE: list[tuple[str, str, int, str | None]] = [
+        ("job_alerts", "_check_job_alerts", 30, None),
+        ("morning_briefing", "_morning_briefing", 30, None),
+        ("evening_wrap", "_evening_wrap", 30, None),
+        ("nudges", "_check_nudges", 30, None),
+        ("gcal_sync", "_check_calendar_sync", 5, "gcal_sync_interval_minutes"),
+        ("github_digest", "_check_github_digest", 5, "github_digest_interval_minutes"),
+        ("deadline_import", "_check_deadline_import", 30, None),
+        ("deadline_thresholds", "_check_deadline_thresholds", 30, None),
+        ("git_todo_summary", "_check_git_todo_summary", 30, None),
+        ("build_watch", "_check_build_watch", 30, None),
+    ]
+
     def __init__(
         self,
         interval_minutes: int = 30,
@@ -253,6 +279,7 @@ class Heartbeat:
         self._context_poll_seconds = max(1, int(context_poll_seconds))
         self._idle_fn = idle_fn if idle_fn is not None else _idle.get_idle_seconds
         self._ticks_since_full = 0
+        self._last_run: dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._speak_queue = speak_queue
@@ -382,7 +409,10 @@ class Heartbeat:
         if self._ticks_since_full * self._context_poll_seconds >= self._interval:
             self._ticks_since_full = 0
             _tick()
-            self._run_scheduled()
+        # _run_scheduled() is called every fast poll -- each task in
+        # _SCHEDULE self-gates on its own interval, so this is cheap when
+        # nothing is due yet (see _run_scheduled's docstring).
+        self._run_scheduled()
 
     def _check_idle_return(self) -> None:
         """Away/return state machine, run every fast poll.
@@ -696,17 +726,28 @@ class Heartbeat:
             _post(("Deadlines from calendar: " + "; ".join(added))[:160])
 
     def _run_scheduled(self) -> None:
-        for task in (self._check_job_alerts,
-                     self._morning_briefing, self._evening_wrap,
-                     self._check_nudges,
-                     self._check_calendar_sync, self._check_github_digest,
-                     self._check_deadline_import,
-                     self._check_deadline_thresholds,
-                     self._check_git_todo_summary, self._check_build_watch):
+        """Run each _SCHEDULE task independently once its own interval has
+        elapsed (config-overridable for gcal_sync/github_digest, else a
+        fixed default -- see _SCHEDULE). Called every fast poll; tasks not
+        yet due are skipped cheaply. time.monotonic() keeps interval
+        tracking immune to wall-clock jumps (sleep/resume, DST)."""
+        from voice import config as cfg
+        conf = cfg.load()
+        now = time.monotonic()
+        for name, method_name, default_min, cfg_key in self._SCHEDULE:
+            interval_min = conf.get(cfg_key, default_min) if cfg_key else default_min
+            interval_s = interval_min * 60
+            last = self._last_run.get(name)
+            if last is not None and now - last < interval_s:
+                continue
+            # Set before calling, not after a successful return -- a
+            # persistently-failing task must wait out its normal interval
+            # rather than being retried every poll.
+            self._last_run[name] = now
             try:
-                task()
+                getattr(self, method_name)()
             except Exception as _e:
-                print(f"[heartbeat] {task.__name__} error: {_e}", flush=True)
+                print(f"[heartbeat] {method_name} error: {_e}", flush=True)
 
     def _morning_briefing(self) -> None:
         from voice import config as cfg
