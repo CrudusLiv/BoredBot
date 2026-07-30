@@ -3,6 +3,9 @@ stream-json fixtures through the parser without spawning a real subprocess."""
 from __future__ import annotations
 
 import json
+import subprocess
+import threading
+import time
 from unittest.mock import MagicMock
 
 from voice import llm
@@ -131,3 +134,81 @@ def test_tool_call_and_result_events(monkeypatch):
     assert kinds.index("tool_call") < kinds.index("tool_result")
     assert kinds[-1] == "result"
     assert kinds.count("result") == 1
+
+
+def test_strict_mcp_config_flag_present(monkeypatch):
+    """Without --strict-mcp-config, `claude -p` also tries to connect every
+    other globally-configured MCP server (context7, playwright, github, ...)
+    alongside vesper, and a fast model turn can race ahead of vesper's own
+    stdio handshake finishing -- silently starving the model of Vesper's
+    tools with no error surfaced anywhere. --strict-mcp-config restricts
+    connection attempts to just the server passed via --mcp-config."""
+    captured_cmd = {}
+
+    def _capture_popen(cmd, *a, **k):
+        captured_cmd["cmd"] = cmd
+        return _fake_popen(_NO_TOOL_CALL_LINES)
+
+    monkeypatch.setattr("subprocess.Popen", _capture_popen)
+    list(llm.stream_mcp("say hello test", model="haiku"))
+    assert "--strict-mcp-config" in captured_cmd["cmd"]
+
+
+def test_timeout_expired_kills_process(monkeypatch):
+    """If proc.wait(timeout=...) is reached and the process is still late
+    (TimeoutExpired), the process must be killed rather than leaking the
+    exception / leaving the child running."""
+    proc = MagicMock()
+    proc.stdout = iter(json.dumps(line) + "\n" for line in _NO_TOOL_CALL_LINES)
+    proc.returncode = 0
+    proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="claude", timeout=90), None]
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: proc)
+
+    events = list(llm.stream_mcp("say hello test", model="haiku"))
+
+    assert any(e["kind"] == "result" for e in events)
+    proc.kill.assert_called_once()
+    assert proc.wait.call_count == 2
+
+
+def test_hanging_stdout_gets_killed_by_watchdog(monkeypatch):
+    """A subprocess whose stdout stays open (never hits EOF) would otherwise
+    block the `for line in proc.stdout` loop forever, so proc.wait(timeout=...)
+    -- which only runs AFTER that loop exits -- would never get a chance to
+    apply the timeout. A watchdog timer must kill the process independently
+    of the read loop once `timeout` elapses."""
+    never_event = threading.Event()
+
+    def _hanging_stdout():
+        yield json.dumps(_NO_TOOL_CALL_LINES[0]) + "\n"
+        never_event.wait(timeout=5)  # simulates a hang; unblocked by the test
+        yield json.dumps(_NO_TOOL_CALL_LINES[-1]) + "\n"
+
+    proc = MagicMock()
+    proc.stdout = _hanging_stdout()
+    proc.returncode = 0
+    proc.wait.return_value = 0
+    monkeypatch.setattr("subprocess.Popen", lambda *a, **k: proc)
+
+    collected = []
+
+    def _consume():
+        collected.extend(llm.stream_mcp("say hello test", model="haiku", timeout=0.05))
+
+    t = threading.Thread(target=_consume, daemon=True)
+    t.start()
+
+    # Give the watchdog time to fire (timeout=0.05s) while the generator is
+    # still parked on never_event.wait() inside the hanging stdout iterator.
+    for _ in range(50):  # up to ~1s
+        if proc.kill.called:
+            break
+        time.sleep(0.02)
+    assert proc.kill.called, "watchdog did not kill the hung process in time"
+
+    # Unblock the fake stdout so the consumer thread can finish and the
+    # generator's finally block runs cleanly.
+    never_event.set()
+    t.join(timeout=5)
+    assert not t.is_alive()
+    assert any(e["kind"] == "result" for e in collected)

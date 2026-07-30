@@ -15,7 +15,7 @@ import os
 import subprocess
 import urllib.request
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Timer
 from typing import Any, Iterator
 
 
@@ -420,6 +420,7 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
         "--setting-sources", "user",
         "--disable-slash-commands",
         "--mcp-config", _mcp_config_json(),
+        "--strict-mcp-config",
         "--allowedTools", "mcp__vesper__*",
         "--model", effective_model,
         "--output-format", "stream-json",
@@ -437,6 +438,14 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", env=env,
     )
+    # Watchdog: proc.wait(timeout=...) in the finally block below only runs
+    # AFTER the stdout read loop exits, which itself only happens on EOF --
+    # so a subprocess that hangs with stdout still open would otherwise
+    # block forever with no timeout ever applying. This timer kills the
+    # process independently of the read loop if it overruns `timeout`.
+    watchdog = Timer(timeout, proc.kill)
+    watchdog.daemon = True
+    watchdog.start()
     result_seen = False
     pending_tool_names: dict[str, str] = {}
     try:
@@ -491,7 +500,12 @@ def stream_mcp(prompt: str, *, system_prompt: str | None = None,
                               (event.get("usage") or {}).get("output_tokens", 0),
                               cost_usd=event.get("total_cost_usd"))
     finally:
-        proc.wait(timeout=timeout)
+        watchdog.cancel()
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
         stderr = proc.stderr.read() if proc.stderr else ""
         if proc.returncode != 0:
             print(f"[llm.stream_mcp] exit {proc.returncode}: {stderr[:500]}", flush=True)
