@@ -8,6 +8,11 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
   const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
   const { breathingScale, shouldBlink, nextBlinkDelay } = await import('./idle.js');
+  const { startEnvelope, mouthWeightAt } = await import('./lipsync.js');
+  let visemeState = null;
+  window.addEventListener('vesper:viseme', (e) => {
+    visemeState = startEnvelope(e.detail.envelope, e.detail.interval_ms, performance.now());
+  });
 
   const scene = new THREE.Scene();
   scene.add(new THREE.AmbientLight(0xffffff, 0.8));
@@ -66,6 +71,11 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
         const sinceBlink = elapsedMs - lastBlinkMs;
         const closeFrac = Math.max(0, 1 - sinceBlink / 150);
         vrm.expressionManager?.setValue('blink', closeFrac);
+      }
+
+      if (visemeState) {
+        const weight = mouthWeightAt(visemeState, performance.now());
+        vrm.expressionManager?.setValue('aa', weight);
       }
 
       vrm.update(clock.getDelta());
