@@ -61,6 +61,44 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       VRMUtils.combineSkeletons(gltf.scene);
       scene.add(vrm.scene);
+
+      const rimMat = new THREE.ShaderMaterial({
+        uniforms: { glowColor: { value: new THREE.Color(0x6a4fc8) } },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 viewPos = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-viewPos.xyz);
+            gl_Position = projectionMatrix * viewPos;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 glowColor;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          void main() {
+            float fresnel = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 2.5);
+            gl_FragColor = vec4(glowColor, fresnel * 0.35);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      // Collect target meshes before mutating the scene graph -- adding a
+      // rim (itself a Mesh) as a child mid-traversal makes traverse() walk
+      // into it too, adding a rim to the rim forever (stack overflow).
+      const rimTargets = [];
+      vrm.scene.traverse((obj) => {
+        if (obj.isMesh) rimTargets.push(obj);
+      });
+      for (const obj of rimTargets) {
+        const rim = new THREE.Mesh(obj.geometry, rimMat);
+        rim.scale.multiplyScalar(1.02);
+        obj.add(rim);
+      }
     },
     undefined,
     (err) => console.error('[avatar] VRM load failed:', err),
