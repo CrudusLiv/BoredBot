@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from google_auth import get_credentials  # noqa: E402
+from core import gcal_sync  # noqa: E402
 
 
 def _service():
@@ -67,8 +68,18 @@ def handle_query(argv: list[str]) -> int:
     # the documented CLI shape; argparse routes post-subcommand flags here.
     # SUPPRESS so the subparser's default doesn't clobber a pre-subcommand --json.
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p_sync = sub.add_parser("sync")
+    p_sync.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     json_out = args.json
+
+    if args.subcommand == "sync":
+        created = gcal_sync.run()
+        if json_out:
+            print(json.dumps({"created": created}))
+        else:
+            print(f"Calendar sync: created {created} new event(s).")
+        return 0
 
     rows = upcoming(args.days, args.max)
     if json_out:

@@ -269,6 +269,10 @@ def handle_query(argv: list[str]) -> int:
     p_ws = sub.add_parser("workflow-status")
     p_ws.add_argument("repo")
     p_ws.add_argument("--workflow", default="build.yml")
+    p_pe = sub.add_parser("pr-events")
+    p_pe.add_argument("--repos", default="")
+    p_pe.add_argument("--since", type=float, default=None)
+    p_pe.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     json_out = args.json
 
@@ -298,6 +302,14 @@ def handle_query(argv: list[str]) -> int:
     elif args.subcommand == "workflow-status":
         result = latest_workflow_run(args.repo, args.workflow)
         print(json.dumps(result, indent=2, default=str))
+    elif args.subcommand == "pr-events":
+        repos = [r.strip() for r in args.repos.split(",") if r.strip()] or None
+        rows = recent_pr_events(repos=repos, since=args.since)
+        if json_out:
+            print(json.dumps(rows, default=str))
+        else:
+            for r in rows:
+                print(f"{r['kind']}: {r['repo']}#{r['pr_number']} {r['pr_title']}")
     return 0
 
 

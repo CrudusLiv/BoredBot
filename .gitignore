@@ -24,7 +24,7 @@ __pycache__/
 *.pyc
 
 # PyInstaller build output
-build/
+/build/
 dist/
 *.egg-info/
 

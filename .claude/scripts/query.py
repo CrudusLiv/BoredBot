@@ -31,9 +31,12 @@ sys.path.insert(0, str(Path(__file__).parent / "integrations"))
 
 from integrations import _env  # noqa: F401, E402  -- loads .env
 from integrations import (  # noqa: E402
+    deadlines_int,
+    digest_int,
     gcal_int,
     github_int,
     gmail_int,
+    jobs_int,
     registry,
 )
 
@@ -41,6 +44,9 @@ DISPATCH = {
     "github": github_int.handle_query,
     "gcal": gcal_int.handle_query,
     "gmail": gmail_int.handle_query,
+    "deadlines": deadlines_int.handle_query,
+    "jobs": jobs_int.handle_query,
+    "digest": digest_int.handle_query,
 }
 
 
