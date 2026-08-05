@@ -616,9 +616,16 @@ async def _drain() -> None:
 
 
 def post_event(event: dict[str, Any]) -> None:
-    """Thread-safe: enqueue an event for broadcast to all WS clients."""
+    """Thread-safe: enqueue an event for broadcast to all WS clients.
+    `state` events additionally derive and enqueue an `emotion` event for
+    the avatar's face -- see voice/avatar_emotion.py."""
     if _loop and _queue:
         _loop.call_soon_threadsafe(_queue.put_nowait, event)
+        if event.get("type") == "state":
+            from voice.avatar_emotion import classify
+            derived = classify(event.get("value", ""))
+            if derived:
+                _loop.call_soon_threadsafe(_queue.put_nowait, derived)
 
 
 def _open_app_window(port: int) -> None:

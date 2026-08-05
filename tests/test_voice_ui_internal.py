@@ -63,3 +63,24 @@ def test_internal_tool_event_relays_to_post_event(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert seen == {"type": "tool", "name": "search_vault", "status": "start"}
+
+
+def test_post_event_state_also_broadcasts_emotion(monkeypatch):
+    from voice import ui_server
+    seen = []
+    monkeypatch.setattr(ui_server, "_loop", type("L", (), {"call_soon_threadsafe": staticmethod(lambda fn, arg: (fn, seen.append(arg)))})())
+    from unittest.mock import Mock
+    monkeypatch.setattr(ui_server, "_queue", Mock())
+    ui_server.post_event({"type": "state", "value": "thinking"})
+    assert seen[0] == {"type": "state", "value": "thinking"}
+    assert seen[1] == {"type": "emotion", "tag": "focused", "intensity": 0.7}
+
+
+def test_post_event_non_state_event_does_not_add_emotion(monkeypatch):
+    from voice import ui_server
+    seen = []
+    monkeypatch.setattr(ui_server, "_loop", type("L", (), {"call_soon_threadsafe": staticmethod(lambda fn, arg: (fn, seen.append(arg)))})())
+    from unittest.mock import Mock
+    monkeypatch.setattr(ui_server, "_queue", Mock())
+    ui_server.post_event({"type": "amplitude", "value": 0.1})
+    assert seen == [{"type": "amplitude", "value": 0.1}]
