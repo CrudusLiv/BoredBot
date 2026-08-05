@@ -105,7 +105,16 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 @app.get("/")
 async def index() -> HTMLResponse:
+    from pathlib import Path as _Path
+    from voice import config as cfg
+    conf = cfg.load()
+    mode = conf.get("ui_render_mode", "orb")
+    if mode not in ("orb", "avatar"):
+        mode = "orb"
+    vrm_name = _Path(conf.get("ui_avatar_vrm_path", "").strip() or "placeholder.vrm").name
     html = (_STATIC / "orb.html").read_text(encoding="utf-8")
+    html = html.replace("__VESPER_RENDER_MODE__", mode)
+    html = html.replace("__VESPER_AVATAR_VRM_URL__", f"/static/avatar/models/{vrm_name}")
     return HTMLResponse(html)
 
 

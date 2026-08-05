@@ -1025,6 +1025,8 @@ function vfetch(url, opts) {
   if (VESPER_TOKEN) headers['X-Vesper-Token'] = VESPER_TOKEN;
   return fetch(url, Object.assign({}, opts, { headers }));
 }
+const VESPER_RENDER_MODE = "__VESPER_RENDER_MODE__";
+const VESPER_AVATAR_VRM_URL = "__VESPER_AVATAR_VRM_URL__";
 
 // ── Renderer ───────────────────────────────────────────────────────────────
 const scene  = new THREE.Scene();

@@ -70,6 +70,8 @@ DEFAULTS: dict[str, Any] = {
     "ui_enabled": False,
     "ui_port": 7070,
     "city": "",                     # for weather widget; empty = disabled
+    "ui_render_mode": "orb",        # orb | avatar
+    "ui_avatar_vrm_path": "",       # filename under voice/static/avatar/models/; empty = placeholder.vrm
     # Safety
     "requires_confirmation": ["create_note", "append_note", "forget_fact"],
     "confirm_timeout_seconds": 30,
