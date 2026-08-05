@@ -1004,6 +1004,15 @@ body.paused #conn-status { display: block; }
 <!-- Drop overlay -->
 
 <script src="/static/three.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/three.module.js",
+    "@pixiv/three-vrm": "/static/avatar/three-vrm.module.min.js"
+  }
+}
+</script>
+<script type="module" src="/static/avatar/scene.js"></script>
 <script>
 // ── Session token (security gate) ───────────────────────────────────────────
 // The server hands this back as `?t=` on the initial page load (see
