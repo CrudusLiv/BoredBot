@@ -1038,7 +1038,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.domElement.id = 'vesper-canvas';
-document.body.appendChild(renderer.domElement);
+if (VESPER_RENDER_MODE === 'orb') document.body.appendChild(renderer.domElement);
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -1393,7 +1393,7 @@ let volAmp    = 0;
 // back to a slow synthetic idle pulse if mic access is denied/unavailable.
 let micAmp = 0;
 let micLive = false;
-(function initMicReactivity() {
+function initMicReactivity() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
   navigator.mediaDevices.getUserMedia({ audio: true, video: false })
     .then(stream => {
@@ -1418,7 +1418,8 @@ let micLive = false;
       })();
     })
     .catch(() => { micLive = false; }); // denied/unavailable — synthetic fallback in getMicAmp()
-})();
+}
+if (VESPER_RENDER_MODE === 'orb') initMicReactivity();
 function getMicAmp(tNow) {
   if (micLive) return micAmp;
   return REDUCED ? 0.12 : 0.16 + 0.10 * Math.sin(tNow * 0.55); // slow synthetic idle pulse
@@ -1493,7 +1494,7 @@ function setPresence(tab) {
 let t = 0;
 let lastFrame = 0;
 let lastStutter = 0;
-(function animate(nowMs) {
+function animate(nowMs) {
   requestAnimationFrame(animate);
   if (REDUCED && nowMs - lastFrame < 33) return;  // ~30 fps under reduced motion
   lastFrame = nowMs || 0;
@@ -1580,7 +1581,8 @@ let lastStutter = 0;
   }
 
   renderer.render(scene, camera);
-})(0);
+}
+if (VESPER_RENDER_MODE === 'orb') animate(0);
 
 // ── Text input bar ─────────────────────────────────────────────────────────
 (function initInput() {
