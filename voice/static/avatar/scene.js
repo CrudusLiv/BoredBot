@@ -23,6 +23,12 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
     }
   });
 
+  const { gazeAngles } = await import('./attention.js');
+  let gaze = { yaw: 0, pitch: 0 };
+  window.addEventListener('mousemove', (e) => {
+    gaze = gazeAngles(e.clientX, e.clientY, innerWidth, innerHeight);
+  });
+
   const scene = new THREE.Scene();
   scene.add(new THREE.AmbientLight(0xffffff, 0.8));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -85,6 +91,12 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
       if (visemeState) {
         const weight = mouthWeightAt(visemeState, performance.now());
         vrm.expressionManager?.setValue('aa', weight);
+      }
+
+      const head = vrm.humanoid?.getNormalizedBoneNode('head');
+      if (head) {
+        head.rotation.y = gaze.yaw;
+        head.rotation.x = gaze.pitch;
       }
 
       vrm.update(clock.getDelta());
