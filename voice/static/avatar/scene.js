@@ -14,6 +14,15 @@ if (typeof VESPER_RENDER_MODE !== 'undefined' && VESPER_RENDER_MODE === 'avatar'
     visemeState = startEnvelope(e.detail.envelope, e.detail.interval_ms, performance.now());
   });
 
+  const { weightsForEmotion } = await import('./expressions.js');
+  window.addEventListener('vesper:emotion', (e) => {
+    if (!vrm) return;
+    const weights = weightsForEmotion(e.detail.tag, e.detail.intensity);
+    for (const [name, weight] of Object.entries(weights)) {
+      vrm.expressionManager?.setValue(name, weight);
+    }
+  });
+
   const scene = new THREE.Scene();
   scene.add(new THREE.AmbientLight(0xffffff, 0.8));
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);

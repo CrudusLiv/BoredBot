@@ -1859,6 +1859,8 @@ setInterval(updateNoticeBadge, 60000);
       volTarget = Math.min((ev.value || 0) * 10, 1.0);
     } else if (ev.type === 'viseme') {
       window.dispatchEvent(new CustomEvent('vesper:viseme', { detail: ev }));
+    } else if (ev.type === 'emotion') {
+      window.dispatchEvent(new CustomEvent('vesper:emotion', { detail: ev }));
     } else if (ev.type === 'confirm') {
       showConfirmCard(ev);
     } else if (ev.type === 'confirm_resolved') {
