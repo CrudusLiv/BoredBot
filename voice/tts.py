@@ -21,9 +21,41 @@ import asyncio
 import ctypes
 import queue
 import random
+import re
 import tempfile
 import threading
 from pathlib import Path
+
+_VOWEL_RE = re.compile(r"[aeiouyAEIOUY]+")
+
+
+def _syllable_count(text: str) -> int:
+    """Rough syllable estimate: one vowel-letter group per word, floored at 1."""
+    words = text.split()
+    if not words:
+        return 1
+    return sum(max(1, len(_VOWEL_RE.findall(w))) for w in words)
+
+
+def _estimate_envelope(text: str, duration_s: float, hz: float = 25.0) -> list[float]:
+    """Synthetic mouth-open amplitude envelope (0-1), sampled at `hz`, spread
+    evenly across `duration_s` -- one triangular open/close pulse per
+    estimated syllable. No real audio decode (see plan Task 6 for why:
+    edge-tts/ElevenLabs only produce MP3 and this app has no MP3 decoder
+    dependency); "roughly in time" is the acceptance bar, not exact."""
+    if duration_s <= 0:
+        return []
+    n_samples = max(1, round(duration_s * hz))
+    syllables = _syllable_count(text)
+    pulse_period = duration_s / syllables
+    envelope = []
+    for i in range(n_samples):
+        t = i / hz
+        phase = (t % pulse_period) / pulse_period
+        amp = max(0.0, 1.0 - abs(phase - 0.5) * 2.0) ** 1.5
+        envelope.append(round(amp, 3))
+    return envelope
+
 
 _alias_lock = threading.Lock()
 _current_alias: str | None = None
@@ -94,7 +126,7 @@ class Utterance:
 
         self._on_done = on_done
         self._synth_q: "queue.Queue[str | None]" = queue.Queue()
-        self._play_q: "queue.Queue[tuple[str, str] | None]" = queue.Queue()
+        self._play_q: "queue.Queue[tuple[str, str, str] | None]" = queue.Queue()
         self._cancelled = threading.Event()
         self._done_fired = threading.Event()
         threading.Thread(target=self._synth_loop, daemon=True,
@@ -172,7 +204,7 @@ class Utterance:
                 Path(item[0]).unlink(missing_ok=True)
                 self._play_q.put(None)
                 return False
-            self._play_q.put(item)
+            self._play_q.put((*item, text))
         else:
             print(f"[TTS] dropped {len(text)} chars — synth returned no audio", flush=True)
         return True
@@ -185,12 +217,12 @@ class Utterance:
                     if item:
                         Path(item[0]).unlink(missing_ok=True)
                     return
-                path, mci_type = item
+                path, mci_type, text = item
                 with _playback_lock:
                     if self._cancelled.is_set():
                         Path(path).unlink(missing_ok=True)
                         return
-                    _utt_play(path, mci_type)
+                    _utt_play(path, mci_type, text)
         finally:
             speaking.clear()
             self._fire_done()
@@ -273,7 +305,7 @@ def _play(text: str, on_done=None) -> None:
         if on_done:
             on_done()
         return
-    _mci_play(item[0], item[1], on_done)
+    _mci_play(item[0], item[1], text, on_done)
 
 
 # ── ElevenLabs backend ───────────────────────────────────────────────────────
@@ -388,7 +420,7 @@ def _synth_kokoro(text: str, voice: str) -> tuple[str, str] | None:
 
 # ── Shared MCI playback ───────────────────────────────────────────────────────
 
-def _mci_play(tmp_path: str, file_type: str, on_done=None) -> None:
+def _mci_play(tmp_path: str, file_type: str, text: str, on_done=None) -> None:
     """Open file with MCI, play to completion, then clean up. Single-shot path
     (speak()): owns the speaking flag for its whole duration."""
     global _current_alias
@@ -398,6 +430,7 @@ def _mci_play(tmp_path: str, file_type: str, on_done=None) -> None:
             _mci(f'open "{tmp_path}" type {file_type} alias {alias}')
             with _alias_lock:
                 _current_alias = alias
+            _broadcast_viseme(alias, text)
             speaking.set()
             _mci(f"play {alias} wait")
         finally:
@@ -413,7 +446,7 @@ def _mci_play(tmp_path: str, file_type: str, on_done=None) -> None:
                 on_done()
 
 
-def _utt_play(tmp_path: str, file_type: str) -> None:
+def _utt_play(tmp_path: str, file_type: str, text: str) -> None:
     """Play one utterance segment. Sets `speaking` but does NOT clear it —
     the utterance play loop clears it once the whole utterance is done, so
     the wakeword stays muted through inter-sentence gaps."""
@@ -423,6 +456,7 @@ def _utt_play(tmp_path: str, file_type: str) -> None:
         _mci(f'open "{tmp_path}" type {file_type} alias {alias}')
         with _alias_lock:
             _current_alias = alias
+        _broadcast_viseme(alias, text)
         speaking.set()
         _mci(f"play {alias} wait")
     finally:
@@ -437,3 +471,31 @@ def _utt_play(tmp_path: str, file_type: str) -> None:
 
 def _mci(cmd: str) -> None:
     ctypes.WinDLL("winmm.dll").mciSendStringW(cmd, None, 0, None)
+
+
+def _mci_query(cmd: str) -> str:
+    buf = ctypes.create_unicode_buffer(128)
+    ctypes.WinDLL("winmm.dll").mciSendStringW(cmd, buf, 128, None)
+    return buf.value
+
+
+def _broadcast_viseme(alias: str, text: str) -> None:
+    """Query the just-opened clip's duration from MCI and broadcast a
+    synthetic envelope timed to it. Best-effort: never raises, never blocks
+    playback -- matches this module's existing fire-and-forget UI pattern."""
+    try:
+        dur_ms = int(_mci_query(f"status {alias} length"))
+    except Exception:
+        return
+    if dur_ms <= 0:
+        return
+    try:
+        from voice import ui_server
+        ui_server.post_event({
+            "type": "viseme",
+            "envelope": _estimate_envelope(text, dur_ms / 1000.0),
+            "interval_ms": 40,
+            "duration_ms": dur_ms,
+        })
+    except Exception:
+        pass
