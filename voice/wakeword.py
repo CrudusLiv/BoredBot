@@ -45,11 +45,30 @@ def _keyword_hit(text: str, keyword: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(keyword.lower())}(?!\w)", text.lower()) is not None
 
 
+class _MuteCooldown:
+    """Tracks a deaf-until deadline that slides forward every time
+    note_muted() fires and then holds fixed once muting stops, expiring
+    cooldown_s after the last mute signal. Mirrors listen_vosk()'s inline
+    deaf_until pattern so the reverb tail of Vesper's own voice can't
+    self-trigger a wake once she stops speaking."""
+
+    def __init__(self, cooldown_s: float):
+        self._cooldown_s = cooldown_s
+        self.deaf_until = 0.0
+
+    def note_muted(self, now: float) -> None:
+        self.deaf_until = now + self._cooldown_s
+
+    def is_deaf(self, now: float) -> bool:
+        return now < self.deaf_until
+
+
 def listen(
     callback: Callable[[], None],
     stop_event: threading.Event | None = None,
     model_path: str = "",
     threshold: float = 0.5,
+    cooldown_s: float = 1.5,
     ready_event: threading.Event | None = None,
     mute_event: threading.Event | None = None,
 ) -> None:
@@ -59,6 +78,8 @@ def listen(
     stop_event:  Set to exit cleanly.
     model_path:  .onnx path or openwakeword model name; falls back to 'alexa'.
     threshold:   Detection confidence 0–1.
+    cooldown_s:  Seconds to stay deaf after mute_event clears, so the tail
+                 of Vesper's own voice can't self-trigger a wake.
     ready_event: Main thread sets this after VAD recording finishes.
                  Wakeword waits on it before reopening the stream.
     mute_event:  When set, detections are skipped (e.g. while Vesper is speaking).
@@ -106,10 +127,12 @@ def listen(
         buf: list[float] = []
         fired = False
         went_silent = False
+        cooldown = _MuteCooldown(cooldown_s)
 
         def _cb(indata, frames, time_info, status):  # noqa: ARG001
             if mute_event and mute_event.is_set():
                 buf.clear()  # never feed Vesper's own voice to the model
+                cooldown.note_muted(time.monotonic())
                 return
             buf.extend(indata[:, 0].tolist())
 
@@ -127,6 +150,8 @@ def listen(
                     continue
                 chunk = np.array(buf[:CHUNK_SIZE], dtype=np.float32)
                 del buf[:CHUNK_SIZE]  # in-place so _cb closure stays valid
+                if cooldown.is_deaf(time.monotonic()):
+                    continue  # post-mute cooldown — same protection listen_vosk() has
                 pcm = (chunk * 32767).astype(np.int16)
                 score = oww.predict(pcm).get(score_key, 0.0)
                 if score >= threshold:
