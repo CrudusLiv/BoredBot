@@ -159,7 +159,7 @@ Register-Task `
     -Trigger $voiceTrigger `
     -Action $voiceAction `
     -Settings $voiceSettings `
-    -Description 'Vesper voice assistant. Starts orb UI + wakeword listener at logon. Wrapper auto-restarts on crashes.'
+    -Description 'Vesper voice assistant. Starts orb UI + push-to-talk voice mode at logon. Wrapper auto-restarts on crashes.'
 
 Write-Host ""
 Write-Host "Installed. Inspect with:"

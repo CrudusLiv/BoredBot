@@ -416,7 +416,6 @@ _SETTINGS_ALLOWED = {
     "user_name", "timezone_offset_hours", "city", "vault_path",
     "tts_engine", "tts_voice", "elevenlabs_voice_id", "elevenlabs_batch_chars",
     "stt_beam_size", "stt_vad_filter", "stt_language",
-    "wakeword_engine", "wakeword_keyword", "wakeword_model",
     "llm_backend", "llm_ollama_model", "llm_lmstudio_model",
     "llm_anthropic_model", "heartbeat_interval_minutes",
     "ui_port", "quiet_hours_start", "quiet_hours_end", "proactive_tts",

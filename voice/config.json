@@ -1,6 +1,4 @@
 {
-  "wakeword_engine": "openwakeword",
-  "wakeword_keyword": "vesper",
   "model": "sonnet",
   "tts_engine": "elevenlabs",
   "tts_voice": "en-GB-SoniaNeural",

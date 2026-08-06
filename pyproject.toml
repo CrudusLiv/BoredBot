@@ -39,8 +39,6 @@ core = [
     "mcp==1.28.0",
     # STT
     "faster-whisper==1.2.1",
-    "vosk==0.3.45",
-    "openwakeword==0.6.0",
     # TTS
     "edge-tts==7.2.8",
     # Audio

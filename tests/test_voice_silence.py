@@ -1,9 +1,8 @@
 """Tests for the global silence gate.
 
 Two independent sources — the killswitch marker and the heartbeat's busy state —
-must both make Vesper fully deaf and mute: no wake-word detection, no mic, no
-speech. Covers the gate itself, the TTS entry points, and the vosk wake-word
-matcher that was firing without the keyword.
+must both make Vesper fully deaf and mute: no mic, no speech. Covers the gate
+itself and the TTS entry points.
 """
 from __future__ import annotations
 
@@ -75,8 +74,8 @@ def test_speak_drops_while_silenced(monkeypatch):
     tts.speak("should not be heard", on_done=done.set)
 
     assert played == []
-    # on_done MUST still fire: it is what releases the wake-word thread's
-    # ready_event. Dropping it silently deadlocks the listener.
+    # on_done MUST still fire: callers depend on it to release whatever
+    # they're waiting on. Dropping it silently deadlocks the caller.
     assert done.is_set()
 
 
@@ -123,29 +122,3 @@ def test_proactive_speaker_holds_while_busy(monkeypatch):
     stop.set()
 
     assert spoken == []
-
-
-# --------------------------------------------------------------------------
-# Vosk wake-word matching — the false-wake root cause
-# --------------------------------------------------------------------------
-
-@pytest.mark.parametrize("text", [
-    "vesper",
-    "hey vesper",
-    "vesper are you there",
-])
-def test_keyword_hit_on_standalone_word(text):
-    from voice import wakeword
-    assert wakeword._keyword_hit(text, "vesper") is True
-
-
-@pytest.mark.parametrize("text", [
-    "",
-    "[unk]",
-    "whisper",          # near-miss the restricted grammar loves to emit
-    "vespers",          # substring match would wrongly fire here
-    "the vesperine hour",
-])
-def test_keyword_miss_on_non_standalone(text):
-    from voice import wakeword
-    assert wakeword._keyword_hit(text, "vesper") is False

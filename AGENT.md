@@ -36,18 +36,13 @@ Full personality spec: `Dynamous/Memory/SOUL.md`
 | Fast path | claude-haiku-4-5 for turns with no tool calls |
 | STT | Deepgram nova-2 REST via httpx |
 | TTS | edge-tts (Microsoft neural, free) + winmm.dll MCI playback |
-| Audio | sounddevice + pynput (PTT) or openwakeword (always-on) |
+| Audio | sounddevice + pynput (PTT) |
 | Memory | Obsidian vault — `Dynamous/Memory/MEMORY.md` + `daily/YYYY-MM-DD.md` |
 | Run target | Laptop (Windows 11, Python 3.14) |
 
 ## Voice Input
 
-Two modes — both available at runtime:
-
 - **Push-to-talk:** `--voice` flag, hold Space while speaking
-- **Wake word:** `--wakeword` flag, say "alexa" (or configure a custom model in `voice/config.json`)
-
-After wake word fires, recording starts automatically and stops on silence (VAD). No key press needed.
 
 ## Hard Limits (never without explicit confirmation)
 
@@ -72,7 +67,6 @@ Holds unread notices until the next session open — never fires and forgets.
 ```
 py -m voice              # text mode (default)
 py -m voice --voice      # push-to-talk voice mode
-py -m voice --wakeword   # always-on wake word mode
 ```
 
 Config: `voice/config.json` — no code change required for tuning.
@@ -80,7 +74,7 @@ Config: `voice/config.json` — no code change required for tuning.
 ## Primary UI
 
 `voice/static/orb.html` — Three.js particle orb with WebSocket state events.  
-Launch: `py -m voice --voice` (or `--wakeword`), then open `http://localhost:7070` in Edge `--app` mode.
+Launch: `py -m voice --voice`, then open `http://localhost:7070` in Edge `--app` mode.
 
 Sidebar panels: Chat, Notices, Finance, Calendar, Jobs, Workspace, Apps, Profiles, Config.
 

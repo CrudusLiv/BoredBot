@@ -1,6 +1,6 @@
 # Vesper
 
-Vesper is a local-first personal voice assistant. It listens for a wake word (or push-to-talk), transcribes speech, routes it through an LLM of your choice, and speaks back — all through a Three.js orb UI in the browser.
+Vesper is a local-first personal voice assistant. It listens via push-to-talk, transcribes speech, routes it through an LLM of your choice, and speaks back — all through a Three.js orb UI in the browser.
 
 ---
 
@@ -12,7 +12,7 @@ cd Vesper
 pip install -e ".[core]"
 ```
 
-That installs the full working voice app: web/async stack (FastAPI, uvicorn), speech-to-text (faster-whisper, vosk, openwakeword), text-to-speech (edge-tts), audio I/O, and the setup UI.
+That installs the full working voice app: web/async stack (FastAPI, uvicorn), speech-to-text (faster-whisper), text-to-speech (edge-tts), audio I/O, and the setup UI.
 
 Optional dependency groups:
 
@@ -27,8 +27,8 @@ pip install -e ".[core,build]"
 ## Run
 
 ```powershell
-py -m voice              # wake-word mode (default) — say "vesper" to trigger
-py -m voice --voice      # push-to-talk instead of wake word
+py -m voice              # text mode
+py -m voice --voice      # push-to-talk voice mode
 py -m voice --smoke-test # import every module and exit — no audio hardware needed
 py -m voice --version    # print the installed version
 ```
@@ -39,7 +39,7 @@ Scroll down (or press →) to dock the orb into the corner and maximize the noti
 
 ## First run
 
-The first launch opens a small setup wizard (identity, LLM backend, optional API keys, voice/wake-word settings). It writes your choices to `%APPDATA%/Vesper/config.json` (which overrides the repo's `voice/config.json` defaults) and marks setup complete so it won't run again.
+The first launch opens a small setup wizard (identity, LLM backend, optional API keys, voice settings). It writes your choices to `%APPDATA%/Vesper/config.json` (which overrides the repo's `voice/config.json` defaults) and marks setup complete so it won't run again.
 
 Vesper can run with **no API keys at all**:
 
@@ -56,7 +56,7 @@ pip install -e ".[core,build]"
 pyinstaller voice.spec
 ```
 
-`voice.spec` bundles the app as a windowed (no console) single executable. Model files (Whisper/Vosk/openwakeword weights) are not bundled — they download to the user's cache on first run, keeping the installer small. See the comments in `voice.spec` for PyInstaller-specific gotchas.
+`voice.spec` bundles the app as a windowed (no console) single executable. Model files (Whisper weights) are not bundled — they download to the user's cache on first run, keeping the installer small. See the comments in `voice.spec` for PyInstaller-specific gotchas.
 
 ## License
 

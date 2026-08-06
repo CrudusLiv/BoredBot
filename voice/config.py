@@ -90,13 +90,6 @@ DEFAULTS: dict[str, Any] = {
     "stt_vad_filter": True,
     "stt_vad_min_silence_ms": 300,
     "stt_language": "en",
-    # Wake word
-    "wakeword_engine": "openwakeword",
-    "wakeword_keyword": "vesper",
-    "wakeword_model": "",
-    "wakeword_threshold": 0.5,
-    "wakeword_debounce_s": 1.5,
-    "wakeword_cooldown_s": 1.5,     # stay deaf this long after Vesper stops speaking
     # Proactive TTS
     "proactive_tts": True,
     "briefing_enabled": True,

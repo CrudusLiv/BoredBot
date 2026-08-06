@@ -67,7 +67,6 @@ def run_wizard() -> None:
             "llm_backend": state.get("llm_var").get(),
             "tts_engine": state.get("tts_var").get(),
             "tts_voice": state.get("tts_voice_var").get().strip() or "en-GB-SoniaNeural",
-            "wakeword_keyword": state.get("wakeword_var").get().strip() or "vesper",
         }
         cfg.save(updates)
 
@@ -165,12 +164,8 @@ def run_wizard() -> None:
     ctk.CTkLabel(p4, text="TTS voice (edge-tts voice name)").pack(anchor="w", pady=(12, 0))
     tts_voice_var = ctk.StringVar(value="en-GB-SoniaNeural")
     ctk.CTkEntry(p4, textvariable=tts_voice_var, width=300).pack(anchor="w", pady=6)
-    ctk.CTkLabel(p4, text="Wake word keyword").pack(anchor="w", pady=(12, 0))
-    wakeword_var = ctk.StringVar(value="vesper")
-    ctk.CTkEntry(p4, textvariable=wakeword_var, width=200).pack(anchor="w", pady=6)
     state["tts_var"] = tts_var
     state["tts_voice_var"] = tts_voice_var
-    state["wakeword_var"] = wakeword_var
     pages.append(p4)
 
     back_btn = ctk.CTkButton(nav, text="Back", command=go_back, width=100, state="disabled")

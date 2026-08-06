@@ -5,7 +5,7 @@
 #  - upx=False: UPX corrupts CTranslate2 (faster-whisper) DLLs
 #  - console=False: tray icon needs windowed mode; safety.py detects sys.frozen
 #    and swaps input() for a tkinter dialog accordingly
-#  - Model files (whisper/vosk/openwakeword) are NOT bundled — they download to
+#  - Model files (whisper) are NOT bundled — they download to
 #    the user's cache on first run, keeping the installer small
 #  - Kokoro (~800MB via torch) is NOT bundled — optional, installed separately
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_all
@@ -29,7 +29,7 @@ hiddenimports = [
 for pkg in ("sounddevice", "onnxruntime", "ctranslate2"):
     binaries += collect_dynamic_libs(pkg)
 
-for pkg in ("faster_whisper", "vosk", "openwakeword"):
+for pkg in ("faster_whisper",):
     _datas, _binaries, _hidden = collect_all(pkg)
     datas += _datas
     binaries += _binaries

@@ -1,7 +1,7 @@
 """Double-clap detector — fires a callback when two sharp transients occur
 within clap_window_s seconds of each other.
 
-Runs as a daemon thread alongside the wakeword listener. Uses its own
+Runs as a daemon thread alongside the PTT loop. Uses its own
 sounddevice InputStream (Windows WASAPI shared mode supports multiple
 concurrent input streams from the same mic).
 

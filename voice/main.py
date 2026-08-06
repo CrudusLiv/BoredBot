@@ -5,7 +5,6 @@ import os
 import queue
 import threading
 import time
-from pathlib import Path
 import voice  # noqa: F401
 
 def _show_notices() -> None:
@@ -88,23 +87,13 @@ def _get_version() -> str:
         return "0.0.0-dev"
 
 
-def _resolve_wakeword_model_path(wakeword_model: str) -> str:
-    """Resolve the configured wakeword_model to an actual path. Empty (or
-    whitespace-only) means "use the bundled default" — mirrors
-    ui_server.py's ui_avatar_vrm_path empty-string-falls-back-to-
-    placeholder.vrm pattern."""
-    if wakeword_model.strip():
-        return wakeword_model.strip()
-    return str(Path(__file__).parent / "models" / "vesper.onnx")
-
-
 def _run_smoke_test() -> None:
     """Import every module the frozen build ships; catches missing hidden
     imports (PyInstaller) without needing audio hardware. Exits 0 on success."""
     import importlib
     modules = [
         "voice.config", "voice.migrate", "voice.brain", "voice.llm",
-        "voice.stt", "voice.tts", "voice.wakeword", "voice.audio",
+        "voice.stt", "voice.tts", "voice.audio",
         "voice.audit", "voice.heartbeat", "voice.safety", "voice.memory",
         "voice.tray", "voice.ui_server", "voice.tools",
         "voice.confirm", "voice.killswitch", "voice.silence", "voice.usage",
@@ -134,7 +123,6 @@ def run() -> None:
 
     parser = argparse.ArgumentParser(description="Vesper voice assistant")
     parser.add_argument("--voice",    action="store_true", help="Push-to-talk voice mode")
-    parser.add_argument("--wakeword", action="store_true", help="Always-on wake-word mode (requires openwakeword)")
     parser.add_argument("--smoke-test", action="store_true", help="Import all modules and exit 0 (CI check, no audio hardware needed)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     args = parser.parse_args()
@@ -146,12 +134,6 @@ def run() -> None:
     if args.smoke_test:
         _run_smoke_test()
         return
-
-    # Default to wakeword mode when no flag is given
-    if not args.voice and not args.wakeword:
-        args.wakeword = True
-    if args.wakeword:
-        args.voice = True  # wakeword implies voice
 
     from voice.brain import Brain
     from voice import config as cfg, migrate
@@ -191,78 +173,12 @@ def run() -> None:
 
     _show_notices()
     print("Vesper. Ctrl-C to quit.")
-    _ww_engine = conf.get("wakeword_engine", "openwakeword")
-    if args.wakeword:
-        import importlib.util
-        if _ww_engine == "vosk":
-            if importlib.util.find_spec("vosk") is None:
-                print("vosk not installed — using PTT.  (py -m pip install vosk)")
-                args.wakeword = False
-            else:
-                print(f"Listening for wake word: '{conf.get('wakeword_keyword', 'vesper')}' (vosk).")
-        else:
-            if importlib.util.find_spec("openwakeword") is None:
-                print("openwakeword not installed — using PTT.  (pip install openwakeword)")
-                args.wakeword = False
-            else:
-                _ww_model = _resolve_wakeword_model_path(conf.get("wakeword_model", ""))
-                if not Path(_ww_model).exists():
-                    print(
-                        f"[wakeword] model not found at {_ww_model} — train a custom "
-                        "openWakeWord model (dscripka/openWakeWord's "
-                        "automatic_model_training.ipynb) and place it there."
-                    )
-                    args.wakeword = False
-                else:
-                    print(f"Listening for wake word (model: {_ww_model}).")
-    if not args.wakeword and args.voice:
+    if args.voice:
         print(f"Hold [{conf.get('ptt_key', 'space')}] to speak.")
     print()
 
-    # Reflects actual playback state from tts._play — wakeword/clap check this
-    from voice.tts import speaking as _tts_active
-
-    # Wake-word thread signals this event; main loop blocks on it instead of PTT
-    _wakeword_event: threading.Event | None = None
-    _wakeword_stop:  threading.Event | None = None
-    if args.wakeword:
-        _wakeword_event = threading.Event()
-        _wakeword_stop  = threading.Event()
-        _wakeword_ready = threading.Event()
-
-        def _on_wake():
-            _wakeword_event.set()
-
-        from voice import wakeword as _ww
-        if _ww_engine == "vosk":
-            _ww_kwargs: dict = {
-                "callback":    _on_wake,
-                "stop_event":  _wakeword_stop,
-                "keyword":     conf.get("wakeword_keyword", "vesper"),
-                "model_path":  conf.get("wakeword_model", ""),
-                "ready_event": _wakeword_ready,
-                "mute_event":  _tts_active,
-            }
-            _ww_target = _ww.listen_vosk
-        else:
-            _ww_kwargs = {
-                "callback":    _on_wake,
-                "stop_event":  _wakeword_stop,
-                "model_path":  _resolve_wakeword_model_path(conf.get("wakeword_model", "")),
-                "threshold":   float(conf.get("wakeword_threshold", 0.5)),
-                "cooldown_s":  float(conf.get("wakeword_cooldown_s", 1.5)),
-                "ready_event": _wakeword_ready,
-                "mute_event":  _tts_active,
-            }
-            _ww_target = _ww.listen
-        _ww_thread = threading.Thread(
-            target=_ww_target, kwargs=_ww_kwargs,
-            daemon=True, name="vesper-wakeword",
-        )
-        _ww_thread.start()
-
-    # Double-clap barge-in: interrupts TTS mid-reply. The wakeword stays muted
-    # while Vesper speaks, so the clap is the only interrupt channel there.
+    # Double-clap barge-in: interrupts TTS mid-reply — a hands-free way to
+    # stop speech without needing to hold the PTT key.
     _clap_stop: threading.Event | None = None
     if args.voice and conf.get("clap_enabled", False):
         from voice import clap_detector as _clap
@@ -273,8 +189,6 @@ def run() -> None:
                 return  # only claps during speech count — idle claps ignored
             print("[clap] barge-in — stopping speech", flush=True)
             _stop_tts()
-            if _wakeword_event is not None:
-                _wakeword_event.set()  # reuse the wake path -> listening turn
 
         _clap_stop = threading.Event()
         threading.Thread(
@@ -343,96 +257,6 @@ def run() -> None:
                 from voice.stt import transcribe
                 from voice.tts import stop_speaking
 
-                _STOP_WORDS = frozenset({"stop", "cancel", "quiet", "shut up", "nevermind", "never mind", "be quiet"})
-
-                if _wakeword_event is not None:
-                    if not _ww_thread.is_alive():
-                        print("[wakeword] thread exited — using PTT fallback")
-                        _wakeword_event = None
-                    else:
-                        # Timeout allows recovery if thread dies after is_alive() check
-                        if not _wakeword_event.wait(timeout=5.0):
-                            continue
-                        _wakeword_event.clear()
-                        # Silence can engage between detection and here (and the
-                        # clap barge-in sets this event directly). Never open the
-                        # mic while silenced.
-                        if silence.is_silenced():
-                            _wakeword_ready.set()
-                            continue
-                        stop_speaking()
-                        print("[wake] triggered — listening …", flush=True)
-                        if conf.get("ui_enabled", False):
-                            try:
-                                from voice import ui_server as _uiw
-                                _uiw.ensure_window_open()
-                            except Exception:
-                                pass
-                        _emit({"type": "state", "value": "listening"})
-                        from voice.audio import record_vad
-                        audio = record_vad()
-                        if audio is None:
-                            _wakeword_ready.set()
-                            _emit({"type": "state", "value": "idle"})
-                            continue
-                        try:
-                            user_text = transcribe(audio)
-                        except Exception as _stt_err:
-                            print(f"\n[STT error] {_stt_err}")
-                            _wakeword_ready.set()
-                            _emit({"type": "state", "value": "idle"})
-                            continue
-                        if not user_text.strip():
-                            print("[STT] (nothing transcribed)")
-                            _wakeword_ready.set()
-                            _emit({"type": "state", "value": "idle"})
-                            continue
-                        if user_text.strip().lower().rstrip(".,!") in _STOP_WORDS:
-                            print("[interrupt] stop command — idle")
-                            _wakeword_ready.set()
-                            _emit({"type": "state", "value": "idle"})
-                            continue
-                        _ks_action = _match_killswitch(user_text)
-                        if _ks_action:
-                            _msg = _apply_killswitch(_ks_action)
-                            print(f"vesper: {_msg}")
-                            from voice.tts import speak
-                            # force: the acknowledgement is the one line that has
-                            # to be heard despite the silence it announces.
-                            speak(_msg, on_done=_wakeword_ready.set, force=True)
-                            _emit({"type": "state", "value": "idle"})
-                            continue
-                        print(f"[STT] {user_text!r}")
-                        # Skip the PTT block below
-                        print("vesper: ", end="", flush=True)
-
-                        def _after_speak():
-                            _wakeword_ready.set()
-                            _emit({"type": "state", "value": "idle"})
-
-                        # Stream sentences straight into the TTS pipeline:
-                        # sentence N plays while N+1 synthesizes.
-                        utt = None
-                        try:
-                            for chunk in brain.turn(user_text, source="voice"):
-                                print(chunk, end=" ", flush=True)
-                                if not cfg.is_quiet_hours():
-                                    if utt is None:
-                                        from voice.tts import begin_utterance
-                                        _emit({"type": "state", "value": "speaking"})
-                                        utt = begin_utterance(on_done=_after_speak)
-                                    utt.feed(chunk)
-                        except Exception as _turn_err:
-                            print(f"\n[brain error] {_turn_err}", flush=True)
-                            _emit({"type": "state", "value": "error"})
-                        print()
-                        if utt is not None:
-                            utt.close()
-                        else:
-                            _after_speak()
-                        continue
-
-                # PTT path (used when wakeword is off or fell back)
                 if silence.is_silenced():
                     time.sleep(0.5)
                     continue
@@ -494,8 +318,6 @@ def run() -> None:
         _stop_proactive.set()
         if hb:
             hb.stop()
-        if _wakeword_stop:
-            _wakeword_stop.set()
         if _clap_stop:
             _clap_stop.set()
         print("\nGoodbye.")

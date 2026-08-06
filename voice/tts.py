@@ -63,7 +63,7 @@ _current_alias: str | None = None
 # Serializes MCI playback so a proactive speak() and an utterance can't overlap audibly
 _playback_lock = threading.Lock()
 
-# Set while audio is physically playing — wakeword/clap import this to suppress self-triggering
+# Set while audio is physically playing — clap detector imports this to suppress self-triggering
 speaking = threading.Event()
 
 _kokoro_pipeline = None
@@ -76,7 +76,6 @@ def speak(text: str, on_done=None, force: bool = False) -> None:
     """Synthesise and play in a daemon thread (non-blocking).
 
     on_done: optional zero-arg callable fired after playback ends or fails.
-             Pass _wakeword_ready.set here instead of calling it after speak().
     force:   Speak even while silenced. Reserved for the killswitch
              acknowledgement — the one line that has to be heard *because*
              she is going quiet.
@@ -449,7 +448,7 @@ def _mci_play(tmp_path: str, file_type: str, text: str, on_done=None) -> None:
 def _utt_play(tmp_path: str, file_type: str, text: str) -> None:
     """Play one utterance segment. Sets `speaking` but does NOT clear it —
     the utterance play loop clears it once the whole utterance is done, so
-    the wakeword stays muted through inter-sentence gaps."""
+    the clap detector stays muted through inter-sentence gaps."""
     global _current_alias
     alias = f"vesper_{random.randint(0, 999_999)}"
     try:

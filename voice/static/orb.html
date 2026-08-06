@@ -854,7 +854,7 @@ body.paused #conn-status { display: block; }
   <div class="rail-sec">
     <div class="rail-lbl">state</div>
     <div id="rail-state" class="rail-val">IDLE</div>
-    <div class="rail-sub" id="rail-state-sub">listening for wake word</div>
+    <div class="rail-sub" id="rail-state-sub">push-to-talk</div>
   </div>
   <div class="rail-hair"></div>
   <div class="rail-sec" id="busy-sec" hidden>
@@ -2000,7 +2000,7 @@ vfetch('/cmd/usage').then(r => r.json()).then(d => {
       'every ' + (c.heartbeat_interval_minutes ?? 30) + 'm')
       + ' · quiet ' + (c.quiet_hours_start || '22:00') + '–' + (c.quiet_hours_end || '09:00');
     const sub = document.getElementById('rail-state-sub');
-    if (sub && c.wakeword_keyword) sub.textContent = `listening for “${c.wakeword_keyword}”`;
+    if (sub && c.ptt_key) sub.textContent = `hold [${c.ptt_key}] to talk`;
   }).catch(() => {});
   loadNotices();
   const ma = document.getElementById('feed-markall');
