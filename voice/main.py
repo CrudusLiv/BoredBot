@@ -88,6 +88,16 @@ def _get_version() -> str:
         return "0.0.0-dev"
 
 
+def _resolve_wakeword_model_path(wakeword_model: str) -> str:
+    """Resolve the configured wakeword_model to an actual path. Empty (or
+    whitespace-only) means "use the bundled default" — mirrors
+    ui_server.py's ui_avatar_vrm_path empty-string-falls-back-to-
+    placeholder.vrm pattern."""
+    if wakeword_model.strip():
+        return wakeword_model.strip()
+    return str(Path(__file__).parent / "models" / "vesper.onnx")
+
+
 def _run_smoke_test() -> None:
     """Import every module the frozen build ships; catches missing hidden
     imports (PyInstaller) without needing audio hardware. Exits 0 on success."""
@@ -195,9 +205,14 @@ def run() -> None:
                 print("openwakeword not installed — using PTT.  (pip install openwakeword)")
                 args.wakeword = False
             else:
-                _ww_model = conf.get("wakeword_model", "")
-                if not _ww_model:
-                    print("[wakeword] no model configured — set wakeword_model in config.json")
+                _ww_model = _resolve_wakeword_model_path(conf.get("wakeword_model", ""))
+                if not Path(_ww_model).exists():
+                    print(
+                        f"[wakeword] model not found at {_ww_model} — train a custom "
+                        "openWakeWord model (dscripka/openWakeWord's "
+                        "automatic_model_training.ipynb) and place it there."
+                    )
+                    args.wakeword = False
                 else:
                     print(f"Listening for wake word (model: {_ww_model}).")
     if not args.wakeword and args.voice:
@@ -233,8 +248,9 @@ def run() -> None:
             _ww_kwargs = {
                 "callback":    _on_wake,
                 "stop_event":  _wakeword_stop,
-                "model_path":  conf.get("wakeword_model", ""),
+                "model_path":  _resolve_wakeword_model_path(conf.get("wakeword_model", "")),
                 "threshold":   float(conf.get("wakeword_threshold", 0.5)),
+                "cooldown_s":  float(conf.get("wakeword_cooldown_s", 1.5)),
                 "ready_event": _wakeword_ready,
                 "mute_event":  _tts_active,
             }
