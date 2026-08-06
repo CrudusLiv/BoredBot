@@ -34,9 +34,9 @@ Full personality spec: `Dynamous/Memory/SOUL.md`
 | Language | Python 3.14 |
 | Brain | `claude -p` subprocess (claude-sonnet-4-6), ReAct tool loop via XML tags |
 | Fast path | claude-haiku-4-5 for turns with no tool calls |
-| STT | Deepgram nova-2 REST via httpx |
+| STT | faster-whisper (local, offline) |
 | TTS | edge-tts (Microsoft neural, free) + winmm.dll MCI playback |
-| Audio | sounddevice + pynput (PTT) |
+| Audio | sounddevice + win32api GetAsyncKeyState (PTT) |
 | Memory | Obsidian vault — `Dynamous/Memory/MEMORY.md` + `daily/YYYY-MM-DD.md` |
 | Run target | Laptop (Windows 11, Python 3.14) |
 

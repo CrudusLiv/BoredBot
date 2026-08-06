@@ -1,8 +1,6 @@
 """Speech-to-text.
 
-Primary: faster-whisper (local, offline, no API key required).
-Fallback: Deepgram REST API if faster-whisper is not installed and
-          DEEPGRAM_API_KEY is set in the environment.
+faster-whisper (local, offline, no API key required).
 
 Config keys (voice/config.json):
   stt_model           "tiny" | "base" | "small" | "medium" | "large-v3"  (default "base")
@@ -61,54 +59,18 @@ def _wav_to_float32(audio_bytes: bytes):
 
 def transcribe(audio_bytes: bytes) -> str:
     """Transcribe WAV bytes; returns the recognised string (may be empty)."""
-    import importlib.util
-
-    if importlib.util.find_spec("faster_whisper") is not None:
-        model = _load_model()
-        audio = _wav_to_float32(audio_bytes)
-        from voice import config as cfg
-        conf = cfg.load()
-        segments, _ = model.transcribe(
-            audio,
-            beam_size=int(conf.get("stt_beam_size", 1)),
-            language=conf.get("stt_language", "en"),
-            vad_filter=bool(conf.get("stt_vad_filter", True)),
-            vad_parameters={
-                "min_silence_duration_ms": int(conf.get("stt_vad_min_silence_ms", 300)),
-            },
-            condition_on_previous_text=False,
-        )
-        return " ".join(seg.text for seg in segments).strip()
-
-    # Fallback: Deepgram
-    import os
-    # Load .env if the key isn't already in the shell environment
-    if not os.getenv("DEEPGRAM_API_KEY"):
-        try:
-            import integrations._env  # noqa: F401 — auto-runs load_env() on import
-        except Exception:
-            pass
-    api_key = os.getenv("DEEPGRAM_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError(
-            "faster-whisper not installed and DEEPGRAM_API_KEY not set — "
-            "run: py -m pip install faster-whisper"
-        )
-
-    try:
-        import httpx
-    except ImportError as exc:
-        raise RuntimeError(f"pip install httpx  ({exc})") from exc
-
-    resp = httpx.post(
-        "https://api.deepgram.com/v1/listen",
-        params={"model": "nova-2", "smart_format": "true", "punctuate": "true"},
-        headers={"Authorization": f"Token {api_key}", "Content-Type": "audio/wav"},
-        content=audio_bytes,
-        timeout=30,
+    model = _load_model()
+    audio = _wav_to_float32(audio_bytes)
+    from voice import config as cfg
+    conf = cfg.load()
+    segments, _ = model.transcribe(
+        audio,
+        beam_size=int(conf.get("stt_beam_size", 1)),
+        language=conf.get("stt_language", "en"),
+        vad_filter=bool(conf.get("stt_vad_filter", True)),
+        vad_parameters={
+            "min_silence_duration_ms": int(conf.get("stt_vad_min_silence_ms", 300)),
+        },
+        condition_on_previous_text=False,
     )
-    resp.raise_for_status()
-    try:
-        return resp.json()["results"]["channels"][0]["alternatives"][0]["transcript"] or ""
-    except (KeyError, IndexError):
-        return ""
+    return " ".join(seg.text for seg in segments).strip()

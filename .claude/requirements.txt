@@ -40,7 +40,6 @@ pyinstaller>=6.0
 faster-whisper>=1.0
 edge-tts>=6.0
 sounddevice>=0.4
-pynput>=1.7
 numpy>=1.26
 
 # Kokoro local TTS (alternative to edge-tts — offline, high quality)
