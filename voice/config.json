@@ -1,5 +1,5 @@
 {
-  "wakeword_engine": "vosk",
+  "wakeword_engine": "openwakeword",
   "wakeword_keyword": "vesper",
   "model": "sonnet",
   "tts_engine": "elevenlabs",
