@@ -174,7 +174,7 @@ def run() -> None:
     _show_notices()
     print("Vesper. Ctrl-C to quit.")
     if args.voice:
-        print(f"Hold [{conf.get('ptt_key', 'space')}] to speak.")
+        print(f"Hold [{conf.get('ptt_key', '`')}] to speak.")
     print()
 
     # Double-clap barge-in: interrupts TTS mid-reply — a hands-free way to
@@ -261,7 +261,7 @@ def run() -> None:
                     time.sleep(0.5)
                     continue
                 _emit({"type": "state", "value": "listening"})
-                audio = record_ptt(key=conf.get("ptt_key", "space"), on_press=stop_speaking)
+                audio = record_ptt(key=conf.get("ptt_key", "`"), on_press=stop_speaking)
                 if audio is None:
                     _emit({"type": "state", "value": "idle"})
                     continue

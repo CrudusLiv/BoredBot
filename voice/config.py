@@ -50,7 +50,7 @@ DEFAULTS: dict[str, Any] = {
     "elevenlabs_voice_id": "",
     "elevenlabs_batch_chars": 250,  # buffer sentences to this size before an ElevenLabs synth call (credit conservation)
     # Input
-    "ptt_key": "space",
+    "ptt_key": "`",
     "max_history_turns": 40,
     # Quiet hours
     "quiet_hours_start": "22:00",

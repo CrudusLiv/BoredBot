@@ -3,7 +3,7 @@
   "tts_engine": "elevenlabs",
   "tts_voice": "en-GB-SoniaNeural",
   "elevenlabs_voice_id": "pFZP5JQG7iQjIQuC4Bku",
-  "ptt_key": "space",
+  "ptt_key": "`",
   "max_history_turns": 40,
   "quiet_hours_start": "22:00",
   "quiet_hours_end": "09:00",

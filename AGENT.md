@@ -42,7 +42,7 @@ Full personality spec: `Dynamous/Memory/SOUL.md`
 
 ## Voice Input
 
-- **Push-to-talk:** `--voice` flag, hold Space while speaking
+- **Push-to-talk:** `--voice` flag, hold `` ` `` (backtick) while speaking
 
 ## Hard Limits (never without explicit confirmation)
 

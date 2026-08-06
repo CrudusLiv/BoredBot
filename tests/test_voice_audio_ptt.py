@@ -43,6 +43,18 @@ def test_vk_code_digit():
     assert audio._vk_code("5") == ord("5")
 
 
+def test_vk_code_backtick():
+    # OEM key -- VK_OEM_3 (0xC0), not ord("`") (0x60, which would
+    # collide with VK_NUMPAD0). The default ptt_key.
+    assert audio._vk_code("`") == 0xC0
+
+
+def test_vk_code_other_oem_punctuation_not_ascii():
+    # Sanity check that OEM keys are looked up, not derived from ASCII.
+    assert audio._vk_code("-") == 0xBD
+    assert audio._vk_code(";") == 0xBA
+
+
 # --------------------------------------------------------------------------
 # record_ptt
 # --------------------------------------------------------------------------

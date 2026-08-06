@@ -17,7 +17,7 @@ MIN_DURATION_S = 0.5
 POLL_INTERVAL_S = 0.01
 
 # Windows virtual-key codes for the PTT key names this app has ever exposed
-# (config default is "space"; setup docs mention others as options).
+# (config default is "`"; setup docs mention others as options).
 _NAMED_VK = {
     "backspace": 0x08, "tab": 0x09, "enter": 0x0D, "return": 0x0D,
     "shift": 0x10, "shift_l": 0xA0, "shift_r": 0xA1,
@@ -29,6 +29,15 @@ _NAMED_VK = {
     "left": 0x25, "up": 0x26, "right": 0x27, "down": 0x28,
     "delete": 0x2E,
     "cmd": 0x5B, "cmd_l": 0x5B, "cmd_r": 0x5C,
+    # OEM punctuation keys (US layout) -- their VK codes don't match ASCII,
+    # so they must be listed explicitly rather than falling through to the
+    # ord() guess below (which is only valid for letters and digits).
+    "`": 0xC0, "grave": 0xC0,
+    "-": 0xBD, "minus": 0xBD,
+    "=": 0xBB, "equals": 0xBB,
+    "[": 0xDB, "]": 0xDD, "\\": 0xDC,
+    ";": 0xBA, "'": 0xDE,
+    ",": 0xBC, ".": 0xBE, "/": 0xBF,
     "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75,
     "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
     "f13": 0x7C, "f14": 0x7D, "f15": 0x7E, "f16": 0x7F, "f17": 0x80, "f18": 0x81,
