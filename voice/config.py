@@ -91,7 +91,7 @@ DEFAULTS: dict[str, Any] = {
     "stt_vad_min_silence_ms": 300,
     "stt_language": "en",
     # Wake word
-    "wakeword_engine": "vosk",
+    "wakeword_engine": "openwakeword",
     "wakeword_keyword": "vesper",
     "wakeword_model": "",
     "wakeword_threshold": 0.5,
