@@ -45,7 +45,7 @@ from voice.tools.email import triage_inbox, filter_subscriptions
 from voice.tools.search import search_vault
 from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
-from voice.tools.calendar import upcoming_events
+from voice.tools.calendar import upcoming_events, create_calendar_event
 from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
 from voice.memory import remember, forget
 
@@ -76,6 +76,10 @@ _register("write_scratch",
 _register("upcoming_events",
     "Fetch upcoming Google Calendar events. Args: days(int, default 7).",
     upcoming_events)
+_register("create_calendar_event",
+    "Create an all-day Google Calendar event. REQUIRES CONFIRMATION. "
+    "Args: title(str), date(str, YYYY-MM-DD), description(str, optional).",
+    create_calendar_event)
 _register("remember_fact",
     "Remember a fact across sessions. Args: key(str), value(str).",
     remember)
