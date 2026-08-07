@@ -122,10 +122,11 @@ def run() -> None:
     _load_data_dir_env()
 
     parser = argparse.ArgumentParser(description="Vesper voice assistant")
-    parser.add_argument("--voice",    action="store_true", help="Push-to-talk voice mode")
+    parser.add_argument("--text",     action="store_true", help="Text mode instead of push-to-talk voice")
     parser.add_argument("--smoke-test", action="store_true", help="Import all modules and exit 0 (CI check, no audio hardware needed)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     args = parser.parse_args()
+    args.voice = not args.text
 
     if args.version:
         print(_get_version())

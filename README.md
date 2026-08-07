@@ -27,8 +27,8 @@ pip install -e ".[core,build]"
 ## Run
 
 ```powershell
-py -m voice              # text mode
-py -m voice --voice      # push-to-talk voice mode
+py -m voice              # push-to-talk voice mode (default)
+py -m voice --text       # text mode
 py -m voice --smoke-test # import every module and exit — no audio hardware needed
 py -m voice --version    # print the installed version
 ```

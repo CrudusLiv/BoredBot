@@ -18,7 +18,7 @@ legacy `secondbrain-*` names from older installs).
 | `vesper-heartbeat` | Daily 09:00 KL, repeats every 30 min for 13 hours | `py heartbeat.py` |
 | `vesper-reflect` | Daily 08:00 KL | `py memory_reflect.py` |
 | `vesper-index` | Every 10 min, all day | `py memory/memory_index.py` |
-| `vesper-voice` | At logon, restart on failure | `start_voice.ps1` (`py -m voice --voice`) |
+| `vesper-voice` | At logon, restart on failure | `start_voice.ps1` (`py -m voice`) |
 
 ## Inspect
 

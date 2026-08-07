@@ -49,7 +49,7 @@ while ($true) {
 
     $start = Get-Date
     try {
-        & $py -u -m voice --voice 2>&1 | ForEach-Object {
+        & $py -u -m voice 2>&1 | ForEach-Object {
             $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $_
             Add-Content -Path $logFile -Value $line
         }

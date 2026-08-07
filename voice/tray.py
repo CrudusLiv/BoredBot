@@ -53,7 +53,7 @@ def install_autostart() -> None:
     if not startup.exists():
         return
     bat = startup / "Vesper.bat"
-    bat.write_text("@echo off\nstart \"\" pythonw -m voice --voice\n", encoding="utf-8")
+    bat.write_text("@echo off\nstart \"\" pythonw -m voice\n", encoding="utf-8")
 
 
 def start(port: int = 7070, on_quit: Callable | None = None) -> None:

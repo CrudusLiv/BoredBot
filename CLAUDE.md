@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Vesper is a personal second brain. Two layers live here:
 
-1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk audio, faster-whisper STT, edge-tts TTS, multi-turn brain via `claude -p` subprocess. The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice --voice`.
+1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk audio, faster-whisper STT, edge-tts TTS, multi-turn brain via `claude -p` subprocess. The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice`.
 2. **Claude Code agent system** — `.claude/scripts/`, `.claude/hooks/`, and `.claude/settings.json` are the running agent layer (memory reflection, vector indexing, integrations).
 
 The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. `core/dashboard.py` + `integrations/discord_webhook.py` are likewise dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today.
@@ -26,8 +26,8 @@ Credentials and secrets go in `.env` at the project root — never committed. Th
 ## Running Vesper
 
 ```powershell
-py -m voice              # text mode
-py -m voice --voice      # push-to-talk
+py -m voice              # push-to-talk (default)
+py -m voice --text       # text mode
 ```
 
 Open `http://localhost:7070` in Edge `--app` mode for the orb UI (requires `ui_enabled: true` in `voice/config.json`).

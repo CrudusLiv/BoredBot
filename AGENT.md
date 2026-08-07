@@ -42,7 +42,7 @@ Full personality spec: `Dynamous/Memory/SOUL.md`
 
 ## Voice Input
 
-- **Push-to-talk:** `--voice` flag, hold `` ` `` (backtick) while speaking
+- **Push-to-talk:** default mode, hold `` ` `` (backtick) while speaking
 
 ## Hard Limits (never without explicit confirmation)
 
@@ -65,8 +65,8 @@ Holds unread notices until the next session open — never fires and forgets.
 ## Entry Points
 
 ```
-py -m voice              # text mode (default)
-py -m voice --voice      # push-to-talk voice mode
+py -m voice              # push-to-talk voice mode (default)
+py -m voice --text       # text mode
 ```
 
 Config: `voice/config.json` — no code change required for tuning.
@@ -74,7 +74,7 @@ Config: `voice/config.json` — no code change required for tuning.
 ## Primary UI
 
 `voice/static/orb.html` — Three.js particle orb with WebSocket state events.  
-Launch: `py -m voice --voice`, then open `http://localhost:7070` in Edge `--app` mode.
+Launch: `py -m voice`, then open `http://localhost:7070` in Edge `--app` mode.
 
 Sidebar panels: Chat, Notices, Finance, Calendar, Jobs, Workspace, Apps, Profiles, Config.
 
