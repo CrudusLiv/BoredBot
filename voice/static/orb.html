@@ -2488,6 +2488,20 @@ async function _renderJobAlerts(conf, container) {
 async function _renderPcControl(conf, container) {
   let apps = (conf.pc_control_apps && typeof conf.pc_control_apps === 'object') ? { ...conf.pc_control_apps } : {};
 
+  // Start Menu scan for autocomplete (GET /cmd/pc-control/apps ->
+  // voice/tools/pc_control.py::discover_apps). Best-effort: an empty or
+  // failed scan just means no suggestions, not a broken editor -- manual
+  // entry always still works.
+  let discovered = [];
+  try {
+    const dr = await vfetch('/cmd/pc-control/apps');
+    if (dr.ok) {
+      const dd = await dr.json();
+      discovered = Array.isArray(dd.apps) ? dd.apps : [];
+    }
+  } catch (_) { /* no suggestions available */ }
+  const discoveredByName = new Map(discovered.map(a => [String(a.name).toLowerCase(), a.target]));
+
   const group = document.createElement('div');
   group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
 
@@ -2500,8 +2514,10 @@ async function _renderPcControl(conf, container) {
   const hint = document.createElement('div');
   hint.className = 'notices-empty';
   hint.style.cssText = 'margin-bottom:8px; font-size:11px;';
-  hint.textContent = 'Only apps listed here can be launched by voice ("launch spotify"). ' +
-    'Target is whatever os.startfile() can open: an exe on PATH, a full path, or a URI like spotify:.';
+  hint.textContent = discovered.length
+    ? `Only apps listed here can be launched by voice ("launch spotify"). ${discovered.length} app(s) found on this PC — start typing to pick one, or enter a custom name/target.`
+    : 'Only apps listed here can be launched by voice ("launch spotify"). ' +
+      'Target is whatever os.startfile() can open: an exe on PATH, a full path, or a URI like spotify:.';
   group.appendChild(hint);
 
   const listEl = document.createElement('div');
@@ -2551,8 +2567,24 @@ async function _renderPcControl(conf, container) {
   const nameInput = document.createElement('input');
   nameInput.className = 'settings-input';
   nameInput.type = 'text';
-  nameInput.placeholder = 'spoken name (e.g. spotify)';
+  nameInput.placeholder = 'spoken name (e.g. spotify) — start typing to search';
   nameInput.style.flex = '1';
+  // Discovered-apps autocomplete: datalist gives native browser search-as-you-type;
+  // picking (or exactly matching) a discovered name autofills the target below,
+  // which stays a normal editable field for anything not found or overridden.
+  const datalistId = 'pc-control-discovered-' + Math.random().toString(36).slice(2);
+  const datalist = document.createElement('datalist');
+  datalist.id = datalistId;
+  discovered.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.name;
+    datalist.appendChild(opt);
+  });
+  nameInput.setAttribute('list', datalistId);
+  nameInput.addEventListener('input', () => {
+    const match = discoveredByName.get(nameInput.value.trim().toLowerCase());
+    if (match) targetInput.value = match;
+  });
   const targetInput = document.createElement('input');
   targetInput.className = 'settings-input';
   targetInput.type = 'text';
@@ -2563,7 +2595,7 @@ async function _renderPcControl(conf, container) {
   addBtn.className = 'pill-btn';
   addBtn.textContent = 'add';
   addRow.append(nameInput, targetInput, addBtn);
-  group.append(addRow, saveHint);
+  group.append(datalist, addRow, saveHint);
 
   function addApp() {
     const name = nameInput.value.trim().toLowerCase();
