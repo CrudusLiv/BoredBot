@@ -51,3 +51,12 @@ def test_patch_rejects_unknown_key(client):
     r = client.post("/cmd/settings", headers=_hdr(),
                     json={"key": "not_a_real_setting", "value": 1})
     assert r.status_code == 400
+
+
+def test_patch_dict_value_round_trips(client):
+    apps = {"spotify": "spotify:", "notepad": "notepad.exe"}
+    r = client.post("/cmd/settings", headers=_hdr(),
+                    json={"key": "pc_control_apps", "value": apps})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got["pc_control_apps"] == apps

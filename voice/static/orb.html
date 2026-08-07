@@ -2480,6 +2480,112 @@ async function _renderJobAlerts(conf, container) {
   container.appendChild(group);
 }
 
+// "PC control" group on the Cfg tab: editable name → launch-target map
+// (pc_control_apps — voice/tools/pc_control.py::launch_app is allowlist-only,
+// so only apps listed here can be launched by voice). Each row shows
+// "name → target"; add via two free-text inputs, same persist-on-change
+// pattern as the chip-list groups above.
+async function _renderPcControl(conf, container) {
+  let apps = (conf.pc_control_apps && typeof conf.pc_control_apps === 'object') ? { ...conf.pc_control_apps } : {};
+
+  const group = document.createElement('div');
+  group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
+
+  const header = document.createElement('div');
+  header.className = 'settings-field-label';
+  header.textContent = 'PC control — allowed apps';
+  header.style.cssText = 'font-weight:600; margin-bottom:10px;';
+  group.appendChild(header);
+
+  const hint = document.createElement('div');
+  hint.className = 'notices-empty';
+  hint.style.cssText = 'margin-bottom:8px; font-size:11px;';
+  hint.textContent = 'Only apps listed here can be launched by voice ("launch spotify"). ' +
+    'Target is whatever os.startfile() can open: an exe on PATH, a full path, or a URI like spotify:.';
+  group.appendChild(hint);
+
+  const listEl = document.createElement('div');
+  listEl.style.cssText = 'display:flex; flex-direction:column; gap:6px; margin:8px 0;';
+  group.appendChild(listEl);
+
+  const saveHint = document.createElement('div');
+  saveHint.className = 'settings-save-hint';
+
+  const persist = () => _saveSetting('pc_control_apps', apps, saveHint);
+
+  function renderRows() {
+    listEl.innerHTML = '';
+    const names = Object.keys(apps).sort();
+    if (!names.length) {
+      const empty = document.createElement('div');
+      empty.className = 'notices-empty';
+      empty.textContent = 'No apps configured yet. Add one below.';
+      listEl.appendChild(empty);
+      return;
+    }
+    names.forEach(name => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      const label = document.createElement('span');
+      label.className = 'profile-chip';
+      label.style.cssText = 'display:inline-flex; align-items:center; gap:6px; flex:1; overflow:hidden;';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = name;
+      nameSpan.style.fontWeight = '600';
+      const targetSpan = document.createElement('span');
+      targetSpan.textContent = ' \u2192 ' + apps[name];
+      targetSpan.style.cssText = 'color: var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+      label.append(nameSpan, targetSpan);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '\u2715';
+      x.style.cssText = 'background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:12px; line-height:1;';
+      x.addEventListener('click', () => { delete apps[name]; renderRows(); persist(); });
+      row.append(label, x);
+      listEl.appendChild(row);
+    });
+  }
+
+  const addRow = document.createElement('div');
+  addRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; align-items:center;';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'settings-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'spoken name (e.g. spotify)';
+  nameInput.style.flex = '1';
+  const targetInput = document.createElement('input');
+  targetInput.className = 'settings-input';
+  targetInput.type = 'text';
+  targetInput.placeholder = 'launch target (e.g. spotify: or C:\\path\\app.exe)';
+  targetInput.style.flex = '2';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'pill-btn';
+  addBtn.textContent = 'add';
+  addRow.append(nameInput, targetInput, addBtn);
+  group.append(addRow, saveHint);
+
+  function addApp() {
+    const name = nameInput.value.trim().toLowerCase();
+    const target = targetInput.value.trim();
+    if (!name || !target) return;
+    apps[name] = target;
+    renderRows();
+    persist();
+    nameInput.value = '';
+    targetInput.value = '';
+    nameInput.focus();
+  }
+  addBtn.addEventListener('click', addApp);
+  [nameInput, targetInput].forEach(inp => {
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addApp(); } });
+  });
+
+  renderRows();
+  container.appendChild(group);
+}
+
+
 async function loadSettingsPanel() {
   const llmEl = document.getElementById('settings-llm-status');
   if (llmEl) {
@@ -2591,6 +2697,7 @@ async function loadSettingsPanel() {
     applyEngineVisibility();
     await _renderActivityAwareness(conf, fieldsEl);
     await _renderJobAlerts(conf, fieldsEl);
+    await _renderPcControl(conf, fieldsEl);
   } catch (_) {
     fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
   }

@@ -424,6 +424,7 @@ _SETTINGS_ALLOWED = {
     "activity_awareness_enabled", "silence_when_running",
     "downloads_triage_enabled",
     "job_alerts_enabled", "job_alert_senders", "job_alert_lookback_days",
+    "pc_control_apps",
 }
 
 
