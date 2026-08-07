@@ -260,6 +260,7 @@ class Heartbeat:
         ("nudges", "_check_nudges", 30, None),
         ("gcal_sync", "_check_calendar_sync", 5, "gcal_sync_interval_minutes"),
         ("github_digest", "_check_github_digest", 5, "github_digest_interval_minutes"),
+        ("urgent_email", "_check_urgent_email", 30, None),
         ("deadline_import", "_check_deadline_import", 30, None),
         ("deadline_thresholds", "_check_deadline_thresholds", 30, None),
         ("git_todo_summary", "_check_git_todo_summary", 30, None),
@@ -311,6 +312,7 @@ class Heartbeat:
 
         # Migrated proactive-check dedup state (Phase 1 of the roadmap migration).
         self._seen_pr_event_ids: list[str] = list(state.get("seen_pr_event_ids", []))
+        self._seen_urgent_email_ids: list[str] = list(state.get("seen_urgent_email_ids", []))
         self._deadline_fired: dict[str, list[str]] = dict(state.get("deadline_fired", {}))
         self._git_todo_done_date: date | None = _parse_date(state.get("git_todo_date"))
         self._build_watch_done_date: date | None = _parse_date(state.get("build_watch_date"))
@@ -336,6 +338,7 @@ class Heartbeat:
             "nudged_date": str(self._nudge_reset_date) if self._nudge_reset_date else None,
             "idle_return_fired": self._last_idle_return_fired.isoformat() if self._last_idle_return_fired else None,
             "seen_pr_event_ids": self._seen_pr_event_ids,
+            "seen_urgent_email_ids": self._seen_urgent_email_ids,
             "deadline_fired": self._deadline_fired,
             "git_todo_date": str(self._git_todo_done_date) if self._git_todo_done_date else None,
             "build_watch_date": str(self._build_watch_done_date) if self._build_watch_done_date else None,
@@ -578,6 +581,48 @@ class Heartbeat:
                 self._seen_pr_event_ids.append(e["id"])
         if len(self._seen_pr_event_ids) > 500:
             self._seen_pr_event_ids = self._seen_pr_event_ids[-500:]
+        self._save_state()
+
+    def _check_urgent_email(self) -> None:
+        """Speak only when a genuinely new urgent-flagged email appears
+        (id-based dedup). Replaces the old _tick()-driven 'N new message(s)'
+        announcement, which re-fired on every count change whether or not
+        anything in the inbox actually needed attention."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("urgent_email_enabled", True):
+            return
+        try:
+            import sys
+            sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+            from integrations import gmail_int  # type: ignore
+            from voice.tools.email import URGENT_KEYWORDS
+            days = int(conf.get("urgent_email_lookback_days", 1))
+            emails = gmail_int.list_recent(days=days, max_results=20)
+        except Exception as _e:
+            print(f"[heartbeat] urgent_email error: {_e}", flush=True)
+            return
+
+        new_urgent = []
+        for e in emails:
+            eid = e.get("id")
+            if not eid or eid in self._seen_urgent_email_ids:
+                continue
+            subj = (e.get("subject") or "").lower()
+            snip = (e.get("snippet") or "").lower()
+            if any(k in subj or k in snip for k in URGENT_KEYWORDS):
+                new_urgent.append(e)
+
+        if not new_urgent:
+            return
+
+        lines = [f"{e.get('from', '?')} — {e.get('subject', '(no subject)')}" for e in new_urgent[:3]]
+        _post(f"Urgent email: {'; '.join(lines)}"[:280], level="URGENT")
+
+        for e in new_urgent:
+            self._seen_urgent_email_ids.append(e["id"])
+        if len(self._seen_urgent_email_ids) > 500:
+            self._seen_urgent_email_ids = self._seen_urgent_email_ids[-500:]
         self._save_state()
 
     _DEADLINE_BUCKET_KIND: dict[str, str] = {

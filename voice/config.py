@@ -118,6 +118,10 @@ DEFAULTS: dict[str, Any] = {
     "job_alerts_enabled": False,           # opt-in: scan Gmail for job-alert digests
     "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],
     "job_alert_lookback_days": 3,
+    # Urgent email (event-triggered heartbeat check, replaces the old
+    # interval-based raw-count announcement)
+    "urgent_email_enabled": True,
+    "urgent_email_lookback_days": 1,
     # Clap detector
     "clap_enabled": False,
     "clap_threshold": 0.7,
