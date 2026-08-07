@@ -66,6 +66,11 @@ DEFAULTS: dict[str, Any] = {
     # Activity awareness (process-based silence + reactive triggers)
     "activity_awareness_enabled": False,   # opt-in; dormant until enabled
     "silence_when_running": [],            # lowercase exe names, e.g. ["zoom.exe", "teams.exe"]
+    # PC control (voice/tools/pc_control.py) — launch_app is allowlist-only:
+    # {"spoken name": "path or command os.startfile() will run"}, e.g.
+    # {"spotify": "spotify:", "notepad": "notepad.exe"}. Empty by default —
+    # opt-in, the user configures which apps voice can launch.
+    "pc_control_apps": {},
     # UI
     "ui_enabled": False,
     "ui_port": 7070,

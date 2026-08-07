@@ -50,6 +50,7 @@ core = [
     "customtkinter==5.2.2",
     # Windows-only
     "pywin32==312",
+    "pycaw==20251023",
 ]
 
 tts-kokoro = [
