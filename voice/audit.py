@@ -1,7 +1,7 @@
 """Append-only JSONL audit log for all voice turns and tool calls.
 
 Written to get_data_dir()/voice_audit.jsonl.
-Schema per line: {"ts": "<ISO8601>", "role": "user|assistant|tool", "content": "...", ["tool": "name"], ["outcome": "cancelled|timeout|paused|..."]}
+Schema per line: {"ts": "<ISO8601>", "role": "user|assistant|tool|stt", "content": "...", ["tool": "name"], ["outcome": "cancelled|timeout|paused|..."], ["meta": {...}]}
 """
 from __future__ import annotations
 
@@ -37,7 +37,8 @@ def _maybe_rotate(path: Path) -> None:
         pass
 
 
-def log(role: str, content: str, tool_name: str | None = None, outcome: str | None = None) -> None:
+def log(role: str, content: str, tool_name: str | None = None, outcome: str | None = None,
+        meta: dict | None = None) -> None:
     """Append one audit entry (non-fatal on I/O error)."""
     global _write_count
     from voice import config as cfg
@@ -50,6 +51,8 @@ def log(role: str, content: str, tool_name: str | None = None, outcome: str | No
         entry["tool"] = tool_name
     if outcome is not None:
         entry["outcome"] = outcome
+    if meta:
+        entry["meta"] = meta
     try:
         log_p = _log_path()
         log_p.parent.mkdir(parents=True, exist_ok=True)
