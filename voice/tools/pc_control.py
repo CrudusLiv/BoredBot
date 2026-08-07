@@ -118,3 +118,46 @@ def focus_window(name: str) -> str:
             win32gui.SetForegroundWindow(hwnd)
             return f"focused {title!r}"
     return f"no window found matching {name!r}"
+
+
+def _start_menu_dirs() -> list:
+    """Start Menu Programs folders to scan for shortcuts: the current
+    user's and the all-users one. Split out so tests can point this at a
+    temp directory instead of the real Start Menu."""
+    import os
+    from pathlib import Path
+    return [
+        Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+    ]
+
+
+def _resolve_shortcut(path) -> str:
+    """Return the target path a .lnk shortcut points to, or "" if it can't
+    be resolved. Split out so tests can mock the COM call directly."""
+    import win32com.client
+    try:
+        shell = win32com.client.Dispatch("WScript.Shell")
+        return shell.CreateShortcut(str(path)).Targetpath or ""
+    except Exception:
+        return ""
+
+
+def discover_apps() -> list[dict[str, str]]:
+    """Scan Start Menu shortcuts (current user + all users) and resolve
+    each .lnk to its target .exe. Used by the settings UI to autocomplete
+    pc_control_apps entries instead of requiring hand-typed paths. Deduped
+    by shortcut name (case-insensitive), sorted by name. Returns
+    [{"name": str, "target": str}, ...]."""
+    found: dict[str, str] = {}
+    for base in _start_menu_dirs():
+        if not base.is_dir():
+            continue
+        for lnk in base.rglob("*.lnk"):
+            target = _resolve_shortcut(lnk)
+            if not target or not target.lower().endswith(".exe"):
+                continue
+            name = lnk.stem.lower()
+            if name not in found:
+                found[name] = target
+    return [{"name": n, "target": t} for n, t in sorted(found.items())]
