@@ -434,6 +434,18 @@ async def settings_get() -> JSONResponse:
     return JSONResponse(cfg.load())
 
 
+@app.get("/cmd/pc-control/apps")
+async def pc_control_discover_apps() -> JSONResponse:
+    """Scan Start Menu shortcuts for the Config tab's app-name autocomplete
+    (voice/tools/pc_control.py::discover_apps). Read-only, so no token
+    required -- same tier as GET /cmd/settings."""
+    from voice.tools import pc_control
+    try:
+        return JSONResponse({"apps": pc_control.discover_apps()})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 class _SettingsPatch(BaseModel):
     key: str
     value: Any
