@@ -77,3 +77,44 @@ def launch_app(name: str) -> str:
     except OSError as exc:
         return f"failed to launch {name!r}: {exc}"
     return f"launched {name}"
+
+
+def _visible_windows() -> list[tuple[int, str]]:
+    """Return (hwnd, title) for every visible top-level window with a
+    non-empty title."""
+    import win32gui
+    found: list[tuple[int, str]] = []
+
+    def _collect(hwnd, _extra):
+        if win32gui.IsWindowVisible(hwnd):
+            title = win32gui.GetWindowText(hwnd)
+            if title:
+                found.append((hwnd, title))
+
+    win32gui.EnumWindows(_collect, None)
+    return found
+
+
+def list_windows() -> str:
+    """List visible top-level window titles, one per line."""
+    windows = _visible_windows()
+    if not windows:
+        return "no visible windows found"
+    return "\n".join(title for _hwnd, title in windows)
+
+
+def focus_window(name: str) -> str:
+    """Bring the first visible window whose title contains `name`
+    (case-insensitive) to the foreground. Note: Windows restricts which
+    processes may steal foreground focus from the user's active window --
+    this may only flash the taskbar icon rather than fully focus, depending
+    on OS state. Args: name(str)."""
+    needle = name.lower()
+    for hwnd, title in _visible_windows():
+        if needle in title.lower():
+            import win32con
+            import win32gui
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(hwnd)
+            return f"focused {title!r}"
+    return f"no window found matching {name!r}"
