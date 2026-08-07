@@ -17,7 +17,8 @@ from voice.tools.email import triage_inbox, filter_subscriptions
 from voice.tools.search import search_vault
 from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
-from voice.tools.calendar import upcoming_events
+from voice.tools.calendar import upcoming_events, create_calendar_event
+from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
 from voice.memory import remember, forget
 from voice.deadlines import complete_deadline
 from voice.safety import requires_confirmation, confirm_with_reason
@@ -131,6 +132,48 @@ def triage_inbox_tool(days: int = 3) -> str:
 def filter_subscriptions_tool(days: int = 3) -> str:
     """Identify newsletter/subscription emails."""
     return filter_subscriptions(days=days)
+
+
+@mcp.tool()
+def create_calendar_event_tool(title: str, date: str, description: str = "") -> str:
+    """Create an all-day Google Calendar event. Requires user confirmation.
+    Args: title(str), date(str, YYYY-MM-DD), description(str, optional)."""
+    denial = _confirm_gate("create_calendar_event", {"title": title, "date": date, "description": description})
+    if denial is not None:
+        return denial
+    return create_calendar_event(title=title, date=date, description=description)
+
+
+@mcp.tool()
+def media_control_tool(action: str) -> str:
+    """Control media playback/volume via simulated keys. Args: action(str) —
+    one of play_pause, next, prev, volume_up, volume_down, mute."""
+    return media_control(action=action)
+
+
+@mcp.tool()
+def set_volume_tool(level: int) -> str:
+    """Set system output volume to an absolute percentage. Args: level(int, 0-100)."""
+    return set_volume(level=level)
+
+
+@mcp.tool()
+def launch_app_tool(name: str) -> str:
+    """Launch a configured application by name. Only apps listed in the
+    user's pc_control_apps config may be launched. Args: name(str)."""
+    return launch_app(name=name)
+
+
+@mcp.tool()
+def list_windows_tool() -> str:
+    """List titles of currently visible windows on the desktop."""
+    return list_windows()
+
+
+@mcp.tool()
+def focus_window_tool(name: str) -> str:
+    """Bring a window to the foreground by matching part of its title. Args: name(str)."""
+    return focus_window(name=name)
 
 
 if __name__ == "__main__":

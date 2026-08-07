@@ -78,7 +78,7 @@ DEFAULTS: dict[str, Any] = {
     "ui_render_mode": "orb",        # orb | avatar
     "ui_avatar_vrm_path": "",       # filename under voice/static/avatar/models/; empty = placeholder.vrm
     # Safety
-    "requires_confirmation": ["create_note", "append_note", "forget_fact"],
+    "requires_confirmation": ["create_note", "append_note", "forget_fact", "create_calendar_event"],
     "confirm_timeout_seconds": 30,
     "killswitch_voice_phrases": ["stand down", "pause yourself", "resume duties"],
     # Streaming replies (sentence-by-sentence TTS pipeline)
