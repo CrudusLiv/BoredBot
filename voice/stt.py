@@ -49,18 +49,26 @@ def _load_model():
 
 
 def _wav_to_float32(audio_bytes: bytes):
-    """Decode 16kHz mono int16 WAV bytes to float32 numpy array."""
+    """Decode 16kHz mono int16 WAV bytes to float32 numpy array.
+    Returns (samples, duration_s)."""
     import numpy as np
     buf = io.BytesIO(audio_bytes)
     with wave.open(buf) as wf:
         frames = wf.readframes(wf.getnframes())
-    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+        duration_s = wf.getnframes() / float(wf.getframerate())
+    samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    return samples, duration_s
 
 
 def transcribe(audio_bytes: bytes) -> str:
-    """Transcribe WAV bytes; returns the recognised string (may be empty)."""
+    """Transcribe WAV bytes; returns the recognised string (may be empty).
+
+    Logs the raw transcription, recording duration, and word rate to the
+    audit log on every call — this is diagnostic data for the "STT
+    sometimes garbles commands" report, not a behavior change to the
+    return value."""
     model = _load_model()
-    audio = _wav_to_float32(audio_bytes)
+    audio, duration_s = _wav_to_float32(audio_bytes)
     from voice import config as cfg
     conf = cfg.load()
     segments, _ = model.transcribe(
@@ -73,4 +81,14 @@ def transcribe(audio_bytes: bytes) -> str:
         },
         condition_on_previous_text=False,
     )
-    return " ".join(seg.text for seg in segments).strip()
+    text = " ".join(seg.text for seg in segments).strip()
+
+    word_count = len(text.split())
+    wps = round(word_count / duration_s, 2) if duration_s > 0 else 0.0
+    from voice import audit
+    audit.log("stt", text, meta={
+        "duration_s": round(duration_s, 2),
+        "word_count": word_count,
+        "words_per_second": wps,
+    })
+    return text
