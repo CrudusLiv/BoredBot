@@ -58,3 +58,22 @@ def set_volume(level: int) -> str:
     endpoint = _volume_endpoint()
     endpoint.SetMasterVolumeLevelScalar(clamped / 100.0, None)
     return f"volume set to {clamped}%"
+
+
+def launch_app(name: str) -> str:
+    """Launch a configured application by spoken name. Allowlist-only —
+    only names present in voice/config.json's pc_control_apps may be
+    launched; anything else is refused, not attempted. Args: name(str)."""
+    from voice import config as cfg
+    apps = cfg.load().get("pc_control_apps", {}) or {}
+    lookup = {k.lower(): v for k, v in apps.items()}
+    target = lookup.get(name.lower())
+    if target is None:
+        allowed = ", ".join(sorted(apps)) or "(none configured)"
+        return f"{name!r} is not allowed. Configured apps: {allowed}"
+    import os
+    try:
+        os.startfile(target)  # nosec B606 -- target is allowlist-resolved, not raw voice input
+    except OSError as exc:
+        return f"failed to launch {name!r}: {exc}"
+    return f"launched {name}"
