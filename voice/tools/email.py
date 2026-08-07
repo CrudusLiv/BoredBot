@@ -2,8 +2,8 @@
 from __future__ import annotations
 import voice  # noqa: F401
 
-_URGENT = ["urgent", "asap", "deadline", "overdue", "action required",
-           "respond by", "reply needed", "important", "follow up"]
+URGENT_KEYWORDS = ["urgent", "asap", "deadline", "overdue", "action required",
+                    "respond by", "reply needed", "important", "follow up"]
 _SUB = ["unsubscribe", "newsletter", "noreply", "no-reply",
         "marketing", "promo", "notification", "digest", "weekly"]
 
@@ -20,7 +20,7 @@ def triage_inbox(days: int = 3) -> str:
     for i, e in enumerate(emails):
         subj = (e.get("subject") or "").lower()
         snip = (e.get("snippet") or "").lower()
-        if any(k in subj or k in snip for k in _URGENT):
+        if any(k in subj or k in snip for k in URGENT_KEYWORDS):
             urgent_idx.add(i)
     lines = [f"{len(emails)} email(s) in last {days}d — {len(urgent_idx)} flagged urgent."]
     for i, e in enumerate(emails):
