@@ -143,35 +143,6 @@ def test_fired_timestamp_persists_across_restart(env):
 
 # --- fast-poll cadence ---
 
-def test_full_tick_runs_only_when_interval_elapsed(env, monkeypatch):
-    hb = make_hb([1.0] * 100)  # active user; idle check is a no-op
-    ticks: list[int] = []
-    monkeypatch.setattr(hb_mod, "_tick", lambda: ticks.append(1))
-    monkeypatch.setattr(hb, "_run_scheduled", lambda: None)
-    # 30-min interval at 60 s polls → full tick on the 30th poll, not before
-    for _ in range(29):
-        hb._poll_once()
-    assert ticks == []
-    hb._poll_once()
-    assert ticks == [1]
-    assert hb._ticks_since_full == 0
-
-
-def test_idle_check_error_does_not_starve_slow_tick(env, monkeypatch):
-    def _boom():
-        raise RuntimeError("boom")
-
-    hb = Heartbeat(interval_minutes=30, idle_fn=_boom)
-    ticks: list[int] = []
-    monkeypatch.setattr(hb_mod, "_tick", lambda: ticks.append(1))
-    monkeypatch.setattr(hb, "_run_scheduled", lambda: None)
-    for _ in range(29):
-        hb._poll_once()
-    assert ticks == []
-    hb._poll_once()
-    assert ticks == [1]
-
-
 def test_context_poll_seconds_clamped(env):
     hb = Heartbeat(interval_minutes=30, context_poll_seconds=0, idle_fn=lambda: None)
     assert hb._context_poll_seconds == 1

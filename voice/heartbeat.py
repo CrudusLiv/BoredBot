@@ -1,34 +1,20 @@
 """Background heartbeat — posts notices and queues proactive spoken text.
 
-The loop wakes every context_poll_seconds (default 60 s) for the cheap
-idle-return check. Two independent things ride that same fast poll:
-
-  - _tick() (calendar/email/deadline notices, dedup'd) stays on the
-    original heartbeat_interval_minutes cadence (default 30) via a tick
-    counter.
-  - _run_scheduled()'s tasks each run on their own interval — see
-    Heartbeat._SCHEDULE. Most default to 30 minutes (unchanged from
-    before this became per-task); gcal_sync and github_digest default to
-    5 minutes, overridable via gcal_sync_interval_minutes /
-    github_digest_interval_minutes.
-
-Per slow tick (_tick(), every heartbeat_interval_minutes, default 30):
-  1. Upcoming calendar events (today via gcal_int)
-  2. Unread email count (gmail_int)
-  3. Upcoming deadlines (DEADLINES.md in the configured vault, if any)
-
-When speak_queue is provided and proactive_tts is true:
-  4. Morning briefing (once per day at briefing_time)
-  5. Evening wrap-up (once per day at wrap_time)
-  6. Pre-event nudge (nudge_minutes before each calendar event)
+The loop wakes every context_poll_seconds (default 60 s). Each fast poll
+runs the cheap idle-return + activity-awareness checks, then
+_run_scheduled(), which fires each task in _SCHEDULE independently once
+its own interval has elapsed (see Heartbeat._SCHEDULE). Every check that
+can speak is event-triggered and deduped against persisted state — nothing
+announces on a bare timer with no underlying change (that was the old
+_tick()-based design; see
+docs/superpowers/specs/2026-08-07-usability-overhaul-design.md §2 for why
+it was replaced).
 
 Notices are written to get_data_dir()/voice_notices.jsonl.
 Spoken text is pushed to speak_queue as plain str items.
 """
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import queue as _queue_mod
 import re
@@ -193,61 +179,9 @@ def _fetch_deadlines() -> list[str]:
         return []
 
 
-def _check_calendar() -> list[str]:
-    try:
-        events = _fetch_events(days=1, max_results=10)
-        if not events:
-            return []
-        lines = [f"{e.get('start', '')[:16]}  {e.get('summary', '(no title)')}" for e in events[:3]]
-        return [f"Calendar: {'; '.join(lines)}"[:120]]
-    except Exception:
-        return []
-
-
-def _check_email() -> list[str]:
-    _sink = io.StringIO()
-    try:
-        import sys
-        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-        from integrations import gmail_int  # type: ignore
-        with contextlib.redirect_stdout(_sink), contextlib.redirect_stderr(_sink):
-            msgs = gmail_int.list_recent(days=1, max_results=5)
-        if msgs:
-            return [f"Email: {len(msgs)} new message(s) in the last 24h"]
-    except Exception:
-        pass
-    return []
-
-
-def _check_deadlines() -> list[str]:
-    lines = _fetch_deadlines()
-    if lines:
-        snippet = "; ".join(lines[:2])
-        return [f"Deadlines: {snippet[:120]}"]
-    return []
-
-
-# Notices carried over from the previous _tick() — in-memory only (a restart
-# just re-baselines, same as _away_since), so a slow tick doesn't re-toast
-# the identical calendar/email/deadline notice it already posted.
-_last_tick_notices: set[str] = set()
-
-
-def _tick() -> None:
-    global _last_tick_notices
-    notices: list[str] = []
-    notices.extend(_check_calendar())
-    notices.extend(_check_email())
-    notices.extend(_check_deadlines())
-    for text in notices:
-        if text not in _last_tick_notices:
-            _post(text)
-    _last_tick_notices = set(notices)
-
-
 class Heartbeat:
-    """Background daemon thread. Calls _tick() each interval and schedules
-    proactive spoken briefings when speak_queue is provided."""
+    """Background daemon thread. Runs _SCHEDULE's event-triggered checks
+    and schedules proactive spoken briefings when speak_queue is provided."""
 
     # Per-task cadence for _run_scheduled(): (name, method_name,
     # default_interval_minutes, config_key). config_key, if set, overrides
@@ -276,10 +210,8 @@ class Heartbeat:
         idle_fn=None,
     ) -> None:
         from voice import idle as _idle
-        self._interval = interval_minutes * 60
         self._context_poll_seconds = max(1, int(context_poll_seconds))
         self._idle_fn = idle_fn if idle_fn is not None else _idle.get_idle_seconds
-        self._ticks_since_full = 0
         self._last_run: dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -379,7 +311,6 @@ class Heartbeat:
         from voice import killswitch
         try:
             if not self._is_quiet() and not killswitch.is_paused():
-                _tick()
                 self._run_scheduled()
         except Exception as _e:
             print(f"[heartbeat] tick error: {_e}", flush=True)
@@ -395,9 +326,9 @@ class Heartbeat:
     def _poll_once(self) -> None:
         """One fast-cadence poll. Activity awareness (the silent busy-state gate
         + live UI indicator) runs 24/7 so it works even during quiet hours.
-        Idle-return and the expensive slow tick (calendar/email/deadlines +
-        scheduled briefings) stay gated to non-quiet hours, so Vesper still never
-        speaks, toasts, or nudges at night."""
+        Idle-return and the scheduled briefings/checks stay gated to
+        non-quiet hours, so Vesper still never speaks, toasts, or nudges at
+        night."""
         try:
             self._check_activity()
         except Exception as _e:
@@ -408,10 +339,6 @@ class Heartbeat:
             self._check_idle_return()
         except Exception as _e:
             print(f"[heartbeat] idle check error: {_e}", flush=True)
-        self._ticks_since_full += 1
-        if self._ticks_since_full * self._context_poll_seconds >= self._interval:
-            self._ticks_since_full = 0
-            _tick()
         # _run_scheduled() is called every fast poll -- each task in
         # _SCHEDULE self-gates on its own interval, so this is cheap when
         # nothing is due yet (see _run_scheduled's docstring).
