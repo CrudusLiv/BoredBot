@@ -40,6 +40,7 @@ from voice.tools.search import search_vault
 from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
 from voice.tools.calendar import upcoming_events
+from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
 from voice.memory import remember, forget
 
 _register("triage_inbox",
@@ -80,3 +81,20 @@ _register("complete_deadline",
     "Mark a deadline as completed — moves its row from Active to Done in DEADLINES.md "
     "so alerts stop. REQUIRES CONFIRMATION. Args: query(str) — a few words from the deadline title.",
     complete_deadline)
+_register("media_control",
+    "Control media playback/volume via simulated keys. Args: action(str) — one of "
+    "play_pause, next, prev, volume_up, volume_down, mute.",
+    media_control)
+_register("set_volume",
+    "Set system output volume to an absolute percentage. Args: level(int, 0-100).",
+    set_volume)
+_register("launch_app",
+    "Launch a configured application by name. Only apps listed in the user's "
+    "pc_control_apps config may be launched — anything else is refused. Args: name(str).",
+    launch_app)
+_register("list_windows",
+    "List titles of currently visible windows on the desktop.",
+    list_windows)
+_register("focus_window",
+    "Bring a window to the foreground by matching part of its title. Args: name(str).",
+    focus_window)
