@@ -1,0 +1,17 @@
+{
+  "extraPaths": [
+    ".claude/scripts",
+    ".claude/scripts/integrations",
+    ".claude/scripts/heartbeat",
+    ".claude/scripts/memory",
+    ".claude/scripts/security",
+    ".claude/scripts/finance",
+    ".claude"
+  ],
+  "exclude": [
+    "Dynamous",
+    ".claude/data",
+    ".claude/hooks/__pycache__",
+    ".claude/scripts/**/__pycache__", "**/node_modules", "**/__pycache__", "**/.*"
+  ]
+}

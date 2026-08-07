@@ -1,0 +1,51 @@
+# Brainstorm sessions
+.superpowers/
+
+# Environment
+.env
+.venv/
+*.token.json
+graphify-out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code state
+.claude/data/
+*.db
+
+# Personal vault — kept local-only, never committed.
+# (Was untracked on 2026-05-16; previously lived in this repo.)
+Dynamous/Memory/
+
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller build output
+build/
+dist/
+*.egg-info/
+
+# Tray smoke-test screenshot artifacts
+.claude/scripts/tray/_smoke_*.png
+
+# Generated plans
+.agent/
+
+# Heartbeat state files
+.claude/data/gcal_synced.json
+
+# Runtime data directory (databases, caches, personal docs, SSH keys)
+data/
+
+# Local-only state (do not commit)
+.claude/settings.local.json
+.claude/chat/*
+!.claude/chat/intent_parser.py
+!.claude/chat/about.py
+Dynamous/Memory/.obsidian/
+
+.playwright-test-results/
+.playwright-mcp

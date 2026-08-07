@@ -1,0 +1,20 @@
+{
+  "wakeword_engine": "vosk",
+  "wakeword_keyword": "vesper",
+  "model": "sonnet",
+  "tts_engine": "elevenlabs",
+  "tts_voice": "en-GB-SoniaNeural",
+  "elevenlabs_voice_id": "pFZP5JQG7iQjIQuC4Bku",
+  "ptt_key": "space",
+  "max_history_turns": 40,
+  "quiet_hours_start": "22:00",
+  "quiet_hours_end": "09:00",
+  "heartbeat_enabled": true,
+  "heartbeat_interval_minutes": 30,
+  "ui_enabled": true,
+  "ui_port": 7070,
+  "requires_confirmation": ["create_note", "append_note", "forget_fact", "launch_app", "activate_profile"],
+  "vad_silence_s": 0.5,
+  "vad_max_s": 8.0,
+  "vad_silence_threshold": 0.01
+}

@@ -1,0 +1,55 @@
+# All Python deps for the Second Brain (.claude/) tooling.
+# Install with: py -m pip install -r .claude/requirements.txt
+
+# Phase 2: hooks (PreCompact + SessionEnd distillation)
+anthropic>=0.40.0
+
+# Phase 3: hybrid RAG memory search
+fastembed>=0.4.0
+sqlite-vec>=0.1.6
+
+# Phase 4: integrations
+discord.py>=2.3
+PyGithub>=2.1
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
+python-pptx>=0.6
+pypdf>=4.0
+msal>=1.28.0
+
+winotify>=1.1.0
+
+# Dashboard (2026-06-21)
+fastapi>=0.115
+uvicorn>=0.30
+jinja2>=3.1
+itsdangerous>=2.2
+
+# Plan 2026-05-13: test framework (first tests in project)
+pytest>=8.0
+httpx>=0.27
+
+# Tray app
+Pillow>=10.0
+pystray>=0.19
+customtkinter>=5.2
+psutil>=5.9
+pyinstaller>=6.0
+
+# Phase 2026-06: OCR processing for image-only slides
+easyocr>=1.7
+pdf2image>=1.16
+
+# Voice assistant (Tier 3 — audio/STT/TTS)
+faster-whisper>=1.0
+edge-tts>=6.0
+sounddevice>=0.4
+pynput>=1.7
+numpy>=1.26
+openwakeword>=0.6
+vosk>=0.3.45
+
+# Kokoro local TTS (alternative to edge-tts — offline, high quality)
+kokoro>=0.9
+soundfile>=0.12

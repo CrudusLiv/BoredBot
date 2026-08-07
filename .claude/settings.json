@@ -1,0 +1,86 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\note-capture.py\"" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\pre-tool-use-guard.py\"" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-start-context.py\"" }
+        ]
+      },
+      {
+        "matcher": "resume",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-start-context.py\"" }
+        ]
+      },
+      {
+        "matcher": "clear",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-start-context.py\"" }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-start-context.py\"" }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\pre-compact-flush.py\"" }
+        ]
+      },
+      {
+        "matcher": "manual",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\pre-compact-flush.py\"" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "clear",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-end-flush.py\"" }
+        ]
+      },
+      {
+        "matcher": "logout",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-end-flush.py\"" }
+        ]
+      },
+      {
+        "matcher": "prompt_input_exit",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-end-flush.py\"" }
+        ]
+      },
+      {
+        "matcher": "other",
+        "hooks": [
+          { "type": "command", "command": "py \"$CLAUDE_PROJECT_DIR\\.claude\\hooks\\session-end-flush.py\"" }
+        ]
+      }
+    ]
+  }
+}

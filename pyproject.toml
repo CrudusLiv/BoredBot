@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper"
+version = "0.1.0"
+description = "Vesper -- local-first voice assistant"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[project.scripts]
+vesper = "voice.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voice*"]
+
+# ---- Dependency groups -------------------------------------------------------
+# Install the core group for a working voice app:
+#   pip install -e ".[core]"
+# Add tts-kokoro for offline high-quality TTS (~300 MB first run):
+#   pip install -e ".[core,tts-kokoro]"
+# Add build to create the Windows .exe:
+#   pip install -e ".[core,build]"
+
+[project.optional-dependencies]
+core = [
+    # Web / async
+    "fastapi==0.136.3",
+    "uvicorn[standard]==0.48.0",
+    "websockets==16.0",
+    "pydantic==2.13.4",
+    "h11==0.16.0",
+    "httpx==0.28.1",
+    # AI
+    "anthropic==0.100.0",
+    # STT
+    "faster-whisper==1.2.1",
+    "vosk==0.3.45",
+    "openwakeword==0.6.0",
+    # TTS
+    "edge-tts==7.2.8",
+    # Audio
+    "sounddevice==0.5.5",
+    "numpy==2.4.4",
+    # Input / UI
+    "pynput==1.8.2",
+    "pystray==0.19.5",
+    "Pillow==12.2.0",
+    "customtkinter==5.2.2",
+    # Windows-only
+    "pywin32==312",
+]
+
+tts-kokoro = [
+    # Offline neural TTS (~300 MB model download on first use)
+    "kokoro>=0.9.2",
+    "soundfile>=0.12.1",
+]
+
+build = [
+    "pyinstaller>=6.11.1",
+]
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"

@@ -1,0 +1,2810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Vesper</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-panel: 620ms;
+    --dur-item: 550ms;
+    --dur-soft: 320ms;
+    --radius-lg: 22px;
+    --radius-md: 16px;
+    --radius-sm: 12px;
+    --glass-bg: rgba(16, 14, 30, 0.5);
+    --glass-bg-raise: rgba(20, 17, 38, 0.62);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-blur: 18px;
+    /* SOUL-canon tokens — near-black, steel, muted purple, yellow-green accent */
+    --bg: #0a0a0f;
+    --bg-raise: #101018;
+    --line: #3a3d46;
+    --line-dim: #22242c;
+    --core: #6a4fc8;
+    --core-dim: #2a1f55;
+    --accent: #c8e64c;
+    --danger: #e6564c;
+    /* connection status gets its own color family — deliberately far from
+       silver/red/purple so OFFLINE is never mistaken for thinking-mode red */
+    --conn-online: #2fd8c4;
+    --conn-offline: #e0a52c;
+    --text: #c9cbd4;
+    --text-dim: #7a7d88;
+    --mono: 'Cascadia Mono', Consolas, monospace;
+    /* live mode color (JS writes these every frame as the orb cross-fades
+       between default/listening/thinking/speaking) — everything below that's
+       meant to "feel like the same system" as the orb reads off these three numbers */
+    --mode-r: 220; --mode-g: 232; --mode-b: 255;
+  }
+  body {
+    width: 100vw; height: 100vh; overflow: hidden;
+    background: radial-gradient(ellipse at center, #0d0d15 0%, #07070b 100%);
+    font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  canvas { display: block; position: fixed; inset: 0; }
+  #starfield { z-index: 0; pointer-events: none; }
+  /* ambient wash: a soft full-screen glow tinted with the orb's current mode
+     color (silver default / yellow-green listening / red thinking / purple
+     speaking) so the room itself feels like it's lit by her, not just the
+     ball in the middle */
+  #mode-wash {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 42%,
+      rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.22), transparent 64%);
+  }
+  #vesper-canvas {
+    z-index: 1;
+    transition: transform var(--dur-panel) var(--ease-soft), opacity var(--dur-panel) var(--ease-soft);
+    transform-origin: 100% 100%;
+  }
+  body.orb-docked #vesper-canvas { transform: scale(0.32); opacity: 0.62; }
+  @media (prefers-reduced-motion: reduce) {
+    #vesper-canvas { transition: none; }
+  }
+
+  /* ── HUD labels ───────────────────────────────────── */
+  #name {
+    position: fixed; top: 28px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 7px; color: #7264b8;
+    text-transform: uppercase; pointer-events: none;
+    font-weight: 500;
+  }
+
+  /* ── Text input bar ───────────────────────────────── */
+  #input-bar {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: min(520px, 90vw); padding: 10px 0 18px 0;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #input-text {
+    flex: 1; background: rgba(10, 10, 26, 0.92); border: 1px solid #30306a;
+    border-radius: 22px; padding: 10px 18px;
+    color: #c8c8ec; font-family: inherit;
+    font-size: 14px; letter-spacing: 0.2px; outline: none;
+    transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft);
+  }
+  #send-btn {
+    background: rgba(16, 16, 44, 0.92); border: 1px solid #30306a;
+    border-radius: 50%; width: 38px; height: 38px; flex-shrink: 0;
+    cursor: pointer; color: #7878b8; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft),
+      background var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft);
+  }
+  /* ── Edge tab trigger (replaces hamburger) ────────── */
+  #panel-edge {
+    position: fixed; top: 50%; right: 0;
+    transform: translateY(-50%);
+    width: 22px; height: 64px;
+    background: rgba(16,14,44,0.88); border: 1px solid #2e2e68;
+    border-right: none; border-radius: 8px 0 0 8px;
+    cursor: pointer; z-index: 15;
+    display: flex; align-items: center; justify-content: center;
+    color: #5858a0; font-size: 13px;
+    transition: color 0.2s, background 0.2s, border-color 0.2s;
+  }
+  #panel-edge:hover { color: #aa88ff; background: rgba(100,60,200,0.2); border-color: #5544aa; }
+  #panel-edge.hidden { opacity: 0; pointer-events: none; }
+
+  /* ── Side panel (drawer) ──────────────────────────── */
+  #side-panel {
+    position: fixed; top: 0; right: -400px; width: 380px; height: 100vh;
+    background: rgba(8, 8, 22, 0.97); border-left: 1px solid #24244e;
+    transition: right 0.28s cubic-bezier(0.4,0,0.2,1); z-index: 20;
+    display: flex; flex-direction: column;
+    backdrop-filter: blur(20px);
+  }
+  #side-panel.open { right: 0; }
+
+  /* ── Panel header ─────────────────────────────────── */
+  #panel-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 52px 14px 0 14px;
+    flex-shrink: 0;
+  }
+
+  /* ── Tab rail ─────────────────────────────────────── */
+  #tab-rail {
+    display: flex; gap: 3px; flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 4px;
+  }
+  .ptab {
+    flex: 1; padding: 7px 0; background: none; border: 1px solid transparent;
+    border-radius: 9px;
+    color: #5a5a92; font-family: inherit;
+    font-size: 9px; letter-spacing: 0.5px; text-transform: uppercase;
+    cursor: pointer; transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft), border-color var(--dur-soft) var(--ease-soft);
+    font-weight: 500;
+  }
+  .ptab:hover:not(.active) { color: #9090cc; background: rgba(255,255,255,0.05); }
+
+  /* ── Close button ─────────────────────────────────── */
+  #panel-close {
+    width: 30px; height: 30px; background: none; border: none; flex-shrink: 0;
+    color: #5858a0; cursor: pointer; font-size: 20px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft);
+    margin-left: 8px; margin-bottom: 1px;
+  }
+  #panel-close:hover { color: #d0c8ff; background: rgba(255,255,255,0.08); }
+
+  /* Divider below tabs */
+  #tab-divider { height: 1px; background: #1c1c42; margin: 12px 0 0; flex-shrink: 0; }
+
+  .ptab-content {
+    display: none; flex: 1; overflow-y: auto; padding: 16px 16px 20px;
+    flex-direction: column; gap: 12px;
+    scrollbar-width: thin; scrollbar-color: #2e2e60 transparent;
+  }
+  .ptab-content.active { display: flex; }
+
+  /* ── Search bar (Finance + Study) ────────────────── */
+  .search-bar {
+    display: flex; align-items: center;
+    background: rgba(14,14,34,0.9); border: 1px solid #28285a;
+    border-radius: 24px; overflow: hidden; transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft);
+  }
+  .search-bar:focus-within {
+    border-color: #7755cc;
+    box-shadow: 0 0 0 3px rgba(119,85,204,0.1);
+  }
+  .search-bar input {
+    flex: 1; background: none; border: none; outline: none;
+    padding: 10px 16px; color: #c0c0e8;
+    font-family: inherit; font-size: 13px;
+  }
+  .search-bar input::placeholder { color: #464666; }
+  .search-bar-btn {
+    background: none; border: none; border-left: 1px solid #28285a;
+    padding: 0 16px; height: 40px; cursor: pointer; white-space: nowrap;
+    color: #9090c8; font-family: inherit;
+    font-size: 12px; letter-spacing: 0.3px; font-weight: 500;
+    transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft);
+  }
+  .search-bar-btn:hover { color: #c8b4ff; background: rgba(119,85,204,0.14); }
+
+  /* Pill button */
+  .pill-btn {
+    padding: 7px 16px; background: rgba(18,18,48,0.9);
+    border: 1px solid #2c2c60; border-radius: 20px;
+    color: #8888c4; font-family: inherit;
+    font-size: 12px; letter-spacing: 0.3px; white-space: nowrap; font-weight: 500;
+    cursor: pointer; transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft);
+  }
+  .pill-btn:hover {
+    border-color: #7755cc; color: #c8b4ff;
+    background: rgba(119,85,204,0.14);
+    box-shadow: 0 0 10px rgba(119,85,204,0.15);
+  }
+  .pill-btn:active { background: rgba(119,85,204,0.24); }
+
+  .panel-output {
+    font-size: 13px; color: #a4a4cc; line-height: 1.75;
+    white-space: pre-wrap; word-break: break-word; margin-top: 4px;
+  }
+
+  /* ── Habits list ──────────────────────────────────── */
+  .habit-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 8px; border-bottom: 1px solid #141438; cursor: pointer;
+    transition: background var(--dur-soft) var(--ease-soft); border-radius: 8px;
+    animation: driftIn var(--dur-item) var(--ease-soft) both;
+  }
+  .habit-row:hover:not(.done) { background: rgba(100,60,200,0.1); }
+  .habit-row.done { cursor: default; }
+  .habit-check {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid #36367a; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: transparent;
+    transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft);
+  }
+  .habit-row.done .habit-check { border-color: #99cc33; color: #99cc33; }
+  .habit-name { font-size: 13px; color: #9898cc; letter-spacing: 0.2px; transition: color var(--dur-soft) var(--ease-soft); }
+  .habit-row.done .habit-name { color: #aadd44; }
+  .habits-meta {
+    font-size: 11px; color: #606098; letter-spacing: 0.5px;
+    padding-top: 10px; border-top: 1px solid #141438;
+  }
+
+  /* ── Study panel ──────────────────────────────────── */
+  .study-row {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 14px 0; border-bottom: 1px solid #141438;
+  }
+  .study-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .study-row-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .study-row-label {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: #6868a4; font-weight: 600;
+  }
+  .study-output {
+    font-size: 13px; color: #a4a4cc; line-height: 1.75;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .quiz-card {
+    background: rgba(14,14,36,0.88); border: 1px solid #222256;
+    border-radius: 12px; padding: 13px 15px; margin-bottom: 6px; cursor: pointer;
+    transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft);
+  }
+  .quiz-card:hover { border-color: #444488; background: rgba(22,22,52,0.95); }
+  .quiz-q { font-size: 13px; color: #aaaadd; line-height: 1.65; }
+  .quiz-a {
+    font-size: 13px; color: #aadd44; margin-top: 9px; display: none;
+    line-height: 1.65; border-top: 1px solid #1e1e48; padding-top: 9px;
+  }
+  .quiz-card.revealed .quiz-a { display: block; }
+  .quiz-lvl {
+    font-size: 9px; color: #404070; letter-spacing: 1.5px; margin-top: 5px;
+    text-transform: uppercase;
+  }
+
+  /* ── Drop overlay ─────────────────────────────────── */
+  /* ── Notice badge on edge tab ─────────────────── */
+  #notice-badge {
+    position: absolute; top: 5px; right: 3px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #cc3355; pointer-events: none; display: none;
+  }
+  #notice-badge.visible { display: block; }
+
+  /* ── Chat history ──────────────────────────────── */
+  #chat-history { display: flex; flex-direction: column; gap: 8px; }
+  .chat-bubble {
+    max-width: 88%; padding: 9px 13px; border-radius: 14px;
+    font-size: 13px; line-height: 1.6; word-break: break-word;
+  }
+  .chat-bubble.user {
+    background: rgba(110,70,210,0.22); align-self: flex-end;
+    color: #c4b4ff; border: 1px solid rgba(130,90,230,0.2);
+  }
+  .chat-bubble.assistant {
+    background: rgba(255,255,255,0.05); align-self: flex-start;
+    color: #b0b0d4; border: 1px solid rgba(255,255,255,0.07);
+  }
+  .bubble-time { font-size: 10px; color: #40406a; margin-top: 4px; display: block; }
+  .chat-empty, .notices-empty {
+    font-size: 12px; color: #404068; text-align: center;
+    letter-spacing: 1px; margin-top: 24px;
+  }
+
+  /* ── Notices feed ──────────────────────────────── */
+  .notice-entry {
+    padding: 10px 12px; border-radius: 10px; border-left: 3px solid #28285a;
+    background: rgba(255,255,255,0.03);
+    font-size: 12px; color: #8888c0; line-height: 1.65; word-break: break-word;
+    margin-bottom: 2px;
+    animation: driftIn var(--dur-item) var(--ease-soft) both;
+  }
+  .notice-entry.unread { border-left-color: #7755cc; color: #b0b0d4; }
+  .notice-entry.urgent { border-left-color: #cc3355; }
+  .notice-time { font-size: 10px; color: #404068; display: block; margin-bottom: 4px; }
+
+  /* ── Spinner ───────────────────────────────────── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin-inline {
+    display: inline-block; width: 10px; height: 10px;
+    border: 2px solid rgba(119,85,204,0.25); border-top-color: #9977dd;
+    border-radius: 50%; animation: spin 0.65s linear infinite;
+    vertical-align: middle; margin-left: 4px;
+  }
+
+  #drop-overlay {
+    position: fixed; inset: 0;
+    background: rgba(80,40,200,0.1);
+    border: 2px dashed #5544cc;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 30; opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-soft) var(--ease-soft);
+  }
+  #drop-overlay.active { opacity: 1; pointer-events: all; }
+  #drop-overlay span {
+    font-size: 12px; letter-spacing: 4px; color: #9988ee;
+    text-transform: uppercase; pointer-events: none;
+  }
+
+  /* ── HUD clock ─────────────────────────────────── */
+  #hud-clock {
+    position: fixed; top: 18px; right: 20px;
+    text-align: right; pointer-events: none; z-index: 5;
+  }
+  #clock-time {
+    font-size: 22px; color: #6655aa; letter-spacing: 2px;
+    font-weight: 300; font-variant-numeric: tabular-nums;
+  }
+  #clock-date {
+    font-size: 9px; color: #3d3d70; letter-spacing: 2px;
+    text-transform: uppercase; margin-top: 3px;
+  }
+
+  /* ── Calendar events ────────────────────────────── */
+  .cal-event {
+    padding: 10px 12px; border-radius: 10px; border-left: 3px solid #3344aa;
+    background: rgba(255,255,255,0.03); margin-bottom: 6px;
+    font-size: 12px; color: #8888c0; line-height: 1.5; word-break: break-word;
+    animation: driftIn var(--dur-item) var(--ease-soft) both;
+  }
+  .cal-event-time { font-size: 10px; color: #404080; display: block; margin-bottom: 3px; }
+  .cal-event-title { color: #a0a0cc; }
+
+  /* ── Settings panel ─────────────────────────────── */
+  .settings-field-label {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #6868a4; font-weight: 600; margin-bottom: 5px;
+  }
+  .settings-input, .settings-select {
+    width: 100%; background: rgba(14,14,34,0.9); border: 1px solid #28285a;
+    border-radius: 8px; padding: 8px 12px; color: #c0c0e8;
+    font-family: inherit; font-size: 13px; outline: none;
+    transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft);
+  }
+  .settings-input:focus, .settings-select:focus {
+    border-color: #7755cc; box-shadow: 0 0 0 2px rgba(119,85,204,0.12);
+  }
+  .settings-select option { background: #0d0d22; }
+  .settings-save-hint {
+    font-size: 10px; color: #3d3d6a; margin-top: 3px; letter-spacing: 0.5px;
+    height: 14px; transition: color var(--dur-soft) var(--ease-soft);
+  }
+  .settings-save-hint.saved { color: #66cc44; }
+
+  /* ── Apps panel ──────────────────────────────────── */
+  .apps-columns { display: flex; gap: 12px; flex: 1; min-height: 0; }
+  .apps-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .apps-col-label {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #6868a4; font-weight: 600; margin-bottom: 8px;
+  }
+  .apps-col-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .app-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03);
+    border: 1px solid #1c1c42;
+    animation: driftIn var(--dur-item) var(--ease-soft) both;
+  }
+  .app-row-name {
+    font-size: 12px; color: #a0a0cc; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; flex: 1;
+  }
+  .app-row .pill-btn { padding: 4px 10px; font-size: 10px; flex-shrink: 0; }
+  .app-alias-input {
+    width: 70px; background: rgba(14,14,34,0.9); border: 1px solid #28285a;
+    border-radius: 6px; padding: 4px 8px; color: #c0c0e8; font-family: inherit;
+    font-size: 11px; outline: none; flex-shrink: 0;
+  }
+
+  /* ── Profiles panel ──────────────────────────────── */
+  .profile-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line-dim); flex-wrap: wrap;
+    animation: driftIn var(--dur-item) var(--ease-soft) both;
+  }
+  .profile-row-main { flex: 1; min-width: 0; }
+  .profile-row-label { font-size: 12px; color: var(--text); }
+  .profile-row-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .profile-chip {
+    display: inline-block; font-size: 10px; color: var(--text);
+    background: rgba(106,79,200,0.16); border: 1px solid var(--line-dim);
+    border-radius: 999px; padding: 2px 8px; margin: 2px 4px 0 0;
+  }
+  .profile-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .profile-row-actions .pill-btn { padding: 4px 10px; font-size: 10px; }
+  .profile-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .profile-form-row .settings-input { flex: 1; min-width: 120px; }
+  .profile-checks { display: flex; flex-wrap: wrap; gap: 10px; }
+  .profile-checks label, .profile-radio {
+    font-size: 11px; color: var(--text); display: inline-flex; align-items: center; gap: 5px;
+    cursor: pointer;
+  }
+
+/* SOUL-canon chrome — mechanical console around the orb. Tokens live in
+   the :root block above; everything below is layout/behavior on top. */
+/* faint scanline field — restrained, disabled under reduced motion */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 4;
+  background: repeating-linear-gradient(to bottom,
+    transparent 0 2px, rgba(255,255,255,0.012) 2px 3px);
+}
+@media (prefers-reduced-motion: reduce) { body::after { display: none; } }
+
+/* wordmark + status readouts go mono — instrument labels, not prose */
+#name { font-family: var(--mono); color: #9ba0b0; letter-spacing: 10px; }
+#clock-time { font-family: var(--mono); }
+#clock-date { font-family: var(--mono); }
+
+/* input bar: rectangular, hairline steel — console, not chat app */
+#input-text {
+  border-radius: 6px; background: rgba(10,10,16,0.92);
+  border: 1px solid var(--line-dim); font-family: var(--mono);
+  font-size: 13px; color: var(--text);
+}
+#input-text:focus { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,0.10); }
+#input-text::placeholder { color: #4a4d58; }
+#send-btn {
+  border-radius: 6px; border: 1px solid var(--line-dim);
+  background: rgba(14,14,22,0.92); color: var(--text-dim);
+}
+#send-btn:hover {
+  border-color: var(--core); color: #b9a5f5;
+  background: rgba(106,79,200,0.15); box-shadow: none;
+}
+
+/* drawer chrome: glass surface, accent only on the active tab */
+#panel-edge {
+  background: var(--glass-bg-raise); border-color: var(--glass-border);
+  color: var(--text-dim); border-radius: var(--radius-md);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft),
+    border-color var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft);
+}
+#panel-edge:hover { color: var(--accent); background: rgba(200,230,76,0.10); border-color: #4a4f3a; transform: translateY(-1px); }
+#side-panel { background: var(--glass-bg-raise); border-left: 1px solid var(--glass-border); }
+#tab-rail { background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.ptab { border-radius: var(--radius-sm); font-family: var(--mono); letter-spacing: 0.08em; }
+.ptab.active {
+  color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
+  border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.55) !important;
+  background: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.12) !important;
+}
+#notice-badge { background: rgb(var(--mode-r), var(--mode-g), var(--mode-b)); }
+#notice-badge.visible::after { content: ''; position: absolute; top: 50%; left: 50%;
+  width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%;
+  background: #fff; opacity: .85; animation: electron-orbit 2.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { #notice-badge.visible::after { animation: none; } }
+
+/* Rails */
+#confirm-card { position:absolute; left:50%; bottom:120px; transform:translateX(-50%);
+  background:var(--glass-bg-raise); border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding:16px 22px; z-index:40; min-width:300px; text-align:center;
+  box-shadow: 0 20px 70px rgba(0,0,0,.5); }
+#confirm-title { font-family:var(--mono); font-size:10px; letter-spacing:.22em;
+  color:var(--text-dim); margin-bottom:6px; }
+#confirm-tool { font-family:var(--mono); color:#b9a5f5; font-size:14px; }
+#confirm-args { font-family:var(--mono); color:var(--text-dim); font-size:11px;
+  margin:4px 0 10px; word-break:break-all; }
+#confirm-countdown { height:2px; background:var(--line-dim); margin-bottom:12px; border-radius: 2px; overflow: hidden; }
+#confirm-countdown-fill { height:100%; width:100%; background:var(--accent); transition:width .1s linear; }
+#confirm-actions { display:flex; gap:10px; justify-content:center; }
+#confirm-actions button { padding:6px 18px; border-radius:999px; border:1px solid var(--line);
+  background:transparent; color:var(--text); cursor:pointer; font-size:11px;
+  font-family:var(--mono); letter-spacing:.12em;
+  transition: background var(--dur-soft) var(--ease-soft), border-color var(--dur-soft) var(--ease-soft); }
+#confirm-approve { border-color:var(--accent); color:var(--accent); }
+#confirm-actions button:hover { background:rgba(255,255,255,.08); }
+#pause-toggle { position:absolute; top:18px; left:18px; z-index:30; background:transparent;
+  border:1px solid var(--line-dim); color:var(--text-dim); border-radius:999px;
+  padding:4px 9px; cursor:pointer;
+  transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft); }
+#pause-toggle:hover { border-color:var(--line); color:var(--text); }
+#pause-toggle.active { border-color:var(--danger); color:var(--danger); }
+#paused-chip { position:absolute; top:22px; left:60px; z-index:30; color:var(--danger);
+  font-family:var(--mono); font-size:10px; letter-spacing:.24em; }
+body.paused #conn-status { display:none; }
+#usage-readout { position:absolute; left:18px; bottom:18px; z-index:30; color:var(--text-dim);
+  font-size:10px; letter-spacing:.12em; font-family:var(--mono); }
+#conn-status { position:absolute; top:22px; left:64px; z-index:30; color:var(--text-dim);
+  font-size:10px; letter-spacing:.18em; font-family:var(--mono); }
+#conn-status.online { color: var(--conn-online); }
+#conn-status.offline { color: var(--conn-offline); }
+#tool-ticker { position:absolute; right:18px; bottom:56px; z-index:30; color:var(--text-dim);
+  font-size:10px; letter-spacing:.1em; font-family:var(--mono);
+  opacity:0; transition:opacity var(--dur-soft) var(--ease-soft); max-width:40vw; overflow:hidden;
+  text-overflow:ellipsis; white-space:nowrap; }
+.notice-entry { position:relative; padding-right:26px; }
+.notice-dismiss { position:absolute; top:4px; right:4px; background:transparent; border:none;
+  color:var(--text-dim); font-size:14px; cursor:pointer; line-height:1; padding:2px 5px; }
+.notice-dismiss:hover { color:var(--text); }
+[hidden] { display:none !important; }
+
+/* ═══ Perimeter Bridge HUD — everything upfront, drawer → modules overlay ═══ */
+
+/* corner brackets — softened into rounded frame marks */
+.hud-cb { position: fixed; width: 22px; height: 22px; border: 1px solid rgba(255,255,255,.10);
+  z-index: 5; pointer-events: none; opacity: .75; }
+.hud-cb.tl { top: 14px; left: 14px; border-right: 0; border-bottom: 0; border-radius: 10px 0 0 0; }
+.hud-cb.tr { top: 14px; right: 14px; border-left: 0; border-bottom: 0; border-radius: 0 10px 0 0; }
+.hud-cb.bl { bottom: 14px; left: 14px; border-right: 0; border-top: 0; border-radius: 0 0 0 10px; }
+.hud-cb.br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; border-radius: 0 0 10px 0; }
+
+/* top-left readouts */
+#conn-status { top: 20px; left: 26px; }
+#backend-readout { position: fixed; top: 20px; left: 118px; z-index: 30;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: #4a4d58; }
+body.paused #conn-status { display: block; }
+
+/* rails — soft glass cards */
+#left-rail { position: fixed; left: 26px; top: 96px; width: 196px; z-index: 6;
+  font-family: var(--mono); display: flex; flex-direction: column; gap: 13px;
+  padding: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 12px 40px rgba(0,0,0,.28); }
+.rail-lbl { font-size: 9px; letter-spacing: .2em; color: var(--text-dim); text-transform: uppercase; }
+.rail-val { font-size: 13px; color: var(--text); letter-spacing: .1em; margin-top: 3px; }
+.rail-sub { font-size: 9.5px; color: #4a4d58; letter-spacing: .05em; margin-top: 3px; line-height: 1.5; }
+.rail-hair { height: 1px; background: var(--line-dim); }
+#rail-state.listening { color: var(--accent); }
+#rail-state.thinking  { color: #a98ef0; }
+#rail-state.speaking  { color: #b7a6ec; }
+#rail-state.error     { color: var(--danger); }
+#usage-readout { position: static; font-size: 12px; }
+#killswitch-row { display: flex; align-items: center; justify-content: space-between; }
+#pause-toggle { position: static; padding: 3px 9px; font-family: var(--mono);
+  font-size: 9px; letter-spacing: .14em; }
+#paused-chip { position: static; margin-top: 6px; }
+#feed-count { color: var(--accent); letter-spacing: .1em; }
+.notice-entry { padding-right: 44px; }
+.notice-acts { position: absolute; top: 3px; right: 2px; display: flex; }
+.notice-acts .notice-dismiss { position: static; padding: 2px 4px; font-size: 12px; }
+.notice-acts .notice-dismiss:hover { color: var(--accent); }
+.notice-acts .notice-dismiss.del:hover { color: var(--danger); }
+#feed-markall { font-size: 9px; padding: 4px 12px; }
+#tool-ticker { position: static; opacity: 1; max-width: none; white-space: normal;
+  overflow: visible; text-overflow: clip; min-height: 16px; }
+.tool-line { font-size: 9.5px; color: var(--text-dim); letter-spacing: .05em; margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  animation: driftIn var(--dur-item) var(--ease-soft) both; }
+.tool-line.done { color: #4a4d58; }
+
+/* chat strip — column-reverse keeps the newest line visible while collapsed */
+#chat-strip { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+  width: clamp(280px, calc(100vw - 560px), 620px); z-index: 8;
+  max-height: 64px; overflow: hidden;
+  display: flex; flex-direction: column-reverse;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 40%);
+  mask-image: linear-gradient(180deg, transparent, #000 40%);
+  transition: max-height var(--dur-panel) var(--ease-soft); }
+#chat-strip:hover { max-height: 46vh; overflow-y: auto;
+  -webkit-mask-image: none; mask-image: none;
+  background: var(--glass-bg-raise); border: 1px solid var(--glass-border); padding: 12px 14px;
+  border-radius: var(--radius-lg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 14px 50px rgba(0,0,0,.35);
+  scrollbar-width: thin; scrollbar-color: #2a2d36 transparent; }
+.strip-line { font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--text); margin: 3px 0; flex-shrink: 0; }
+.strip-line .who { font-size: 9px; letter-spacing: .14em; margin-right: 8px; }
+.strip-line.user .who { color: #a98ef0; }
+.strip-line.assistant .who { color: var(--accent); }
+#input-bar { width: clamp(280px, calc(100vw - 560px), 620px); }
+
+/* modules launcher — bottom-right, quiet until needed */
+#panel-edge { top: auto; right: 26px; bottom: 22px; transform: none;
+  width: auto; height: auto; padding: 6px 12px; border-radius: 4px;
+  border: 1px solid var(--line-dim); border-right: 1px solid var(--line-dim);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+  color: var(--text-dim); background: rgba(12,12,18,.9); }
+#notice-badge { top: -3px; right: -3px; }
+
+/* drawer → centered modules overlay (all IDs and handlers unchanged) */
+#side-panel { top: 50%; left: 50%; right: auto; bottom: auto;
+  width: min(780px, 92vw); height: min(74vh, 620px);
+  transform: translate(-50%, -50%) scale(0.94) translateY(10px);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+  background: var(--glass-bg-raise); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-panel) var(--ease-soft), transform var(--dur-panel) var(--ease-soft);
+  box-shadow: 0 20px 90px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05); }
+#side-panel.open { right: auto; opacity: 1; pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1) translateY(0); }
+#panel-header { padding: 18px 16px 0 16px; }
+@media (prefers-reduced-motion: reduce) {
+  #side-panel { transition: opacity var(--dur-soft) ease; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* narrow windows: slim the rail so the orb keeps its stage */
+@media (max-width: 1024px) {
+  #left-rail { width: 168px; }
+  #chat-strip, #input-bar { width: clamp(250px, calc(100vw - 470px), 620px); }
+}
+
+/* ═══ Task 9: Modules overlay — depth, rhythm, presence.
+   Panes still wore the old purple/blue theme; pull them onto the SOUL
+   tokens (steel hairlines, muted-purple core, one yellow-green accent per
+   pane) and give the overlay a heartbeat. All scoped to #side-panel. ═══ */
+
+/* presence strip — Vesper's state dot + a dry per-tab remark */
+#panel-presence { display: flex; align-items: center; gap: 9px;
+  padding: 11px 18px 2px; flex-shrink: 0; }
+#presence-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; position: relative;
+  background: var(--core); box-shadow: 0 0 8px rgba(106,79,200,.55);
+  transition: background var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
+#presence-dot::after { content: ''; position: absolute; top: 50%; left: 50%;
+  width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 5px rgba(200,230,76,.7);
+  animation: electron-orbit 3.6s linear infinite; }
+@keyframes electron-orbit {
+  from { transform: rotate(0deg) translateX(9px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(9px) rotate(-360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #presence-dot::after, #notice-badge.visible::after { animation: none; opacity: .6; }
+}
+#presence-dot.listening { background: var(--accent); box-shadow: 0 0 8px rgba(200,230,76,.55); }
+#presence-dot.thinking  { background: #a98ef0; box-shadow: 0 0 8px rgba(169,142,240,.55); }
+#presence-dot.speaking  { background: #b7a6ec; box-shadow: 0 0 8px rgba(183,166,236,.45); }
+#presence-dot.error     { background: var(--danger); box-shadow: 0 0 8px rgba(230,86,76,.55); }
+#presence-remark { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  color: var(--text-dim); opacity: .85; transition: opacity var(--dur-soft) var(--ease-soft); }
+
+#tab-divider { background: var(--line-dim); margin: 12px 0 0; }
+
+/* pane transitions: soft fade + drift, then a gentle stagger on the contents */
+.ptab-content { padding-top: 12px; }
+.ptab-content.active { animation: paneIn var(--dur-panel) var(--ease-soft) both; }
+@keyframes paneIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.ptab-content.active > * { animation: itemIn var(--dur-item) var(--ease-soft) both; }
+.ptab-content.active > *:nth-child(1) { animation-delay: .03s; }
+.ptab-content.active > *:nth-child(2) { animation-delay: .07s; }
+.ptab-content.active > *:nth-child(3) { animation-delay: .11s; }
+.ptab-content.active > *:nth-child(4) { animation-delay: .15s; }
+.ptab-content.active > *:nth-child(5) { animation-delay: .19s; }
+.ptab-content.active > *:nth-child(6) { animation-delay: .23s; }
+.ptab-content.active > *:nth-child(n+7) { animation-delay: .26s; }
+@keyframes itemIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes driftIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ptab-content.active, .ptab-content.active > * { animation: none; }
+  .notice-entry, .cal-event, .habit-row, .app-row, .quiz-card, .chat-bubble, .tool-line { animation: none !important; }
+}
+
+/* search fields → rounded glass input */
+#side-panel .search-bar { border-radius: var(--radius-md);
+  background: rgba(10,10,16,.55); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
+#side-panel .search-bar:focus-within { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
+#side-panel .search-bar input { color: var(--text); font-family: var(--mono); font-size: 12px; }
+#side-panel .search-bar input::placeholder { color: #4a4d58; }
+#side-panel .search-bar-btn { border-left: 1px solid var(--glass-border); color: var(--text-dim);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
+#side-panel .search-bar-btn:hover { color: #b9a5f5; background: rgba(106,79,200,.14); }
+
+/* pills → rounded glass buttons, lift on hover */
+#side-panel .pill-btn { border-radius: 999px;
+  background: rgba(14,14,22,.55); border: 1px solid var(--glass-border); color: var(--text-dim);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft),
+    border-color var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft); }
+#side-panel .pill-btn:hover { border-color: var(--core); color: #b9a5f5;
+  background: rgba(106,79,200,.16); box-shadow: 0 0 16px rgba(106,79,200,.18); transform: translateY(-1px); }
+#side-panel .pill-btn:active { transform: none; background: rgba(106,79,200,.24); }
+
+/* quiz cards */
+#side-panel .quiz-card { border-radius: var(--radius-md);
+  background: rgba(14,14,22,.5); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: driftIn var(--dur-item) var(--ease-soft) both;
+  transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft); }
+#side-panel .quiz-card:hover { border-color: var(--core); background: rgba(18,18,28,.65); transform: translateY(-1px); }
+#side-panel .quiz-q { color: var(--text); }
+#side-panel .quiz-a { color: var(--accent); border-top-color: var(--line-dim); }
+#side-panel .quiz-lvl { color: var(--text-dim); }
+
+/* study rows + section labels → mono instrument labels, steel rules */
+#side-panel .study-row { border-bottom: 1px solid var(--line-dim); }
+#side-panel .study-row-label, #side-panel .apps-col-label,
+#side-panel .settings-field-label { color: var(--text-dim); font-family: var(--mono);
+  letter-spacing: .16em; font-weight: 500; }
+#side-panel .study-output, #side-panel .panel-output { color: var(--text); }
+
+/* notices (overlay only — the feed rail keeps its own styling) */
+#ptab-notices .notice-entry { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
+  border-left: 2px solid var(--line); color: var(--text-dim);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
+#ptab-notices .notice-entry.unread { border-left-color: var(--core); color: var(--text); }
+#ptab-notices .notice-entry.urgent { border-left-color: var(--danger); }
+#ptab-notices .notice-time { color: var(--text-dim); }
+
+/* calendar events */
+#side-panel .cal-event { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
+  border-left: 2px solid var(--core);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#side-panel .cal-event-time { color: var(--text-dim); }
+#side-panel .cal-event-title { color: var(--text); }
+
+/* habit rows */
+#side-panel .habit-row { border-radius: var(--radius-sm); border-bottom: 1px solid var(--line-dim);
+  transition: background var(--dur-soft) var(--ease-soft); }
+#side-panel .habit-row:hover:not(.done) { background: rgba(106,79,200,.12); }
+#side-panel .habit-check { border-color: var(--line); transition: border-color var(--dur-soft) var(--ease-soft), color var(--dur-soft) var(--ease-soft); }
+#side-panel .habit-row.done .habit-check { border-color: var(--accent); color: var(--accent); }
+#side-panel .habit-name { color: var(--text); }
+#side-panel .habit-row.done .habit-name { color: var(--accent); }
+#side-panel .habits-meta { color: var(--text-dim); border-top-color: var(--line-dim); }
+
+/* settings fields */
+#side-panel .settings-input, #side-panel .settings-select { border-radius: var(--radius-sm);
+  background: rgba(10,10,16,.55); border: 1px solid var(--glass-border); color: var(--text);
+  font-family: var(--mono); font-size: 12px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
+#side-panel .settings-input:focus, #side-panel .settings-select:focus { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
+#side-panel .settings-save-hint { color: var(--text-dim); transition: color var(--dur-soft) var(--ease-soft); }
+#side-panel .settings-save-hint.saved { color: var(--accent); }
+
+/* apps rows */
+#side-panel .app-row { border-radius: var(--radius-sm); background: rgba(255,255,255,.03); border: 1px solid var(--glass-border);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
+#side-panel .app-row-name { color: var(--text); }
+#side-panel .app-alias-input { border-radius: var(--radius-sm); background: rgba(10,10,16,.6);
+  border: 1px solid var(--glass-border); color: var(--text); font-family: var(--mono); }
+
+/* chat bubbles */
+#side-panel .chat-bubble { border-radius: var(--radius-md); animation: driftIn var(--dur-item) var(--ease-soft) both; }
+#side-panel .chat-bubble.user { background: rgba(106,79,200,.18); color: #c4b4ff; border: 1px solid rgba(106,79,200,.28); }
+#side-panel .chat-bubble.assistant { background: rgba(255,255,255,.03); color: var(--text); border: 1px solid var(--line-dim); }
+#side-panel .bubble-time { color: var(--text-dim); }
+
+/* empty + error copy in Vesper's voice — one styled line, never raw JSON */
+#side-panel .pane-empty, #side-panel .chat-empty, #side-panel .notices-empty {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .05em; line-height: 1.7;
+  color: var(--text-dim); text-align: center; margin-top: 30px; text-transform: none; }
+#side-panel .pane-empty.err { color: var(--danger); }
+#side-panel .pane-err-detail { display: block; margin-top: 7px; font-size: 10px;
+  letter-spacing: 0; color: var(--text-dim); word-break: break-word; }
+
+/* ═══ Mode-reactive chrome: the orb cross-fades between four colors
+   (silver default / yellow-green listening / red thinking / purple speaking,
+   see MODE_COLORS in the script below) and everything here reads off the
+   same --mode-r/g/b vars
+   every frame, so the whole HUD shifts with her instead of staying a fixed
+   neutral shell around a colored ball. ═══ */
+#left-rail, #side-panel, #confirm-card {
+  border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.42) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.28), 0 0 34px rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.18);
+}
+#panel-edge { border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.45) !important; }
+#panel-edge:hover {
+  color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
+  background: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.16) !important;
+  border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.7) !important;
+}
+.hud-cb { border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.4) !important; }
+#rail-state.thinking, #rail-state.speaking { color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important; }
+#presence-dot.thinking, #presence-dot.speaking {
+  background: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
+  box-shadow: 0 0 8px rgba(var(--mode-r), var(--mode-g), var(--mode-b), .55) !important;
+}
+.pill-btn:hover, #send-btn:hover, #side-panel .pill-btn:hover, #side-panel .search-bar-btn:hover {
+  border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), .6) !important;
+  color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
+  background: rgba(var(--mode-r), var(--mode-g), var(--mode-b), .14) !important;
+  box-shadow: 0 0 12px rgba(var(--mode-r), var(--mode-g), var(--mode-b), .2);
+}
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div id="mode-wash"></div>
+
+<div id="name">V E S P E R</div>
+
+<!-- HUD clock -->
+<div id="hud-clock">
+  <div id="clock-time">--:--</div>
+  <div id="clock-date">---</div>
+</div>
+
+<!-- Chat strip (recent exchange; hover to expand full history) -->
+<div id="chat-strip"></div>
+
+<!-- Text input bar -->
+<div id="input-bar">
+  <input id="input-text" type="text" placeholder="say something…" autocomplete="off" spellcheck="false" />
+  <button id="send-btn">&#10148;</button>
+</div>
+
+<!-- Confirmation card (approve/deny for gated tools) -->
+<div id="confirm-card" hidden>
+  <div id="confirm-title">CONFIRM ACTION</div>
+  <div id="confirm-tool"></div>
+  <div id="confirm-args"></div>
+  <div id="confirm-countdown"><div id="confirm-countdown-fill"></div></div>
+  <div id="confirm-actions">
+    <button id="confirm-approve">APPROVE (Y)</button>
+    <button id="confirm-deny">DENY (N)</button>
+  </div>
+</div>
+
+<!-- Corner brackets -->
+<span class="hud-cb tl"></span><span class="hud-cb tr"></span>
+<span class="hud-cb bl"></span><span class="hud-cb br"></span>
+
+<!-- Connection indicator + backend (top-left) -->
+<div id="conn-status">○ OFFLINE</div>
+<div id="backend-readout"></div>
+
+<!-- Left rail : systems -->
+<div id="left-rail">
+  <div class="rail-sec">
+    <div class="rail-lbl">state</div>
+    <div id="rail-state" class="rail-val">IDLE</div>
+    <div class="rail-sub" id="rail-state-sub">listening for wake word</div>
+  </div>
+  <div class="rail-hair"></div>
+  <div class="rail-sec">
+    <div class="rail-lbl">usage · today</div>
+    <div id="usage-readout" class="rail-val">—</div>
+    <div class="rail-sub" id="usage-week"></div>
+  </div>
+  <div class="rail-hair"></div>
+  <div class="rail-sec">
+    <div class="rail-lbl">heartbeat</div>
+    <div id="hb-readout" class="rail-sub">—</div>
+  </div>
+  <div class="rail-hair"></div>
+  <div class="rail-sec">
+    <div id="killswitch-row">
+      <span class="rail-lbl">killswitch</span>
+      <button id="pause-toggle" title="Pause proactive systems">&#9208; PAUSE</button>
+    </div>
+    <div id="paused-chip" hidden>SUSPENDED</div>
+  </div>
+  <div class="rail-hair"></div>
+  <div class="rail-sec">
+    <div class="rail-lbl">tools</div>
+    <div id="tool-ticker"></div>
+  </div>
+</div>
+
+<!-- Modules launcher (fallback controls when voice is down) -->
+<button id="panel-edge" title="Modules — manual controls (Esc closes)">&#9881; MODULES<span id="notice-badge"></span></button>
+
+<!-- Side panel -->
+<div id="side-panel">
+  <div id="panel-header">
+    <div id="tab-rail">
+      <button class="ptab active" data-tab="chat">Chat</button>
+      <button class="ptab" data-tab="notices">Notices</button>
+      <button class="ptab" data-tab="finance" data-requires="scripts">Finance</button>
+      <button class="ptab" data-tab="habits" data-requires="scripts">Habits</button>
+      <button class="ptab" data-tab="study" data-requires="scripts">Study</button>
+      <button class="ptab" data-tab="calendar">Cal</button>
+      <button class="ptab" data-tab="apps">Apps</button>
+      <button class="ptab" data-tab="profiles">Profiles</button>
+      <button class="ptab" data-tab="workspace" data-requires="vault">Workspace</button>
+      <button class="ptab" data-tab="settings">Cfg</button>
+    </div>
+    <button id="panel-close" title="Close panel">&#215;</button>
+  </div>
+  <div id="tab-divider"></div>
+  <div id="panel-presence">
+    <span id="presence-dot" class="idle"></span>
+    <span id="presence-remark">Modules. Since you insist.</span>
+  </div>
+
+  <div id="ptab-chat" class="ptab-content active">
+    <div id="chat-history"><div class="chat-empty">No words yet. I can wait.</div></div>
+  </div>
+
+  <div id="ptab-notices" class="ptab-content">
+    <div class="study-row-header" style="margin-bottom:10px;">
+      <div class="study-row-label">Notices <span id="feed-count"></span></div>
+      <button id="feed-markall" hidden class="pill-btn" title="Mark all as read">&#10003; all</button>
+    </div>
+    <div id="notices-list"><div class="notices-empty">Nothing flagged. Don't get used to it.</div></div>
+  </div>
+
+  <div id="ptab-finance" class="ptab-content">
+    <form id="finance-form">
+      <div class="search-bar">
+        <input id="fin-entry" type="text" placeholder="50 food lunch" autocomplete="off" spellcheck="false" />
+        <button type="submit" class="search-bar-btn">Log</button>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:9px;">
+        <button type="button" id="fin-summary-btn" class="pill-btn">Summary</button>
+      </div>
+    </form>
+    <div id="finance-output" class="panel-output"></div>
+  </div>
+
+  <div id="ptab-habits" class="ptab-content">
+    <div id="habits-list"></div>
+    <div id="habits-meta" class="habits-meta"></div>
+    <div id="habits-output" class="panel-output"></div>
+  </div>
+
+  <div id="ptab-study" class="ptab-content">
+
+    <div class="study-row">
+      <div class="study-row-label">Explain concept</div>
+      <div class="search-bar">
+        <input id="study-explain-input" type="text" placeholder="e.g. dynamic programming" autocomplete="off" />
+        <button class="search-bar-btn" id="study-explain-btn">Explain</button>
+      </div>
+      <div class="study-output" id="study-explain-out"></div>
+    </div>
+
+    <div class="study-row">
+      <div class="study-row-header">
+        <div class="study-row-label">Quiz</div>
+        <button class="pill-btn" id="study-quiz-btn">from latest lecture</button>
+      </div>
+      <div id="study-quiz-cards"></div>
+    </div>
+
+    <div class="study-row">
+      <div class="study-row-header">
+        <div class="study-row-label">Study plan</div>
+        <button class="pill-btn" id="study-plan-btn">generate</button>
+      </div>
+      <div class="study-output" id="study-plan-out"></div>
+    </div>
+
+    <div class="study-row">
+      <div class="study-row-label">Research topic</div>
+      <div class="search-bar">
+        <input id="study-research-input" type="text" placeholder="e.g. reinforcement learning" autocomplete="off" />
+        <button class="search-bar-btn" id="study-research-btn">Research</button>
+      </div>
+      <div class="study-output" id="study-research-out"></div>
+    </div>
+
+    <div class="study-row">
+      <div class="study-row-header">
+        <div class="study-row-label">Weekly progress</div>
+        <button class="pill-btn" id="study-progress-btn">view</button>
+      </div>
+      <div class="study-output" id="study-progress-out"></div>
+    </div>
+
+  </div>
+
+  <div id="ptab-calendar" class="ptab-content">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+      <button class="pill-btn" id="cal-refresh-btn">refresh</button>
+    </div>
+    <div id="calendar-list"></div>
+    <div class="study-row-label" style="margin-top:18px; margin-bottom:8px;">Deadlines</div>
+    <div id="tasks-list"></div>
+  </div>
+
+  <div id="ptab-apps" class="ptab-content">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+      <button class="pill-btn" id="apps-scan-btn">scan</button>
+    </div>
+    <div class="apps-columns">
+      <div class="apps-col">
+        <div class="apps-col-label">Installed</div>
+        <div class="apps-col-list" id="apps-installed-list"></div>
+      </div>
+      <div class="apps-col">
+        <div class="apps-col-label">Approved</div>
+        <div class="apps-col-list" id="apps-approved-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ptab-profiles" class="ptab-content">
+    <div class="study-row-label" style="margin-bottom:8px;">Profiles</div>
+    <div id="profiles-list" class="apps-col-list" style="margin-bottom:16px;"></div>
+    <div class="study-row-label" id="profile-form-title" style="margin-bottom:8px;">New profile</div>
+    <form id="profile-form">
+      <div class="profile-form-row">
+        <input id="profile-label" class="settings-input" type="text" placeholder="Label (e.g. Study Mode)" autocomplete="off" />
+        <input id="profile-id" class="settings-input" type="text" placeholder="id (auto)" autocomplete="off" />
+      </div>
+      <div class="study-row-label" style="margin:12px 0 6px;">Apps</div>
+      <div id="profile-apps-checks" class="profile-checks"></div>
+      <div class="study-row-label" style="margin:12px 0 6px;">Trigger</div>
+      <div class="profile-form-row">
+        <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="manual" checked /> Manual only</label>
+        <label class="profile-radio"><input type="radio" name="profile-trigger-kind" value="time" /> Auto (time)</label>
+      </div>
+      <div id="profile-trigger-time-fields" hidden>
+        <div class="profile-form-row" style="margin-top:8px;">
+          <input id="profile-trigger-time" class="settings-input" type="time" value="18:00" />
+        </div>
+        <div id="profile-trigger-days" class="profile-checks" style="margin-top:8px;"></div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+        <button type="button" id="profile-form-cancel" class="pill-btn" hidden>cancel edit</button>
+        <button type="submit" class="pill-btn" id="profile-form-submit">create</button>
+      </div>
+    </form>
+    <div id="profiles-output" class="panel-output"></div>
+  </div>
+
+  <div id="ptab-workspace" class="ptab-content">
+    <div class="apps-columns" style="flex: none;">
+      <div class="apps-col">
+        <div class="apps-col-label">Drafts</div>
+        <div class="apps-col-list" id="workspace-drafts-list"></div>
+      </div>
+      <div class="apps-col">
+        <div class="apps-col-label">Scratch</div>
+        <div class="apps-col-list" id="workspace-scratch-list"></div>
+      </div>
+    </div>
+    <div class="study-row-label" style="margin-top:16px; margin-bottom:8px;">Content</div>
+    <div class="study-output" id="workspace-content"></div>
+  </div>
+
+  <div id="ptab-settings" class="ptab-content">
+    <div style="margin-bottom:18px;">
+      <div class="study-row-label" style="margin-bottom:8px;">LLM Backend</div>
+      <div id="settings-llm-status" class="panel-output" style="font-size:12px; min-height:16px; margin-bottom:8px;"></div>
+      <button class="pill-btn" id="settings-llm-detect">re-detect</button>
+    </div>
+    <div style="margin-bottom:18px;">
+      <div class="study-row-label" style="margin-bottom:8px;">Weather</div>
+      <div id="settings-weather-status" class="panel-output" style="font-size:12px; min-height:16px;"></div>
+    </div>
+    <div id="settings-fields"></div>
+  </div>
+
+</div>
+
+<!-- Drop overlay -->
+<div id="drop-overlay"><span>drop .pdf or .pptx</span></div>
+
+<script src="/static/three.min.js"></script>
+<script>
+// ── Session token (security gate) ───────────────────────────────────────────
+// The server hands this back as `?t=` on the initial page load (see
+// _open_app_window / tray.py). Every fetch() and the /ws handshake carry it
+// so that no other local process or webpage can hit state-changing endpoints.
+const VESPER_TOKEN = new URLSearchParams(location.search).get('t') || '';
+function vfetch(url, opts) {
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  if (VESPER_TOKEN) headers['X-Vesper-Token'] = VESPER_TOKEN;
+  return fetch(url, Object.assign({}, opts, { headers }));
+}
+
+// ── Renderer ───────────────────────────────────────────────────────────────
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 100);
+camera.position.z = 3.2;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.domElement.id = 'vesper-canvas';
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ── Starfield: layered 2D canvas behind the orb — slow parallax + twinkle ──
+(function initStarfield() {
+  const canvas = document.getElementById('starfield');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let w, h, layers;
+
+  function makeLayers() {
+    const specs = REDUCE
+      ? [{ n: 60, r: [0.5, 1.1], speed: 0, alpha: [0.25, 0.5] }]
+      : [
+          { n: 90,  r: [0.4, 0.9], speed: 0.004, alpha: [0.15, 0.35] },
+          { n: 55,  r: [0.7, 1.4], speed: 0.010, alpha: [0.25, 0.5]  },
+          { n: 28,  r: [1.0, 1.9], speed: 0.020, alpha: [0.35, 0.7]  },
+        ];
+    return specs.map(spec => ({
+      speed: spec.speed,
+      stars: Array.from({ length: spec.n }, () => ({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: spec.r[0] + Math.random() * (spec.r[1] - spec.r[0]),
+        a: spec.alpha[0] + Math.random() * (spec.alpha[1] - spec.alpha[0]),
+        phase: Math.random() * Math.PI * 2,
+        twinkleSpeed: 0.4 + Math.random() * 0.8,
+      })),
+    }));
+  }
+
+  function resize() {
+    w = canvas.width = innerWidth;
+    h = canvas.height = innerHeight;
+    layers = makeLayers();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  let t = 0;
+  let lastFrame = 0;
+  (function draw(nowMs) {
+    requestAnimationFrame(draw);
+    if (REDUCE && nowMs - lastFrame < 66) return;  // ~15fps is plenty for a static-ish field
+    lastFrame = nowMs || 0;
+    t += 0.016;
+    ctx.clearRect(0, 0, w, h);
+    layers.forEach(layer => {
+      layer.stars.forEach(s => {
+        // slow downward drift, wrapping — depth read via per-layer speed
+        s.y += layer.speed;
+        if (s.y > h + 2) s.y = -2;
+        const twinkle = REDUCE ? 1 : 0.55 + 0.45 * Math.sin(t * s.twinkleSpeed + s.phase);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(210,205,235,${(s.a * twinkle).toFixed(3)})`;
+        ctx.fill();
+      });
+    });
+  })(0);
+})();
+
+// ── Orb dock: right-arrow / scroll-down tucks the orb into a corner and
+// maximizes the feed into the centered modules overlay; reverse to undock ──
+let dockToggle = null;
+(function initDock() {
+  const edgeBtn = document.getElementById('panel-edge');
+  const panelEl = document.getElementById('side-panel');
+  const closeBtn = document.getElementById('panel-close');
+  if (!edgeBtn || !panelEl || !closeBtn) return;
+
+  function isDocked() { return document.body.classList.contains('orb-docked'); }
+  function dock() {
+    document.body.classList.add('orb-docked');
+    if (!panelEl.classList.contains('open')) edgeBtn.click();
+    const noticesTab = document.querySelector('.ptab[data-tab="notices"]');
+    if (noticesTab && !noticesTab.classList.contains('active')) noticesTab.click();
+  }
+  function undock() {
+    document.body.classList.remove('orb-docked');
+    if (panelEl.classList.contains('open')) closeBtn.click();
+  }
+  dockToggle = () => { isDocked() ? undock() : dock(); };
+  // Keep state honest if the panel closes some other way (Escape, close button).
+  new MutationObserver(() => {
+    if (!panelEl.classList.contains('open')) document.body.classList.remove('orb-docked');
+  }).observe(panelEl, { attributes: true, attributeFilter: ['class'] });
+
+  let cooldown = false;
+  function cool() { cooldown = true; setTimeout(() => { cooldown = false; }, 700); }
+
+  document.addEventListener('keydown', e => {
+    if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if (e.key === 'ArrowRight' && !isDocked()) { dock(); cool(); }
+    else if (e.key === 'ArrowLeft' && isDocked()) { undock(); cool(); }
+  });
+  document.addEventListener('wheel', e => {
+    if (cooldown) return;
+    if (e.target.closest('#side-panel, #left-rail, #chat-strip')) return;
+    if (e.deltaY > 12 && !isDocked()) { dock(); cool(); }
+    else if (e.deltaY < -12 && isDocked()) { undock(); cool(); }
+  }, { passive: true });
+})();
+
+// ═══ Vesper orb — shader core + astrolabe armature (SOUL canon palette) ═══
+const PALETTE = {
+  core:    0x6a4fc8,  // muted purple — her energy
+  coreHi:  0x8a5fe8,
+  steel:   0x565b6e,  // armature linework
+  steelHi: 0x8a8fa3,  // engraved ticks
+  accent:  0xc8e64c,  // yellow-green — her eyes; rare, active only
+  danger:  0xe6564c,
+};
+
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ── Energy core: fresnel-lit sphere with in-shader noise surface ───────────
+const coreUniforms = {
+  uTime:    { value: 0 },
+  uEnergy:  { value: 0.22 },
+  uPaused:  { value: 0 },
+  uColor:   { value: new THREE.Color(PALETTE.core) },
+  uColorHi: { value: new THREE.Color(PALETTE.coreHi) },
+};
+const core = new THREE.Mesh(
+  new THREE.SphereGeometry(0.78, 64, 64),
+  new THREE.ShaderMaterial({
+    uniforms: coreUniforms,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    vertexShader: `
+      varying vec3 vNormal, vView, vPos;
+      void main() {
+        vNormal = normalMatrix * normal;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = -mv.xyz;
+        vPos = position;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform float uTime, uEnergy, uPaused;
+      uniform vec3 uColor, uColorHi;
+      varying vec3 vNormal, vView, vPos;
+      float hash(vec3 p) {
+        p = fract(p * 0.3183099 + 0.1); p *= 17.0;
+        return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+      }
+      float noise(vec3 x) {
+        vec3 i = floor(x), f = fract(x);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(hash(i), hash(i+vec3(1,0,0)), f.x),
+                       mix(hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)), f.x), f.y),
+                   mix(mix(hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)), f.x),
+                       mix(hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+      }
+      void main() {
+        vec3 q = vPos * 2.4 + vec3(0.0, uTime * 0.15, uTime * 0.09);
+        float n = noise(q) * 0.5 + noise(q * 2.1) * 0.3 + noise(q * 4.3) * 0.2;
+        // limb brightening: real stars glow whiter/brighter at the rim than
+        // the core, so the fresnel term uses a separate, hotter color.
+        float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.5);
+        vec3 col = uColor * (0.20 + uEnergy * n * 1.4) + uColorHi * fres * (0.9 + uEnergy * 1.1);
+        float grey = dot(col, vec3(0.299, 0.587, 0.114));
+        col = mix(col, vec3(grey) * 0.55, uPaused);
+        gl_FragColor = vec4(col, 0.92);
+      }`,
+  })
+);
+scene.add(core);
+
+// soft halo shell
+scene.add(new THREE.Mesh(
+  new THREE.SphereGeometry(1.02, 32, 32),
+  new THREE.MeshBasicMaterial({ color: 0x2a1f55, transparent: true, opacity: 0.35,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide })
+));
+
+// ── Particle halo: GPU-displaced points (was a 4000-pt CPU loop) ──────────
+const N = 1500;
+const homeArr  = new Float32Array(N * 3);
+const phaseArr = new Float32Array(N);
+for (let i = 0; i < N; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos(2 * Math.random() - 1);
+  homeArr[i*3]   = Math.sin(phi) * Math.cos(theta);
+  homeArr[i*3+1] = Math.sin(phi) * Math.sin(theta);
+  homeArr[i*3+2] = Math.cos(phi);
+  phaseArr[i] = Math.random() * Math.PI * 2;
+}
+const haloGeo = new THREE.BufferGeometry();
+haloGeo.setAttribute('position', new THREE.BufferAttribute(homeArr, 3));
+haloGeo.setAttribute('aPhase', new THREE.BufferAttribute(phaseArr, 1));
+const haloUniforms = {
+  uTime:      { value: 0 },
+  uRadius:    { value: 1.0 },
+  uPulseAmp:  { value: 0.03 },
+  uPulseFreq: { value: 0.7 },
+  uColor:     { value: new THREE.Color(PALETTE.core) },
+  uOpacity:   { value: 0.8 },
+};
+const halo = new THREE.Points(haloGeo, new THREE.ShaderMaterial({
+  uniforms: haloUniforms,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  vertexShader: `
+    attribute float aPhase;
+    uniform float uTime, uRadius, uPulseAmp, uPulseFreq;
+    void main() {
+      float pulse = 1.0 + sin(uTime * uPulseFreq + aPhase) * uPulseAmp;
+      vec4 mv = modelViewMatrix * vec4(position * uRadius * pulse, 1.0);
+      gl_PointSize = 5.5 * (1.0 / -mv.z) * 3.2;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor;
+    uniform float uOpacity;
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      gl_FragColor = vec4(uColor, smoothstep(0.5, 0.0, d) * uOpacity);
+    }`,
+}));
+scene.add(halo);
+
+// ── Astrolabe armature: engraved rings + instanced ticks + accent arcs ─────
+const armature = new THREE.Group();
+scene.add(armature);
+
+const RING_DEFS = [
+  { r: 1.18, tilt: [Math.PI / 2.6, 0.0,  0.30], ticks: 96,  speed:  0.10, comet: true },
+  { r: 1.38, tilt: [Math.PI / 3.4, 0.0, -0.70], ticks: 64,  speed: -0.07 },
+  { r: 1.58, tilt: [Math.PI / 2.1, 0.5,  1.20], ticks: 128, speed:  0.045 },
+];
+
+// ── Comet arc: single trailing accent arc with a true per-vertex gradient
+// fade (transparent tail -> bright head), color follows the live mode lerp.
+// Built as a raw strip rather than RingGeometry so the fade is explicit. ────
+function makeCometArc(radius, thickness, sweep, segments) {
+  const positions = new Float32Array((segments + 1) * 2 * 3);
+  const progress  = new Float32Array((segments + 1) * 2);
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * sweep;
+    const cx = Math.cos(a), sx = Math.sin(a);
+    const pr = i / segments; // 0 at tail, 1 at head
+    const vi = i * 2;
+    positions[vi * 3]         = cx * (radius - thickness);
+    positions[vi * 3 + 1]     = sx * (radius - thickness);
+    positions[vi * 3 + 2]     = 0;
+    positions[(vi + 1) * 3]     = cx * (radius + thickness);
+    positions[(vi + 1) * 3 + 1] = sx * (radius + thickness);
+    positions[(vi + 1) * 3 + 2] = 0;
+    progress[vi] = pr;
+    progress[vi + 1] = pr;
+  }
+  const index = [];
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    index.push(a, b, c,  b, d, c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aProgress', new THREE.BufferAttribute(progress, 1));
+  geo.setIndex(index);
+  const uniforms = { uColor: { value: new THREE.Color(PALETTE.accent) }, uOpacity: { value: 0 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `
+      attribute float aProgress;
+      varying float vProgress;
+      void main() {
+        vProgress = aProgress;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying float vProgress;
+      void main() {
+        float fade = smoothstep(0.0, 1.0, vProgress);
+        gl_FragColor = vec4(uColor, fade * fade * uOpacity);
+      }`,
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+const rings = RING_DEFS.map(def => {
+  const g = new THREE.Group();      // carries the tilt (state-aligned)
+  const wheel = new THREE.Group();  // spins about the ring's own axis
+  g.add(wheel);
+
+  wheel.add(new THREE.Mesh(
+    new THREE.TorusGeometry(def.r, 0.0022, 6, 160),
+    new THREE.MeshBasicMaterial({ color: PALETTE.steel, transparent: true,
+      opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })
+  ));
+
+  // engraved tick marks — every 8th is a long "cardinal" tick
+  const inst = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.0032, 0.026, 0.0032),
+    new THREE.MeshBasicMaterial({ color: PALETTE.steelHi, transparent: true,
+      opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+    def.ticks
+  );
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  for (let i = 0; i < def.ticks; i++) {
+    const a = (i / def.ticks) * Math.PI * 2;
+    pos.set(Math.cos(a) * def.r, Math.sin(a) * def.r, 0);
+    q.setFromAxisAngle(zAxis, a - Math.PI / 2);  // long axis points radially
+    scl.set(1, i % 8 === 0 ? 1.9 : 1, 1);
+    m4.compose(pos, q, scl);
+    inst.setMatrixAt(i, m4);
+  }
+  wheel.add(inst);
+
+  // single comet arc (only the innermost ring carries it) — mode-colored,
+  // sweeps only when she's actually engaged
+  let arc = null;
+  if (def.comet) {
+    arc = makeCometArc(def.r, 0.011, 0.85, 48);
+    wheel.add(arc);
+  }
+
+  g.rotation.set(def.tilt[0], def.tilt[1], def.tilt[2]);
+  g.userData = { def, wheel, arc, arcOpacity: 0 };
+  armature.add(g);
+  return g;
+});
+
+// ── Mic volume ring ────────────────────────────────────────────────────────
+const volRingMat = new THREE.MeshBasicMaterial({
+  color: PALETTE.accent, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const volRing = new THREE.Mesh(new THREE.TorusGeometry(1.08, 0.004, 8, 100), volRingMat);
+scene.add(volRing);
+let volTarget = 0;
+let volAmp    = 0;
+
+// ── Live mic reactivity ─────────────────────────────────────────────────────
+// Independent of the app's own STT pipeline (which reports volume over the
+// websocket as `amplitude` events, above) — this reads the browser's own
+// microphone directly via an AnalyserNode so the orb stays visibly alive
+// even when voice/main.py isn't attached (e.g. a standalone preview). Falls
+// back to a slow synthetic idle pulse if mic access is denied/unavailable.
+let micAmp = 0;
+let micLive = false;
+(function initMicReactivity() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    .then(stream => {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const resume = () => { if (ctx.state === 'suspended') ctx.resume(); };
+      document.addEventListener('pointerdown', resume, { once: true });
+      document.addEventListener('keydown', resume, { once: true });
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      micLive = true;
+      (function sample() {
+        requestAnimationFrame(sample);
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+        const rms = Math.sqrt(sum / buf.length);
+        micAmp += (Math.min(rms * 5, 1) - micAmp) * 0.25;
+      })();
+    })
+    .catch(() => { micLive = false; }); // denied/unavailable — synthetic fallback in getMicAmp()
+})();
+function getMicAmp(tNow) {
+  if (micLive) return micAmp;
+  return REDUCED ? 0.12 : 0.16 + 0.10 * Math.sin(tNow * 0.55); // slow synthetic idle pulse
+}
+
+// ── Click the orb to dock (mirrors right-arrow / scroll-down) ──────────────
+(function initOrbClick() {
+  const raycaster = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  renderer.domElement.addEventListener('click', e => {
+    ndc.x = (e.clientX / innerWidth) * 2 - 1;
+    ndc.y = -(e.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    if (raycaster.intersectObject(core, false).length && dockToggle) dockToggle();
+  });
+})();
+
+// ── State choreography ─────────────────────────────────────────────────────
+// energy: core noise intensity · ringMul: armature speed multiplier ·
+// align: rings ease to a flat aligned plane · arc: accent arc opacity
+//
+// Color is driven separately (see MODE_COLORS below): four modes carry a
+// distinct, user-facing color — default (hot blue-white star), listening
+// (her eyes — yellow-green alert), thinking (solar flare), speaking (violet
+// nebula). idle reads as "default"; error keeps its own hardcoded danger red
+// since it isn't one of the four modes. Each mode also has a `coreHi` — a
+// brighter/whiter color for the shader's fresnel rim, since real stars glow
+// whiter at the limb than at the core (see uColorHi in the core shader above).
+const MODE_COLORS = {
+  default:   { core: 0xdce8ff, coreHi: 0xffffff },  // blue-white hot star (Sirius/Vega)
+  listening: { core: 0xc8e64c, coreHi: 0xe8ffb8 },  // her eyes -> pale bright lime rim
+  thinking:  { core: 0xff5a2e, coreHi: 0xffd24a },  // solar flare -> white-hot yellow tip
+  speaking:  { core: 0xb84fff, coreHi: 0xff7fe0 },  // violet nebula -> magenta edge
+};
+const COLOR_LERP_RATE = 0.045; // ~1.2s to settle after a mode switch
+
+const STATES = {
+  idle:      { energy: 0.22, ringMul: 1.0, align: 0, arc: 0.0,  mode: 'default',   pr: 1.00, pa: 0.030, pf: 0.7 },
+  listening: { energy: 0.42, ringMul: 0.3, align: 1, arc: 0.85, mode: 'listening', pr: 0.90, pa: 0.050, pf: 2.2 },
+  thinking:  { energy: 0.85, ringMul: 4.0, align: 0, arc: 0.0,  mode: 'thinking',  pr: 1.10, pa: 0.120, pf: 3.6 },
+  speaking:  { energy: 0.65, ringMul: 1.6, align: 0, arc: 0.30, mode: 'speaking',  pr: 0.95, pa: 0.140, pf: 4.2 },
+  error:     { energy: 0.50, ringMul: 0.4, align: 0, arc: 0.0,  mode: null,        pr: 0.95, pa: 0.050, pf: 1.1 },
+};
+function targetColorFor(s) {
+  const def = STATES[s];
+  if (!def || !def.mode) return PALETTE.danger;
+  return MODE_COLORS[def.mode].core;
+}
+function targetColorForHi(s) {
+  const def = STATES[s];
+  if (!def || !def.mode) return PALETTE.danger;
+  return MODE_COLORS[def.mode].coreHi;
+}
+
+let state = 'idle';
+const cur = { energy: 0.22, ringMul: 1.0, align: 0, pr: 1.0, pa: 0.03, pf: 0.7, paused: 0 };
+const curColor = new THREE.Color(MODE_COLORS.default.core);
+const curColorHi = new THREE.Color(MODE_COLORS.default.coreHi);
+
+function setState(s) {
+  if (!STATES[s]) return;
+  state = s;
+  const rs = document.getElementById('rail-state');
+  if (rs) { rs.textContent = s.toUpperCase(); rs.className = 'rail-val ' + s; }
+  const pd = document.getElementById('presence-dot');
+  if (pd) pd.className = s;
+}
+
+// Per-tab remark for the overlay presence strip — dry, one line, Vesper.
+const PRESENCE_REMARKS = {
+  chat:     'Talk if you must. I\'m listening.',
+  notices:  'Things I flagged. You\'re welcome.',
+  finance:  'Your money. Let\'s get this over with.',
+  habits:   'The streak\'s yours to break.',
+  study:    'Ask. That\'s what I\'m here for.',
+  calendar: 'What\'s coming. Don\'t shoot the messenger.',
+  apps:     'Apps I\'m allowed to open. Vetted.',
+  profiles: 'Groups of apps. One nod launches all of them.',
+  workspace: 'Drafts and scratch. Nothing here is sent.',
+  settings: 'Knobs and dials. Don\'t break anything.',
+};
+function setPresence(tab) {
+  const el = document.getElementById('presence-remark');
+  if (el) el.textContent = PRESENCE_REMARKS[tab] || 'Modules. Since you insist.';
+}
+
+// ── Render loop ────────────────────────────────────────────────────────────
+let t = 0;
+let lastFrame = 0;
+let lastStutter = 0;
+(function animate(nowMs) {
+  requestAnimationFrame(animate);
+  if (REDUCED && nowMs - lastFrame < 33) return;  // ~30 fps under reduced motion
+  lastFrame = nowMs || 0;
+  t += 0.016;
+
+  const paused = document.body.classList.contains('paused');
+  const tgt = STATES[state];
+  const lf = 0.05;
+
+  cur.energy  += ((paused ? 0.08 : (REDUCED ? Math.min(tgt.energy, 0.3) : tgt.energy)) - cur.energy) * lf;
+  cur.ringMul += ((paused || REDUCED ? 0 : tgt.ringMul) - cur.ringMul) * (paused ? 0.03 : lf);
+  cur.align   += (tgt.align - cur.align) * lf;
+  cur.pr      += (tgt.pr - cur.pr) * lf;
+  cur.pa      += (tgt.pa - cur.pa) * lf;
+  cur.pf      += (tgt.pf - cur.pf) * lf;
+  cur.paused  += ((paused ? 1 : 0) - cur.paused) * 0.06;
+  curColor.lerp(new THREE.Color(targetColorFor(state)), COLOR_LERP_RATE);
+  curColorHi.lerp(new THREE.Color(targetColorForHi(state)), COLOR_LERP_RATE);
+  document.documentElement.style.setProperty('--mode-r', Math.round(curColor.r * 255));
+  document.documentElement.style.setProperty('--mode-g', Math.round(curColor.g * 255));
+  document.documentElement.style.setProperty('--mode-b', Math.round(curColor.b * 255));
+
+  // core
+  const micAmp = getMicAmp(t);
+  coreUniforms.uTime.value = t;
+  coreUniforms.uEnergy.value = cur.energy;
+  coreUniforms.uPaused.value = cur.paused;
+  coreUniforms.uColor.value.copy(curColor);
+  coreUniforms.uColorHi.value.copy(curColorHi);
+  const spkPulse = state === 'speaking' ? Math.sin(t * 4.2) * 0.045 : 0;
+  core.scale.setScalar((1 + spkPulse) * (1 + micAmp * 0.10));
+
+  // halo — blended toward the hotter rim color so the sparkle reads
+  // brighter/whiter than the body, like dust lit by a nearby star
+  haloUniforms.uTime.value = t;
+  haloUniforms.uRadius.value = cur.pr;
+  haloUniforms.uPulseAmp.value = REDUCED ? 0.015 : cur.pa;
+  haloUniforms.uPulseFreq.value = cur.pf;
+  haloUniforms.uColor.value.copy(curColor).lerp(curColorHi, 0.4);
+  haloUniforms.uOpacity.value = Math.min(1.25, (0.9 - cur.paused * 0.5) * (1 + micAmp * 0.35));
+  halo.rotation.y += 0.0022 * (paused ? 0.2 : 1);
+
+  // armature: spin each wheel; error state stutters in quantized jolts
+  const stutterStep = state === 'error' && Math.floor(t * 2.5) !== lastStutter;
+  if (stutterStep) lastStutter = Math.floor(t * 2.5);
+  rings.forEach((g, ri) => {
+    const { def, wheel, arc } = g.userData;
+    if (state === 'error') {
+      if (stutterStep) wheel.rotation.z += def.speed > 0 ? 0.11 : -0.11;
+    } else {
+      wheel.rotation.z += def.speed * cur.ringMul * 0.016;
+    }
+    // listening: tilts ease toward a shared visible plane (slightly offset per
+    // ring so they read as concentric dials, not one edge-on line)
+    const a = cur.align;
+    g.rotation.x = def.tilt[0] * (1 - a) + (Math.PI / 2.5 + ri * 0.06) * a;
+    g.rotation.y = def.tilt[1] * (1 - a);
+    g.rotation.z = def.tilt[2] * (1 - a) + ri * 0.4 * a;
+    // single comet arc: fade + independent sweep, color follows live mode
+    if (arc) {
+      g.userData.arcOpacity += (tgt.arc - g.userData.arcOpacity) * 0.06;
+      arc.material.uniforms.uOpacity.value = g.userData.arcOpacity * (1 - cur.paused);
+      arc.material.uniforms.uColor.value.copy(curColorHi);
+      if (!REDUCED) arc.rotation.z += 0.02;
+    }
+  });
+  armature.rotation.y += (paused || REDUCED ? 0 : 0.0006 * cur.ringMul);
+
+  // mic volume ring
+  volAmp += (volTarget - volAmp) * 0.18;
+  volTarget *= 0.82;
+  if (state === 'listening') {
+    volRingMat.color.set(PALETTE.accent);
+    volRingMat.opacity = volAmp * 0.9;
+    volRing.scale.setScalar(1 + volAmp * 0.12);
+  } else if (state === 'speaking') {
+    const spk = 0.5 + 0.5 * Math.sin(t * 4.2);
+    volRingMat.color.set(0x7a55d8);
+    volRingMat.opacity = spk * 0.5;
+    volRing.scale.setScalar(1 + spk * 0.15);
+  } else {
+    volRingMat.opacity = 0;
+    volRing.scale.setScalar(1);
+  }
+
+  renderer.render(scene, camera);
+})(0);
+
+// ── Text input bar ─────────────────────────────────────────────────────────
+(function initInput() {
+  const inp = document.getElementById('input-text');
+  const btn = document.getElementById('send-btn');
+  function send() {
+    const text = inp.value.trim();
+    if (!text) return;
+    // no local echo — the server broadcasts the user message to all clients
+    inp.value = '';
+    setState('thinking');
+    vfetch('/input', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text}),
+    }).catch(() => setState('idle'));
+  }
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); send(); }
+  });
+  btn.addEventListener('click', send);
+})();
+
+// ── Side panel ─────────────────────────────────────────────────────────────
+(function initPanel() {
+  const edge  = document.getElementById('panel-edge');
+  const close = document.getElementById('panel-close');
+  const panel = document.getElementById('side-panel');
+  const tabs  = document.querySelectorAll('.ptab');
+  const panes = document.querySelectorAll('.ptab-content');
+
+  function openPanel() {
+    panel.classList.add('open');
+    edge.classList.add('hidden');
+    const activeTab = document.querySelector('.ptab.active');
+    if (activeTab) {
+      const t = activeTab.dataset.tab;
+      setPresence(t);
+      if (t === 'habits') loadHabits();
+      if (t === 'notices') loadNotices();
+      if (t === 'chat') scrollChatToBottom();
+      if (t === 'calendar') loadCalendar();
+      if (t === 'settings') loadSettingsPanel();
+      if (t === 'apps') loadApps();
+      if (t === 'profiles') loadProfiles();
+      if (t === 'workspace') loadWorkspace();
+    }
+  }
+
+  function closePanel() {
+    panel.classList.remove('open');
+    edge.classList.remove('hidden');
+  }
+
+  edge.addEventListener('click', openPanel);
+  close.addEventListener('click', closePanel);
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      panes.forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const pane = document.getElementById('ptab-' + tab.dataset.tab);
+      if (pane) pane.classList.add('active');
+      setPresence(tab.dataset.tab);
+      if (tab.dataset.tab === 'habits') loadHabits();
+      if (tab.dataset.tab === 'notices') loadNotices();
+      if (tab.dataset.tab === 'chat') scrollChatToBottom();
+      if (tab.dataset.tab === 'calendar') loadCalendar();
+      if (tab.dataset.tab === 'settings') loadSettingsPanel();
+      if (tab.dataset.tab === 'apps') loadApps();
+      if (tab.dataset.tab === 'profiles') loadProfiles();
+      if (tab.dataset.tab === 'workspace') loadWorkspace();
+    });
+  });
+
+  // Finance: log expense
+  document.getElementById('finance-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const entry = document.getElementById('fin-entry').value.trim();
+    if (!entry) return;
+    const out = document.getElementById('finance-output');
+    out.textContent = '…';
+    try {
+      const r = await vfetch('/cmd/finance', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({entry}),
+      });
+      const d = await r.json();
+      if (d.message) { out.textContent = d.message; document.getElementById('fin-entry').value = ''; }
+      else out.innerHTML = paneErr(errText(d), "Couldn't log that. Try: 50 food lunch.");
+    } catch (err) {
+      out.innerHTML = paneErr(err.message);
+    }
+  });
+
+  // Finance: summary
+  document.getElementById('fin-summary-btn').addEventListener('click', async () => {
+    const out = document.getElementById('finance-output');
+    out.textContent = '…';
+    try {
+      const r = await vfetch('/cmd/finance');
+      const d = await r.json();
+      if (d.empty) out.innerHTML = paneEmpty('Nothing logged. Impressive restraint, or you forgot.');
+      else if (d.summary) out.textContent = d.summary;
+      else if (errText(d)) out.innerHTML = paneErr(errText(d));
+      else out.innerHTML = paneEmpty('Nothing logged. Impressive restraint, or you forgot.');
+    } catch (err) {
+      out.innerHTML = paneErr(err.message);
+    }
+  });
+
+  // Habits: load + render
+  async function loadHabits() {
+    const list = document.getElementById('habits-list');
+    const meta = document.getElementById('habits-meta');
+    const out  = document.getElementById('habits-output');
+    try {
+      const r = await vfetch('/cmd/habits');
+      const d = await r.json();
+      if (d.error) { out.innerHTML = paneErr(errText(d), 'Habits won\'t load.'); list.innerHTML = ''; return; }
+      out.textContent = '';
+      list.innerHTML = '';
+      const checked = d.checked || {};
+      Object.entries(checked).forEach(([name, done]) => {
+        const row = document.createElement('div');
+        row.className = 'habit-row' + (done ? ' done' : '');
+        row.innerHTML = `<div class="habit-check">${done ? '✓' : ''}</div><div class="habit-name">${name}</div>`;
+        if (!done) {
+          row.addEventListener('click', async () => {
+            const res = await vfetch('/cmd/habits/check', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({pillar: name}),
+            });
+            const rd = await res.json();
+            if (rd.checked) loadHabits();
+          });
+        }
+        list.appendChild(row);
+      });
+      const dc  = d.done_count || 0;
+      const tot = d.total || 0;
+      const str = d.current_streak || 0;
+      meta.textContent = `${dc}/${tot} done today · ${str} day streak`;
+    } catch (err) {
+      out.innerHTML = paneErr(err.message, 'Habits won\'t load. Not on me.');
+    }
+  }
+})();
+
+// ── Study panel ────────────────────────────────────────────────────────────
+(function initStudy() {
+  function setOut(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  function withLoading(btn, label, fn) {
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = label + '<span class="spin-inline"></span>';
+    return fn().finally(() => { btn.disabled = false; btn.innerHTML = orig; });
+  }
+
+  // Explain
+  async function doExplain() {
+    const topic = document.getElementById('study-explain-input').value.trim();
+    if (!topic) return;
+    const btn = document.getElementById('study-explain-btn');
+    await withLoading(btn, 'Explain', async () => {
+      setOut('study-explain-out', '');
+      try {
+        const r = await vfetch('/cmd/study/explain', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({topic}),
+        });
+        const d = await r.json();
+        fillOut('study-explain-out', d, 'Nothing to explain. Give me a topic.');
+      } catch (e) { document.getElementById('study-explain-out').innerHTML = paneErr(e.message); }
+    });
+  }
+  document.getElementById('study-explain-btn').addEventListener('click', doExplain);
+  document.getElementById('study-explain-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doExplain(); }
+  });
+
+  // Quiz
+  document.getElementById('study-quiz-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('study-quiz-btn');
+    const wrap = document.getElementById('study-quiz-cards');
+    await withLoading(btn, 'from latest lecture', async () => {
+      wrap.innerHTML = '';
+      try {
+        const r = await vfetch('/cmd/study/quiz');
+        const d = await r.json();
+        if (errText(d)) { wrap.innerHTML = paneErr(errText(d), 'Quiz won\'t load.'); return; }
+        (d.cards || []).forEach(card => {
+          const el = document.createElement('div');
+          el.className = 'quiz-card';
+          el.innerHTML =
+            `<div class="quiz-q">${escHtml(card.q)}</div>` +
+            `<div class="quiz-lvl">${escHtml(card.level || '')}</div>` +
+            `<div class="quiz-a">${escHtml(card.a)}</div>`;
+          el.addEventListener('click', () => el.classList.toggle('revealed'));
+          wrap.appendChild(el);
+        });
+        if (!d.cards || !d.cards.length) wrap.innerHTML = paneEmpty('No cards. Nothing to drill yet.');
+      } catch (e) { wrap.innerHTML = paneErr(e.message); }
+    });
+  });
+
+  // Plan
+  document.getElementById('study-plan-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('study-plan-btn');
+    await withLoading(btn, 'generate', async () => {
+      setOut('study-plan-out', '');
+      try {
+        const r = await vfetch('/cmd/study/plan');
+        const d = await r.json();
+        fillOut('study-plan-out', d, 'No plan yet. Nothing to plan around.');
+      } catch (e) { document.getElementById('study-plan-out').innerHTML = paneErr(e.message); }
+    });
+  });
+
+  // Research
+  async function doResearch() {
+    const topic = document.getElementById('study-research-input').value.trim();
+    if (!topic) return;
+    const btn = document.getElementById('study-research-btn');
+    await withLoading(btn, 'Research', async () => {
+      setOut('study-research-out', '');
+      try {
+        const r = await vfetch('/cmd/study/research', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({topic}),
+        });
+        const d = await r.json();
+        fillOut('study-research-out', d, 'Nothing to research. Give me a topic.');
+      } catch (e) { document.getElementById('study-research-out').innerHTML = paneErr(e.message); }
+    });
+  }
+  document.getElementById('study-research-btn').addEventListener('click', doResearch);
+  document.getElementById('study-research-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doResearch(); }
+  });
+
+  // Progress
+  document.getElementById('study-progress-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('study-progress-btn');
+    await withLoading(btn, 'view', async () => {
+      setOut('study-progress-out', '');
+      try {
+        const r = await vfetch('/cmd/study/progress');
+        const d = await r.json();
+        fillOut('study-progress-out', d, 'No progress logged yet. Get to work.');
+      } catch (e) { document.getElementById('study-progress-out').innerHTML = paneErr(e.message); }
+    });
+  });
+})();
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Styled empty state — one dry line, never a raw dump.
+function paneEmpty(msg) {
+  return `<div class="pane-empty">${escHtml(msg)}</div>`;
+}
+// Styled error — Vesper's voice up top, the technical detail kept small and
+// dim underneath so a `{"error": ...}` payload never leaks as raw JSON.
+function paneErr(detail, line) {
+  const d = detail == null ? '' : String(detail);
+  const tail = d ? `<span class="pane-err-detail">${escHtml(d.slice(0, 160))}</span>` : '';
+  return `<div class="pane-empty err">${escHtml(line || "That didn't work. Don't look at me.")}${tail}</div>`;
+}
+// Pull a human string out of a fetch payload / thrown error without ever
+// surfacing the raw object.
+function errText(x) {
+  if (x == null) return '';
+  if (typeof x === 'string') return x;
+  if (x.error) return String(x.error);
+  if (x.message) return String(x.message);
+  return '';
+}
+// Fill a text output pane: result as plain text, otherwise a styled empty or
+// error line (so an error payload is never dumped as-is).
+function fillOut(id, d, emptyLine) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (d && d.result) { el.textContent = d.result; return; }
+  const e = errText(d);
+  el.innerHTML = e ? paneErr(e) : paneEmpty(emptyLine || 'Nothing here yet.');
+}
+
+// ── Chat history ────────────────────────────────────────────────────────────
+const chatHistory = [];
+
+function addChatBubble(role, content) {
+  chatHistory.push({ role, content, ts: Date.now() });
+  // chat strip: newest first (column-reverse pins it to the bottom edge)
+  const strip = document.getElementById('chat-strip');
+  if (strip) {
+    const line = document.createElement('div');
+    line.className = 'strip-line ' + role;
+    line.innerHTML = `<span class="who">${role === 'user' ? 'YOU' : 'VESPER'}</span>${escHtml(content)}`;
+    strip.insertBefore(line, strip.firstChild);
+    while (strip.children.length > 60) strip.removeChild(strip.lastChild);
+  }
+  const hist = document.getElementById('chat-history');
+  if (!hist) return;
+  hist.innerHTML = '';
+  chatHistory.forEach(({ role, content, ts }) => {
+    const div = document.createElement('div');
+    div.className = 'chat-bubble ' + role;
+    const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    div.innerHTML = `<span>${escHtml(content)}</span><span class="bubble-time">${time}</span>`;
+    hist.appendChild(div);
+  });
+  scrollChatToBottom();
+}
+
+function scrollChatToBottom() {
+  const hist = document.getElementById('chat-history');
+  const pane = document.getElementById('ptab-chat');
+  if (pane) pane.scrollTop = pane.scrollHeight;
+  if (hist) hist.scrollTop = hist.scrollHeight;
+}
+
+// ── Notices feed ────────────────────────────────────────────────────────────
+async function loadNotices() {
+  const targets = [document.getElementById('notices-list')].filter(Boolean);
+  if (!targets.length) return;
+  try {
+    const r = await vfetch('/cmd/notices');
+    const d = await r.json();
+    const notices = d.notices || [];
+    const unread = notices.filter(n => !n.read).length;
+    const fc = document.getElementById('feed-count');
+    if (fc) fc.textContent = unread ? `· ${unread} unread` : '';
+    const ma = document.getElementById('feed-markall');
+    if (ma) ma.hidden = unread === 0;
+    targets.forEach(list => {
+      list.innerHTML = '';
+      if (!notices.length) {
+        list.innerHTML = '<div class="notices-empty">Nothing flagged. Don\'t get used to it.</div>';
+        return;
+      }
+      notices.forEach(n => {
+        const div = document.createElement('div');
+        div.className = 'notice-entry'
+          + (n.read ? '' : ' unread')
+          + (n.level === 'URGENT' ? ' urgent' : '');
+        const ts = new Date(n.ts).toLocaleString([], {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        div.innerHTML = `<span class="notice-time">${ts}</span>${escHtml(n.text || '')}`;
+        const acts = document.createElement('span');
+        acts.className = 'notice-acts';
+        const act = (payload) => {
+          vfetch('/cmd/notices/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload) })
+            .then(() => { loadNotices(); updateNoticeBadge(); }).catch(() => {});
+        };
+        if (!n.read) {
+          const mk = document.createElement('button');
+          mk.className = 'notice-dismiss';
+          mk.textContent = '✓';
+          mk.title = 'Mark as read';
+          mk.onclick = () => act({ id: n.id || n.ts });
+          acts.appendChild(mk);
+        }
+        const del = document.createElement('button');
+        del.className = 'notice-dismiss del';
+        del.textContent = '×';
+        del.title = 'Delete';
+        del.onclick = () => act({ id: n.id || n.ts, delete: true });
+        acts.appendChild(del);
+        div.appendChild(acts);
+        list.appendChild(div);
+      });
+    });
+  } catch (e) {
+    targets.forEach(list => {
+      list.innerHTML = '<div class="notices-empty">Notices won\'t load right now.</div>';
+    });
+  }
+}
+
+async function updateNoticeBadge() {
+  try {
+    const r = await vfetch('/cmd/notices');
+    const d = await r.json();
+    const unread = (d.notices || []).filter(n => !n.read).length;
+    const badge = document.getElementById('notice-badge');
+    if (badge) badge.classList.toggle('visible', unread > 0);
+  } catch (_) {}
+}
+updateNoticeBadge();
+setInterval(updateNoticeBadge, 60000);
+
+// ── File drop zone ─────────────────────────────────────────────────────────
+(function initDrop() {
+  const overlay = document.getElementById('drop-overlay');
+  let count = 0;
+  document.addEventListener('dragenter', e => {
+    if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+      count++; overlay.classList.add('active');
+    }
+  });
+  document.addEventListener('dragleave', () => {
+    if (--count <= 0) { count = 0; overlay.classList.remove('active'); }
+  });
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', async e => {
+    e.preventDefault();
+    count = 0; overlay.classList.remove('active');
+    const files = Array.from(e.dataTransfer.files)
+      .filter(f => /\.(pdf|pptx)$/i.test(f.name));
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append('file', file);
+      await vfetch('/upload', {method: 'POST', body: fd});
+    }
+    if (files.length) setState('thinking');
+  });
+})();
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+(function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws?t=${encodeURIComponent(VESPER_TOKEN)}`);
+  ws.onopen = () => {
+    setConn(true);
+    vfetch('/cmd/killswitch').then(r => r.json()).then(d => setPaused(!!d.paused)).catch(() => {});
+    updateNoticeBadge();
+  };
+  ws.onmessage = ({ data }) => {
+    const ev = JSON.parse(data);
+    if (ev.type === 'state') {
+      setState(ev.value);
+    } else if (ev.type === 'message') {
+      const content = ev.content ?? '';
+      addChatBubble(ev.role || 'assistant', content);
+    } else if (ev.type === 'tool') {
+      showToolActivity(ev);
+    } else if (ev.type === 'amplitude') {
+      volTarget = Math.min((ev.value || 0) * 10, 1.0);
+    } else if (ev.type === 'confirm') {
+      showConfirmCard(ev);
+    } else if (ev.type === 'confirm_resolved') {
+      hideConfirmCard(ev.id);
+    } else if (ev.type === 'killswitch') {
+      setPaused(!!ev.paused);
+    } else if (ev.type === 'usage') {
+      updateUsage(ev);
+    } else if (ev.type === 'notice' || ev.type === 'notice_read') {
+      updateNoticeBadge();
+      loadNotices();  // feed rail is always on screen now
+    }
+  };
+  const ping = setInterval(() => ws.readyState === 1 && ws.send('ping'), 20000);
+  ws.onclose = () => { clearInterval(ping); setConn(false); setTimeout(connect, 2000); };
+})();
+
+// ── Connection indicator + tool activity ticker ────────────────────────────
+function setConn(up) {
+  const el = document.getElementById('conn-status');
+  if (!el) return;
+  el.textContent = up ? '● LINKED' : '○ OFFLINE';
+  el.classList.toggle('online', up);
+  el.classList.toggle('offline', !up);
+}
+
+function showToolActivity(ev) {
+  // rolling three-line tool log in the feed rail
+  const el = document.getElementById('tool-ticker');
+  if (!el) return;
+  const line = document.createElement('div');
+  line.className = 'tool-line' + (ev.status === 'done' ? ' done' : '');
+  line.textContent = (ev.status === 'done' ? '✓ ' : '▸ ') + (ev.name || '')
+    + (ev.status !== 'done' && ev.args_summary ? ' ' + ev.args_summary : '');
+  el.insertBefore(line, el.firstChild);
+  while (el.children.length > 3) el.removeChild(el.lastChild);
+}
+
+// Restore conversation after a reload (once, not on reconnect)
+vfetch('/cmd/history?n=50').then(r => r.json()).then(d => {
+  (d.messages || []).forEach(m => addChatBubble(m.role || 'assistant', m.content || ''));
+}).catch(() => {});
+
+// ── Safety rails: confirm card, kill switch, usage tally ───────────────────
+const confirmCard = document.getElementById('confirm-card');
+let confirmId = null, confirmTimer = null;
+function showConfirmCard(ev) {
+  confirmId = ev.id;
+  document.getElementById('confirm-tool').textContent = ev.tool || '';
+  document.getElementById('confirm-args').textContent = ev.args_summary || '';
+  confirmCard.hidden = false;
+  const fill = document.getElementById('confirm-countdown-fill');
+  const t0 = Date.now(), total = (ev.timeout_s || 30) * 1000;
+  clearInterval(confirmTimer);
+  fill.style.width = '100%';
+  confirmTimer = setInterval(() => {
+    const left = Math.max(0, 1 - (Date.now() - t0) / total);
+    fill.style.width = (left * 100) + '%';
+    if (left <= 0) hideConfirmCard(confirmId);
+  }, 100);
+}
+function hideConfirmCard(id) {
+  if (id && confirmId && id !== confirmId) return;
+  confirmId = null;
+  clearInterval(confirmTimer);
+  confirmCard.hidden = true;
+}
+function voteConfirm(approve) {
+  if (!confirmId) return;
+  vfetch('/cmd/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: confirmId, approve }) }).catch(() => {});
+  hideConfirmCard(confirmId);
+}
+document.getElementById('confirm-approve').onclick = () => voteConfirm(true);
+document.getElementById('confirm-deny').onclick = () => voteConfirm(false);
+document.addEventListener('keydown', (e) => {
+  if (confirmCard.hidden) return;
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (e.key === 'y' || e.key === 'Y') voteConfirm(true);
+  if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') voteConfirm(false);
+});
+
+const pauseBtn = document.getElementById('pause-toggle');
+const pausedChip = document.getElementById('paused-chip');
+let isPaused = false;
+function setPaused(p) {
+  isPaused = p;
+  pausedChip.hidden = !p;
+  pauseBtn.classList.toggle('active', p);
+  document.body.classList.toggle('paused', p);
+}
+pauseBtn.onclick = () => {
+  vfetch('/cmd/killswitch', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paused: !isPaused }) })
+    .then(r => r.json()).then(d => setPaused(!!d.paused)).catch(() => {});
+};
+vfetch('/cmd/killswitch').then(r => r.json()).then(d => setPaused(!!d.paused)).catch(() => {});
+
+const usageEl = document.getElementById('usage-readout');
+function updateUsage(ev) {
+  const tok = (ev.today_in || 0) + (ev.today_out || 0);
+  const tokStr = tok >= 1000 ? (tok / 1000).toFixed(1) + 'K' : String(tok);
+  usageEl.textContent = '$' + (ev.today_cost || 0).toFixed(4) + ' · ' + tokStr + ' TOK';
+}
+vfetch('/cmd/usage').then(r => r.json()).then(d => {
+  const t = d.today || {};
+  updateUsage({ today_cost: t.cost_usd, today_in: t.input_tokens, today_out: t.output_tokens });
+  const w = document.getElementById('usage-week');
+  if (w && d.week) w.textContent = '7-day $' + (d.week.cost_usd || 0).toFixed(4);
+}).catch(() => {});
+
+// ── Perimeter rails boot ────────────────────────────────────────────────────
+(function initRails() {
+  vfetch('/cmd/llm/status').then(r => r.json()).then(d => {
+    const el = document.getElementById('backend-readout');
+    if (el) el.textContent = (d.backend || '—') + (d.model ? ' · ' + d.model : '');
+  }).catch(() => {});
+  vfetch('/cmd/settings').then(r => r.json()).then(c => {
+    const hb = document.getElementById('hb-readout');
+    if (hb) hb.textContent = (c.heartbeat_enabled === false ? 'off' :
+      'every ' + (c.heartbeat_interval_minutes ?? 30) + 'm')
+      + ' · quiet ' + (c.quiet_hours_start || '22:00') + '–' + (c.quiet_hours_end || '09:00');
+    const sub = document.getElementById('rail-state-sub');
+    if (sub && c.wakeword_keyword) sub.textContent = `listening for “${c.wakeword_keyword}”`;
+  }).catch(() => {});
+  loadNotices();
+  const ma = document.getElementById('feed-markall');
+  if (ma) ma.onclick = () => {
+    vfetch('/cmd/notices/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true }) })
+      .then(() => { loadNotices(); updateNoticeBadge(); }).catch(() => {});
+  };
+  // Esc closes the modules overlay
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const p = document.getElementById('side-panel');
+    if (p && p.classList.contains('open')) {
+      p.classList.remove('open');
+      const edge = document.getElementById('panel-edge');
+      if (edge) edge.classList.remove('hidden');
+    }
+  });
+})();
+
+// ── HUD clock ──────────────────────────────────────────────────────────────
+(function initClock() {
+  const timeEl = document.getElementById('clock-time');
+  const dateEl = document.getElementById('clock-date');
+  const DAYS   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function tick() {
+    const n = new Date();
+    timeEl.textContent = n.getHours().toString().padStart(2,'0') + ':' + n.getMinutes().toString().padStart(2,'0');
+    dateEl.textContent = DAYS[n.getDay()] + ' ' + n.getDate() + ' ' + MONTHS[n.getMonth()];
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
+// ── Capability gating ────────────────────────────────────────────────────────
+(async function gateCapabilities() {
+  try {
+    const r = await vfetch('/cmd/capabilities');
+    const d = await r.json();
+    document.querySelectorAll('.ptab[data-requires]').forEach(tab => {
+      const need = tab.dataset.requires;
+      if (!d[need]) {
+        tab.disabled = true;
+        tab.title = need === 'scripts'
+          ? 'requires .claude/scripts (Claude Code agent layer) — not present in this install'
+          : 'requires a configured vault';
+        tab.style.opacity = '0.35';
+        tab.style.cursor = 'not-allowed';
+      }
+    });
+  } catch (_) {}
+})();
+
+// ── Calendar ───────────────────────────────────────────────────────────────
+async function loadCalendar() {
+  const list = document.getElementById('calendar-list');
+  if (!list) return;
+  list.innerHTML = '<div class="notices-empty">one moment…</div>';
+  try {
+    const r = await vfetch('/cmd/calendar');
+    const d = await r.json();
+    list.innerHTML = '';
+    if (errText(d)) { list.innerHTML = paneErr(errText(d), 'Calendar won\'t answer.'); return; }
+    const events = d.events || [];
+    if (!events.length) { list.innerHTML = '<div class="notices-empty">Nothing scheduled. Enjoy it.</div>'; return; }
+    events.forEach(ev => {
+      const div = document.createElement('div');
+      div.className = 'cal-event';
+      const title = ev.summary || ev.title || ev.name || '(no title)';
+      const start = ev.start || ev.date || ev.datetime || '';
+      div.innerHTML = `<span class="cal-event-time">${escHtml(String(start))}</span><span class="cal-event-title">${escHtml(title)}</span>`;
+      list.appendChild(div);
+    });
+  } catch (_) {
+    list.innerHTML = paneErr(null, 'Calendar\'s offline. Try later.');
+  }
+
+  const tasksList = document.getElementById('tasks-list');
+  if (!tasksList) return;
+  tasksList.innerHTML = '<div class="notices-empty">one moment…</div>';
+  try {
+    const r = await vfetch('/cmd/tasks');
+    const d = await r.json();
+    tasksList.innerHTML = '';
+    if (!d.vault_configured) {
+      tasksList.innerHTML = '<div class="notices-empty">No vault set. Fix that in Cfg.</div>';
+      return;
+    }
+    const tasks = d.tasks || [];
+    if (!tasks.length) { tasksList.innerHTML = '<div class="notices-empty">No deadlines. For now.</div>'; return; }
+    tasks.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'habit-row' + (t.done ? ' done' : '');
+      row.innerHTML = `<div class="habit-check">${t.done ? '✓' : ''}</div><div class="habit-name">${escHtml(t.text)}</div>`;
+      tasksList.appendChild(row);
+    });
+  } catch (_) {
+    tasksList.innerHTML = paneErr(null, 'Deadlines won\'t load.');
+  }
+}
+document.getElementById('cal-refresh-btn')?.addEventListener('click', loadCalendar);
+
+// ── Settings panel ─────────────────────────────────────────────────────────
+async function loadSettingsPanel() {
+  const llmEl = document.getElementById('settings-llm-status');
+  if (llmEl) {
+    try {
+      const r = await vfetch('/cmd/llm/status');
+      const d = await r.json();
+      llmEl.textContent = `${d.backend} · ${d.model || '—'} · ${d.available ? 'online' : 'offline'}`;
+    } catch (_) { if (llmEl) llmEl.textContent = 'backend won\'t answer.'; }
+  }
+  const wxEl = document.getElementById('settings-weather-status');
+  if (wxEl) {
+    try {
+      const r = await vfetch('/cmd/weather');
+      if (r.ok) {
+        const d = await r.json();
+        wxEl.textContent = `${d.city}: ${d.temp_c}°C, ${d.desc} · humidity ${d.humidity}%`;
+      } else if (r.status === 400) {
+        // 400 is only ever the no-city-configured case (see /cmd/weather in
+        // ui_server.py); real fetch/API failures come back as 500. Show the
+        // Vesper line instead of the raw "no city configured — set..." text.
+        wxEl.textContent = "No city set. I'm not guessing your weather.";
+      } else {
+        const d = await r.json();
+        wxEl.textContent = errText(d) || 'No weather right now.';
+      }
+    } catch (_) { if (wxEl) wxEl.textContent = 'No weather right now.'; }
+  }
+  const fieldsEl = document.getElementById('settings-fields');
+  if (!fieldsEl) return;
+  try {
+    const r = await vfetch('/cmd/settings');
+    const conf = await r.json();
+    const FIELDS = [
+      { key: 'user_name',             label: 'Display name',      type: 'text'   },
+      { key: 'vault_path',            label: 'Obsidian vault folder (optional)', type: 'text' },
+      { key: 'city',                  label: 'City (weather)',     type: 'text'   },
+      { key: 'timezone_offset_hours', label: 'UTC offset (hours)', type: 'number' },
+      { key: 'tts_engine',            label: 'TTS engine',         type: 'select', opts: ['edge','kokoro','elevenlabs'] },
+      { key: 'elevenlabs_voice_id',    label: 'ElevenLabs voice ID',            type: 'text',   showIf: 'elevenlabs' },
+      { key: 'elevenlabs_batch_chars', label: 'ElevenLabs batch size (chars)',  type: 'number',  showIf: 'elevenlabs' },
+      { key: 'llm_backend',           label: 'LLM backend',        type: 'select', opts: ['auto','ollama','lmstudio','anthropic','claude_cli'] },
+      { key: 'quiet_hours_start',     label: 'Quiet hours start',  type: 'text'   },
+      { key: 'quiet_hours_end',       label: 'Quiet hours end',    type: 'text'   },
+    ];
+    fieldsEl.innerHTML = '';
+    let engineCtrl = null;
+    const engineDependentWraps = [];
+    FIELDS.forEach(({ key, label, type, opts, showIf }) => {
+      const val = conf[key] ?? '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-bottom:14px;';
+      const lbl = document.createElement('div');
+      lbl.className = 'settings-field-label';
+      lbl.textContent = label;
+      let ctrl;
+      if (type === 'select') {
+        ctrl = document.createElement('select');
+        ctrl.className = 'settings-select';
+        (opts || []).forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          if (o === String(val)) opt.selected = true;
+          ctrl.appendChild(opt);
+        });
+      } else {
+        ctrl = document.createElement('input');
+        ctrl.className = 'settings-input';
+        ctrl.type = type;
+        ctrl.value = String(val);
+      }
+      ctrl.dataset.key = key;
+      const hint = document.createElement('div');
+      hint.className = 'settings-save-hint';
+      hint.id = 'hint-' + key;
+      async function saveField() {
+        const k = ctrl.dataset.key;
+        let v = ctrl.value;
+        if (type === 'number') v = parseFloat(v);
+        try {
+          const res = await vfetch('/cmd/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: k, value: v }),
+          });
+          const h = document.getElementById('hint-' + k);
+          if (h) {
+            h.textContent = res.ok ? 'saved' : 'error';
+            h.className = 'settings-save-hint' + (res.ok ? ' saved' : '');
+            setTimeout(() => { h.textContent = ''; h.className = 'settings-save-hint'; }, 1800);
+          }
+        } catch (_) {}
+      }
+      ctrl.addEventListener('change', saveField);
+      if (type !== 'select') ctrl.addEventListener('blur', saveField);
+      if (key === 'tts_engine') engineCtrl = ctrl;
+      if (showIf) engineDependentWraps.push({ wrap, showIf });
+      wrap.append(lbl, ctrl, hint);
+      fieldsEl.appendChild(wrap);
+    });
+    // Progressive disclosure: ElevenLabs-only fields stay hidden unless that
+    // engine is selected, so switching engines doesn't leave dead controls visible.
+    function applyEngineVisibility() {
+      const engine = engineCtrl ? engineCtrl.value : '';
+      engineDependentWraps.forEach(({ wrap, showIf }) => {
+        wrap.style.display = engine === showIf ? '' : 'none';
+      });
+    }
+    if (engineCtrl) engineCtrl.addEventListener('change', applyEngineVisibility);
+    applyEngineVisibility();
+  } catch (_) {
+    fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
+  }
+}
+
+document.getElementById('settings-llm-detect')?.addEventListener('click', async () => {
+  const btn = document.getElementById('settings-llm-detect');
+  const el  = document.getElementById('settings-llm-status');
+  if (btn) btn.disabled = true;
+  if (el) el.textContent = 'detecting…';
+  try {
+    const r = await vfetch('/cmd/llm/detect');
+    const d = await r.json();
+    if (el) el.textContent = `detected: ${d.detected}`;
+    setTimeout(loadSettingsPanel, 600);
+  } catch (_) {
+    if (el) el.textContent = 'detect failed';
+  }
+  if (btn) btn.disabled = false;
+});
+
+// ── Apps panel ─────────────────────────────────────────────────────────────
+async function loadApps(forceScan) {
+  const installedList = document.getElementById('apps-installed-list');
+  const approvedList  = document.getElementById('apps-approved-list');
+  if (!installedList || !approvedList) return;
+  installedList.innerHTML = '<div class="notices-empty">scanning…</div>';
+  approvedList.innerHTML = '';
+  try {
+    const r = await vfetch('/cmd/apps/scan');
+    const d = await r.json();
+    if (errText(d)) {
+      installedList.innerHTML = paneErr(errText(d), 'Scan failed.');
+      return;
+    }
+    const apps = d.apps || [];
+    installedList.innerHTML = '';
+    approvedList.innerHTML = '';
+    const approvedApps = apps.filter(a => a.approved);
+    const unapprovedApps = apps.filter(a => !a.approved);
+
+    if (!unapprovedApps.length) {
+      installedList.innerHTML = '<div class="notices-empty">Nothing new to approve.</div>';
+    }
+    unapprovedApps.forEach(app => {
+      const row = document.createElement('div');
+      row.className = 'app-row';
+      row.innerHTML =
+        `<span class="app-row-name" title="${escHtml(app.path)}">${escHtml(app.name)}</span>` +
+        `<input class="app-alias-input" placeholder="alias" value="${escHtml(app.name.toLowerCase())}" />` +
+        `<button class="pill-btn">approve</button>`;
+      row.querySelector('button').addEventListener('click', async () => {
+        const alias = row.querySelector('input').value.trim();
+        if (!alias) return;
+        await vfetch('/cmd/apps/approve', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ path: app.path, alias }),
+        });
+        loadApps();
+      });
+      installedList.appendChild(row);
+    });
+
+    if (!approvedApps.length) {
+      approvedList.innerHTML = '<div class="notices-empty">Nothing approved. Cautious. Good.</div>';
+    }
+    approvedApps.forEach(app => {
+      const row = document.createElement('div');
+      row.className = 'app-row';
+      row.innerHTML =
+        `<span class="app-row-name" title="${escHtml(app.path)}">${escHtml(app.voice_alias || app.name)}</span>` +
+        `<button class="pill-btn">revoke</button>`;
+      row.querySelector('button').addEventListener('click', async () => {
+        await vfetch('/cmd/apps/revoke', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ alias: app.voice_alias || app.name }),
+        });
+        loadApps();
+      });
+      approvedList.appendChild(row);
+    });
+  } catch (e) {
+    installedList.innerHTML = paneErr(e.message, 'Scan failed.');
+  }
+}
+document.getElementById('apps-scan-btn')?.addEventListener('click', () => loadApps());
+
+// ── Profiles panel ──────────────────────────────────────────────────────────
+// UI-only CRUD (no voice-callable create/edit/delete — matches app approval's
+// own voice-less trust boundary). Activation itself stays voice/heartbeat-only
+// (voice/tools/activate_profile.py, voice/heartbeat.py) — this panel never
+// activates a profile, only defines one.
+const PROFILE_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+const PROFILE_DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+let _profileEditingId = null;
+let _profileApprovedAliases = [];
+
+function _profileTriggerSummary(trig) {
+  if (!trig || trig.type !== 'time') return 'Manual only';
+  const days = (trig.days && trig.days.length) ? trig.days : PROFILE_DAYS;
+  let dayLabel;
+  if (days.length === 7) dayLabel = 'every day';
+  else if (days.length === 5 && ['mon','tue','wed','thu','fri'].every(d => days.includes(d))) dayLabel = 'Mon–Fri';
+  else dayLabel = days.map(d => PROFILE_DAY_LABELS[d] || d).join('/');
+  return `Daily ${trig.time || '00:00'} (${dayLabel})`;
+}
+
+function _profileSlug(label) {
+  return label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+async function loadProfiles() {
+  const listEl = document.getElementById('profiles-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="notices-empty">loading…</div>';
+  try {
+    const [profR, appsR] = await Promise.all([
+      vfetch('/cmd/profiles'),
+      vfetch('/cmd/apps/scan'),
+    ]);
+    const profD = await profR.json();
+    if (errText(profD)) { listEl.innerHTML = paneErr(errText(profD), 'Profiles won\'t load.'); return; }
+    const appsD = await appsR.json();
+    _profileApprovedAliases = (appsD.apps || []).filter(a => a.approved).map(a => a.voice_alias || a.name);
+
+    _renderProfileAppChecks('profile-apps-checks', []);
+    _renderProfileDayChecks();
+
+    const profiles = profD.profiles || {};
+    const ids = Object.keys(profiles);
+    listEl.innerHTML = '';
+    if (!ids.length) {
+      listEl.innerHTML = '<div class="notices-empty">No profiles yet. One thing at a time, I guess.</div>';
+    }
+    ids.forEach(id => {
+      const p = profiles[id];
+      const row = document.createElement('div');
+      row.className = 'profile-row';
+      const chips = (p.apps || []).map(a => `<span class="profile-chip">${escHtml(a)}</span>`).join('');
+      row.innerHTML =
+        `<div class="profile-row-main">` +
+          `<div class="profile-row-label">${escHtml(p.label || id)}</div>` +
+          `<div class="profile-row-meta">${escHtml(_profileTriggerSummary(p.trigger))}</div>` +
+          `<div>${chips}</div>` +
+        `</div>` +
+        `<div class="profile-row-actions">` +
+          `<button class="pill-btn" data-act="edit">edit</button>` +
+          `<button class="pill-btn" data-act="delete">delete</button>` +
+        `</div>`;
+      row.querySelector('[data-act="edit"]').addEventListener('click', () => _profileStartEdit(id, p));
+      row.querySelector('[data-act="delete"]').addEventListener('click', () => _profileDelete(id, p));
+      listEl.appendChild(row);
+    });
+  } catch (e) {
+    listEl.innerHTML = paneErr(e.message, 'Profiles won\'t load.');
+  }
+}
+
+function _renderProfileAppChecks(containerId, checkedAliases) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+  if (!_profileApprovedAliases.length) {
+    el.innerHTML = '<div class="notices-empty">Nothing approved yet. Approve an app in the Apps tab first.</div>';
+    return;
+  }
+  _profileApprovedAliases.forEach(alias => {
+    const label = document.createElement('label');
+    const checked = checkedAliases.includes(alias) ? ' checked' : '';
+    label.innerHTML = `<input type="checkbox" value="${escHtml(alias)}"${checked} /> ${escHtml(alias)}`;
+    el.appendChild(label);
+  });
+}
+
+function _renderProfileDayChecks(checkedDays) {
+  const el = document.getElementById('profile-trigger-days');
+  if (!el) return;
+  const days = checkedDays || ['mon','tue','wed','thu','fri'];  // default: weekdays
+  el.innerHTML = '';
+  PROFILE_DAYS.forEach(d => {
+    const label = document.createElement('label');
+    const checked = days.includes(d) ? ' checked' : '';
+    label.innerHTML = `<input type="checkbox" value="${d}"${checked} /> ${PROFILE_DAY_LABELS[d]}`;
+    el.appendChild(label);
+  });
+}
+
+function _profileResetForm() {
+  _profileEditingId = null;
+  document.getElementById('profile-form-title').textContent = 'New profile';
+  document.getElementById('profile-form-submit').textContent = 'create';
+  document.getElementById('profile-form-cancel').hidden = true;
+  document.getElementById('profile-label').value = '';
+  document.getElementById('profile-id').value = '';
+  document.getElementById('profile-id').disabled = false;
+  document.querySelector('input[name="profile-trigger-kind"][value="manual"]').checked = true;
+  document.getElementById('profile-trigger-time-fields').hidden = true;
+  document.getElementById('profile-trigger-time').value = '18:00';
+  _renderProfileAppChecks('profile-apps-checks', []);
+  _renderProfileDayChecks();
+}
+
+function _profileStartEdit(id, p) {
+  _profileEditingId = id;
+  document.getElementById('profile-form-title').textContent = 'Edit profile';
+  document.getElementById('profile-form-submit').textContent = 'save';
+  document.getElementById('profile-form-cancel').hidden = false;
+  document.getElementById('profile-label').value = p.label || '';
+  document.getElementById('profile-id').value = id;
+  document.getElementById('profile-id').disabled = true;  // id is immutable once created
+  _renderProfileAppChecks('profile-apps-checks', p.apps || []);
+  const trig = p.trigger;
+  const isTime = trig && trig.type === 'time';
+  document.querySelector(`input[name="profile-trigger-kind"][value="${isTime ? 'time' : 'manual'}"]`).checked = true;
+  document.getElementById('profile-trigger-time-fields').hidden = !isTime;
+  document.getElementById('profile-trigger-time').value = (trig && trig.time) || '18:00';
+  _renderProfileDayChecks(trig && trig.days);
+  document.getElementById('profiles-output').textContent = '';
+  document.getElementById('ptab-profiles').scrollTop = 0;
+}
+
+async function _profileDelete(id, p) {
+  if (!confirm(`Delete profile "${p.label || id}"?`)) return;
+  try {
+    await vfetch(`/cmd/profiles/${encodeURIComponent(id)}/delete`, { method: 'POST' });
+    if (_profileEditingId === id) _profileResetForm();
+    loadProfiles();
+  } catch (e) {
+    document.getElementById('profiles-output').innerHTML = paneErr(e.message, 'Delete failed.');
+  }
+}
+
+document.getElementById('profile-form-cancel')?.addEventListener('click', () => _profileResetForm());
+
+document.querySelectorAll('input[name="profile-trigger-kind"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const isTime = document.querySelector('input[name="profile-trigger-kind"]:checked').value === 'time';
+    document.getElementById('profile-trigger-time-fields').hidden = !isTime;
+  });
+});
+
+document.getElementById('profile-label')?.addEventListener('input', () => {
+  if (_profileEditingId) return;  // id is fixed once editing an existing profile
+  const idField = document.getElementById('profile-id');
+  if (idField.dataset.userEdited === 'true') return;
+  idField.value = _profileSlug(document.getElementById('profile-label').value);
+});
+document.getElementById('profile-id')?.addEventListener('input', e => { e.target.dataset.userEdited = 'true'; });
+
+document.getElementById('profile-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const out = document.getElementById('profiles-output');
+  out.textContent = '';
+  const label = document.getElementById('profile-label').value.trim();
+  const id = document.getElementById('profile-id').value.trim() || _profileSlug(label);
+  const apps = Array.from(document.querySelectorAll('#profile-apps-checks input:checked')).map(i => i.value);
+  if (!label || !id) { out.innerHTML = paneErr(null, 'Label required.'); return; }
+  if (!apps.length) { out.innerHTML = paneErr(null, 'Pick at least one app.'); return; }
+  const kind = document.querySelector('input[name="profile-trigger-kind"]:checked').value;
+  let trigger = null;
+  if (kind === 'time') {
+    const time = document.getElementById('profile-trigger-time').value || '18:00';
+    const days = Array.from(document.querySelectorAll('#profile-trigger-days input:checked')).map(i => i.value);
+    trigger = { type: 'time', time, days: days.length ? days : PROFILE_DAYS };
+  }
+  try {
+    let r;
+    if (_profileEditingId) {
+      r = await vfetch(`/cmd/profiles/${encodeURIComponent(_profileEditingId)}/update`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, apps, trigger }),
+      });
+    } else {
+      r = await vfetch('/cmd/profiles', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, label, apps, trigger }),
+      });
+    }
+    const d = await r.json();
+    if (errText(d)) { out.innerHTML = paneErr(errText(d), 'Save failed.'); return; }
+    _profileResetForm();
+    loadProfiles();
+  } catch (e2) {
+    out.innerHTML = paneErr(e2.message, 'Save failed.');
+  }
+});
+
+// ── Workspace panel (drafts/active/ + scratch/) ─────────────────────────────
+// Read-only viewer. Writes happen via the write_draft/write_scratch tools
+// (voice/tools/workspace.py) — confirmation-free by design, so there's no
+// write UI here, just a list + click-to-view. Both folders can nest freely
+// (write_draft("sub/x.md", ...) / scratch/notes/x.md both work server-side
+// with no restriction on "/" in the name), so both lists share one drillable,
+// typed (is_dir) list + click-to-view implementation.
+const _WORKSPACE_KINDS = {
+  drafts:  { listEl: 'workspace-drafts-list',  listUrl: '/cmd/drafts',  contentUrl: '/cmd/drafts/content',  contentParam: 'name', emptyMsg: 'Nothing drafted. Yet.',       errMsg: 'Drafts won\'t load.' },
+  scratch: { listEl: 'workspace-scratch-list', listUrl: '/cmd/scratch', contentUrl: '/cmd/scratch/content', contentParam: 'path', emptyMsg: 'Empty. My own mess, for once.', errMsg: 'Scratch won\'t load.' },
+};
+const _workspaceDirs = { drafts: '', scratch: '' };
+
+function _workspaceSelectRow(listEl, row) {
+  listEl.querySelectorAll('.app-row').forEach(r => r.style.borderColor = '');
+  if (row) row.style.borderColor = 'var(--accent)';
+}
+
+async function loadWorkspace() {
+  const content = document.getElementById('workspace-content');
+  if (content) content.textContent = '';
+  await loadWorkspaceDir('drafts', '');
+  await loadWorkspaceDir('scratch', '');
+}
+
+async function loadScratchDir(dir) {
+  await loadWorkspaceDir('scratch', dir);
+}
+
+async function loadWorkspaceDir(kind, dir) {
+  const cfg = _WORKSPACE_KINDS[kind];
+  const listEl = document.getElementById(cfg.listEl);
+  const content = document.getElementById('workspace-content');
+  if (!listEl) return;
+  _workspaceDirs[kind] = dir;
+  listEl.innerHTML = '<div class="notices-empty">loading…</div>';
+  try {
+    const r = await vfetch(cfg.listUrl + '?dir=' + encodeURIComponent(dir));
+    const d = await r.json();
+    if (errText(d)) { listEl.innerHTML = paneErr(errText(d), cfg.errMsg); return; }
+    const entries = d.entries || [];
+    listEl.innerHTML = '';
+    if (dir) {
+      const up = document.createElement('div');
+      up.className = 'app-row';
+      up.style.cursor = 'pointer';
+      const parent = dir.split('/').slice(0, -1).join('/');
+      up.innerHTML = `<span class="app-row-name">.. (up)</span>`;
+      up.addEventListener('click', () => loadWorkspaceDir(kind, parent));
+      listEl.appendChild(up);
+    }
+    if (!entries.length && !dir) {
+      listEl.innerHTML = '<div class="notices-empty">' + cfg.emptyMsg + '</div>';
+      return;
+    }
+    entries.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'app-row';
+      row.style.cursor = 'pointer';
+      const label = entry.is_dir ? entry.name + '/' : entry.name;
+      row.innerHTML = `<span class="app-row-name" title="${escHtml(label)}">${escHtml(label)}</span>`;
+      row.addEventListener('click', async () => {
+        if (entry.is_dir) {
+          loadWorkspaceDir(kind, dir ? dir + '/' + entry.name : entry.name);
+          return;
+        }
+        _workspaceSelectRow(listEl, row);
+        content.textContent = '…';
+        const relPath = dir ? dir + '/' + entry.name : entry.name;
+        try {
+          const cr = await vfetch(cfg.contentUrl + '?' + cfg.contentParam + '=' + encodeURIComponent(relPath));
+          const cd = await cr.json();
+          content.textContent = cd.content ?? '';
+        } catch (e) { content.innerHTML = paneErr(e.message); }
+      });
+      listEl.appendChild(row);
+    });
+  } catch (e) { listEl.innerHTML = paneErr(e.message, cfg.errMsg); }
+}
+</script>
+</body>
+</html>
