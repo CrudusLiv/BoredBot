@@ -43,7 +43,8 @@ DEFAULTS: dict[str, Any] = {
     "llm_lmstudio_model": "local-model",
     "llm_anthropic_model": "claude-sonnet-4-6",
     # TTS
-    "tts_engine": "edge",           # edge | kokoro | elevenlabs
+    "tts_engine": "chatterbox",     # chatterbox | edge | kokoro | elevenlabs
+    "tts_chatterbox_device": "cuda",  # cuda | cpu (falls back to cpu if cuda init fails)
     "tts_voice": "en-GB-SoniaNeural",
     "tts_kokoro_voice": "bf_isabella",
     "tts_preload_kokoro": False,

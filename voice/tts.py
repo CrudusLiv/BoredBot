@@ -1,6 +1,10 @@
-"""Text-to-speech — three backends selectable via config `tts_engine`.
+"""Text-to-speech — four backends selectable via config `tts_engine`.
 
-edge (default): Microsoft Edge TTS — free, requires internet.
+chatterbox (default): Chatterbox Turbo (Resemble AI) — local, GPU-accelerated, open-source.
+  Install: py -m pip install chatterbox-tts
+  Config: tts_chatterbox_device  ("cuda" or "cpu", default "cuda"; falls back to cpu on init failure)
+
+edge: Microsoft Edge TTS — free, requires internet.
   Config: tts_voice  (e.g. "en-GB-SoniaNeural")
 
 kokoro: Local Kokoro TTS — offline, no API key, high quality.
@@ -67,6 +71,7 @@ _playback_lock = threading.Lock()
 speaking = threading.Event()
 
 _kokoro_pipeline = None
+_chatterbox_model = None
 
 _active_utterance: "Utterance | None" = None
 _utterance_lock = threading.Lock()
@@ -289,6 +294,12 @@ def _synth(text: str) -> tuple[str, str] | None:
             print("[TTS] elevenlabs failed, falling back to edge", flush=True)
             return _synth_edge(text, conf.get("tts_voice", "en-GB-SoniaNeural"))
         # key or voice_id missing — fall through to edge
+    if engine == "chatterbox":
+        item = _synth_chatterbox(text, conf.get("tts_chatterbox_device", "cuda"))
+        if item is not None:
+            return item
+        print("[TTS] chatterbox failed, falling back to edge", flush=True)
+        return _synth_edge(text, conf.get("tts_voice", "en-GB-SoniaNeural"))
     if engine == "kokoro":
         return _synth_kokoro(text, conf.get("tts_kokoro_voice", "bf_isabella"))
     return _synth_edge(text, conf.get("tts_voice", "en-GB-SoniaNeural"))
@@ -409,6 +420,55 @@ def _synth_kokoro(text: str, voice: str) -> tuple[str, str] | None:
         tmp_path = fh.name
     try:
         sf.write(tmp_path, audio, 24000)
+    except Exception as exc:
+        print(f"[TTS] wav write failed: {exc}", flush=True)
+        Path(tmp_path).unlink(missing_ok=True)
+        return None
+
+    return tmp_path, "waveaudio"
+
+
+# ── Chatterbox Turbo backend ────────────────────────────────────────────────
+
+def _load_chatterbox(device: str):
+    global _chatterbox_model
+    if _chatterbox_model is not None:
+        return _chatterbox_model
+    try:
+        from chatterbox.tts_turbo import ChatterboxTurboTTS
+    except ImportError as exc:
+        raise RuntimeError(f"pip install chatterbox-tts  ({exc})") from exc
+    print(f"[TTS] loading Chatterbox (device={device!r}) …", flush=True)
+    try:
+        _chatterbox_model = ChatterboxTurboTTS.from_pretrained(device=device)
+    except Exception as exc:
+        if device != "cpu":
+            print(f"[TTS] Chatterbox {device} init failed ({exc}) — retrying on cpu", flush=True)
+            _chatterbox_model = ChatterboxTurboTTS.from_pretrained(device="cpu")
+        else:
+            raise
+    print("[TTS] Chatterbox ready.", flush=True)
+    return _chatterbox_model
+
+
+def _synth_chatterbox(text: str, device: str) -> tuple[str, str] | None:
+    try:
+        model = _load_chatterbox(device)
+        wav = model.generate(text)
+    except Exception as exc:
+        print(f"[TTS] Chatterbox synthesis failed: {exc}", flush=True)
+        return None
+
+    try:
+        import torchaudio as ta
+    except ImportError as exc:
+        print(f"[TTS] chatterbox needs torchaudio: pip install torchaudio  ({exc})", flush=True)
+        return None
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fh:
+        tmp_path = fh.name
+    try:
+        ta.save(tmp_path, wav, model.sr)
     except Exception as exc:
         print(f"[TTS] wav write failed: {exc}", flush=True)
         Path(tmp_path).unlink(missing_ok=True)

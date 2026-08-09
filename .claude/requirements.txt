@@ -45,3 +45,6 @@ numpy>=1.26
 # Kokoro local TTS (alternative to edge-tts — offline, high quality)
 kokoro>=0.9
 soundfile>=0.12
+
+# Chatterbox Turbo local TTS (default — GPU-accelerated, open-source)
+chatterbox-tts
