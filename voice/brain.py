@@ -35,7 +35,15 @@ _FALLBACK = (
 _VOICE_NOTE = (
     "\n\nYou are running as a voice assistant. Write replies as spoken: "
     "no markdown, no bullet points, no code blocks unless asked. "
-    "2-4 conversational sentences for most replies."
+    "Default short — most replies are a sentence or two — but let it run "
+    "longer when the moment actually calls for it; don't pad, and don't "
+    "cut a real point short just to hit a count."
+)
+
+_DELIVERY_TAGS_NOTE = (
+    "\n\nYour voice engine supports short delivery tags like [sigh] or "
+    "[pause] — use at most one per reply, only when it earns its place, "
+    "and never in serious/technical replies where it would blunt the point."
 )
 
 _TRUST_BOUNDARY = """
@@ -68,7 +76,10 @@ def _build_system(conf: dict, tool_descriptions: str) -> str:
     tz_label = f"UTC{tz_hours:+d}" if tz_hours != 0 else "UTC"
     now = datetime.now(tz).strftime(f"%A, %d %B %Y, %H:%M {tz_label}")
 
-    base = f"{_TRUST_BOUNDARY}\n\n{soul}{_VOICE_NOTE}\n\nCurrent time: {now}"
+    base = f"{_TRUST_BOUNDARY}\n\n{soul}{_VOICE_NOTE}"
+    if conf.get("tts_engine") == "chatterbox":
+        base += _DELIVERY_TAGS_NOTE
+    base += f"\n\nCurrent time: {now}"
     try:
         from voice.memory import load_context
         ctx = load_context()

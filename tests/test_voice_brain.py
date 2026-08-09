@@ -103,3 +103,29 @@ def test_turn_mid_stream_exception_keeps_partial_reply(brain, monkeypatch):
     assert "Partial answer here" in joined
     assert "[couldn't get a response — try again]" not in chunks
     assert brain.history[-1] == {"role": "assistant", "content": "Partial answer here"}
+
+
+def test_build_system_includes_delivery_tags_note_for_chatterbox(monkeypatch, tmp_path):
+    from datetime import timezone
+    monkeypatch.setattr("voice.config.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("voice.config.get_vault_dir", lambda: None)
+    monkeypatch.setattr("voice.config.get_timezone", lambda: timezone.utc)
+    monkeypatch.setattr("voice.memory.load_context", lambda: "")
+    from voice.brain import _build_system
+
+    system = _build_system({"tts_engine": "chatterbox"}, "")
+
+    assert "[sigh]" in system
+
+
+def test_build_system_omits_delivery_tags_note_for_other_engines(monkeypatch, tmp_path):
+    from datetime import timezone
+    monkeypatch.setattr("voice.config.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr("voice.config.get_vault_dir", lambda: None)
+    monkeypatch.setattr("voice.config.get_timezone", lambda: timezone.utc)
+    monkeypatch.setattr("voice.memory.load_context", lambda: "")
+    from voice.brain import _build_system
+
+    system = _build_system({"tts_engine": "edge"}, "")
+
+    assert "[sigh]" not in system
