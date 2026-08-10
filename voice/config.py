@@ -45,6 +45,7 @@ DEFAULTS: dict[str, Any] = {
     # TTS
     "tts_engine": "chatterbox",     # chatterbox | edge | kokoro | elevenlabs
     "tts_chatterbox_device": "cuda",  # cuda | cpu (falls back to cpu if cuda init fails)
+    "tts_chatterbox_voice_path": "",  # optional local .wav reference clip (>5s) for voice cloning
     "tts_voice": "en-GB-SoniaNeural",
     "tts_kokoro_voice": "bf_isabella",
     "tts_preload_kokoro": False,

@@ -72,6 +72,7 @@ speaking = threading.Event()
 
 _kokoro_pipeline = None
 _chatterbox_model = None
+_chatterbox_voice_path: str | None = None
 
 _active_utterance: "Utterance | None" = None
 _utterance_lock = threading.Lock()
@@ -295,7 +296,11 @@ def _synth(text: str) -> tuple[str, str] | None:
             return _synth_edge(text, conf.get("tts_voice", "en-GB-SoniaNeural"))
         # key or voice_id missing — fall through to edge
     if engine == "chatterbox":
-        item = _synth_chatterbox(text, conf.get("tts_chatterbox_device", "cuda"))
+        item = _synth_chatterbox(
+            text,
+            conf.get("tts_chatterbox_device", "cuda"),
+            conf.get("tts_chatterbox_voice_path", "").strip(),
+        )
         if item is not None:
             return item
         print("[TTS] chatterbox failed, falling back to edge", flush=True)
@@ -451,24 +456,51 @@ def _load_chatterbox(device: str):
     return _chatterbox_model
 
 
-def _synth_chatterbox(text: str, device: str) -> tuple[str, str] | None:
+def _synth_chatterbox(text: str, device: str, voice_path: str = "") -> tuple[str, str] | None:
+    global _chatterbox_voice_path
     try:
         model = _load_chatterbox(device)
+        if voice_path and voice_path != _chatterbox_voice_path:
+            # Re-embedding the reference clip is expensive — only do it when
+            # the configured path actually changes, not on every reply.
+            # norm_loudness=False: chatterbox-tts's own loudness-normalize
+            # step multiplies the float32 reference wav by a numpy.float64
+            # gain scalar (pyloudnorm's integrated_loudness() returns
+            # np.float64, not a plain float), silently upcasting the array
+            # to float64 under current numpy's type-promotion rules. That
+            # then collides with the model's float32 mel filters deeper in
+            # the pipeline ("expected scalar type Double but found Float").
+            # Skipping it avoids the bug; our reference clips are already at
+            # a normal speaking volume.
+            print(f"[TTS] Chatterbox: preparing voice from {voice_path!r} …", flush=True)
+            model.prepare_conditionals(voice_path, norm_loudness=False)
+            _chatterbox_voice_path = voice_path
         wav = model.generate(text)
     except Exception as exc:
         print(f"[TTS] Chatterbox synthesis failed: {exc}", flush=True)
         return None
 
+    return _write_wav(wav, model.sr)
+
+
+def _write_wav(wav, sr: int) -> tuple[str, str] | None:
     try:
-        import torchaudio as ta
+        import soundfile as sf
     except ImportError as exc:
-        print(f"[TTS] chatterbox needs torchaudio: pip install torchaudio  ({exc})", flush=True)
+        print(f"[TTS] chatterbox needs soundfile: pip install soundfile  ({exc})", flush=True)
         return None
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fh:
         tmp_path = fh.name
     try:
-        ta.save(tmp_path, wav, model.sr)
+        # model.generate() returns a (1, N) tensor — squeeze to mono (N,)
+        # before handing to soundfile. torchaudio.save() is avoided here:
+        # torchaudio >= 2.1 requires the separate torchcodec package to
+        # encode audio, which isn't installed and adds another fragile
+        # torch/torchaudio/torchcodec version-pinning dependency; soundfile
+        # is already a hard dependency (used by the kokoro backend above).
+        audio = wav.squeeze(0).cpu().numpy()
+        sf.write(tmp_path, audio, sr)
     except Exception as exc:
         print(f"[TTS] wav write failed: {exc}", flush=True)
         Path(tmp_path).unlink(missing_ok=True)
