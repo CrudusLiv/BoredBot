@@ -60,3 +60,25 @@ def test_patch_dict_value_round_trips(client):
     assert r.status_code == 200, r.text
     got = client.get("/cmd/settings").json()
     assert got["pc_control_apps"] == apps
+
+
+@pytest.mark.parametrize("key,value", [
+    ("ptt_key", "f6"),
+    ("screen_read_capture_hotkey", "f9"),
+    ("screen_read_ask_hotkey", "f10"),
+    ("screen_read_copy_hotkey", "f11"),
+    ("screen_read_dismiss_hotkey", "f12"),
+])
+def test_patch_keybind_round_trips(client, key, value):
+    r = client.post("/cmd/settings", headers=_hdr(), json={"key": key, "value": value})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got[key] == value
+
+
+def test_patch_screen_read_hotkey_can_be_unbound(client):
+    r = client.post("/cmd/settings", headers=_hdr(),
+                     json={"key": "screen_read_capture_hotkey", "value": ""})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got["screen_read_capture_hotkey"] == ""

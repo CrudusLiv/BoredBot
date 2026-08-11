@@ -434,6 +434,8 @@ _SETTINGS_ALLOWED = {
     "downloads_triage_enabled",
     "job_alerts_enabled", "job_alert_senders", "job_alert_lookback_days",
     "pc_control_apps",
+    "ptt_key", "screen_read_capture_hotkey", "screen_read_ask_hotkey",
+    "screen_read_copy_hotkey", "screen_read_dismiss_hotkey",
 }
 
 
