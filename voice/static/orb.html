@@ -2631,6 +2631,152 @@ async function _renderPcControl(conf, container) {
 }
 
 
+// Maps a browser KeyboardEvent.code to the exact key-name string
+// voice/audio.py::_NAMED_VK understands. Keys not listed here (numpad,
+// media keys, CapsLock, etc.) are rejected by the recorder in
+// _renderKeybinds — accepting them would resolve to the wrong VK code
+// server-side via _vk_code()'s ASCII fallback.
+const CODE_TO_KEYNAME = {
+  Backspace: 'backspace', Tab: 'tab', Enter: 'enter',
+  ShiftLeft: 'shift_l', ShiftRight: 'shift_r',
+  ControlLeft: 'ctrl_l', ControlRight: 'ctrl_r',
+  AltLeft: 'alt_l', AltRight: 'alt_r',
+  Escape: 'esc', Space: 'space',
+  PageUp: 'page_up', PageDown: 'page_down', End: 'end', Home: 'home',
+  ArrowLeft: 'left', ArrowUp: 'up', ArrowRight: 'right', ArrowDown: 'down',
+  Delete: 'delete',
+  MetaLeft: 'cmd_l', MetaRight: 'cmd_r',
+  Backquote: '`', Minus: '-', Equal: '=',
+  BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+  Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/',
+};
+for (let i = 0; i <= 9; i++) CODE_TO_KEYNAME['Digit' + i] = String(i);
+for (let i = 0; i < 26; i++) CODE_TO_KEYNAME['Key' + String.fromCharCode(65 + i)] = String.fromCharCode(97 + i);
+for (let i = 1; i <= 24; i++) CODE_TO_KEYNAME['F' + i] = 'f' + i;
+
+// The 5 rebindable keys in the app. unbindable: true means an "unbind"
+// button is offered (saves ""); ptt_key omits it because _vk_code("")
+// crashes the PTT poll loop server-side.
+const KEYBINDS = [
+  { key: 'ptt_key',                     label: 'Push-to-talk',                    unbindable: false },
+  { key: 'screen_read_capture_hotkey',  label: 'Screen-read: capture',            unbindable: true  },
+  { key: 'screen_read_ask_hotkey',      label: 'Screen-read: ask',                unbindable: true  },
+  { key: 'screen_read_copy_hotkey',     label: 'Screen-read: copy last answer',   unbindable: true  },
+  { key: 'screen_read_dismiss_hotkey',  label: 'Screen-read: dismiss overlay',    unbindable: true  },
+];
+
+// "Keybinds" group on the Cfg tab: press-to-record rebinding for the 5 keys
+// in KEYBINDS. Values round-trip through the same /cmd/settings patch path
+// as every other setting (widened to allow these keys in
+// voice/ui_server.py::_SETTINGS_ALLOWED).
+async function _renderKeybinds(conf, container) {
+  const values = {};
+  KEYBINDS.forEach(b => { values[b.key] = conf[b.key] || ''; });
+
+  const group = document.createElement('div');
+  group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
+
+  const header = document.createElement('div');
+  header.className = 'settings-field-label';
+  header.textContent = 'Keybinds';
+  header.style.cssText = 'font-weight:600; margin-bottom:10px;';
+  group.appendChild(header);
+
+  const rowEls = {};
+
+  function conflictsFor(bindKey) {
+    const v = values[bindKey];
+    if (!v) return [];
+    return KEYBINDS.filter(b => b.key !== bindKey && values[b.key] === v).map(b => b.label);
+  }
+
+  function refreshConflictWarnings() {
+    KEYBINDS.forEach(b => {
+      const others = conflictsFor(b.key);
+      rowEls[b.key].warn.textContent = others.length ? `also bound to: ${others.join(', ')}` : '';
+    });
+  }
+
+  KEYBINDS.forEach(({ key, label, unbindable }) => {
+    const row = document.createElement('div');
+    row.className = 'app-row';
+    row.style.cssText = 'display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'app-row-name';
+    nameEl.style.flex = '1';
+    nameEl.textContent = label;
+
+    const badge = document.createElement('span');
+    badge.className = 'profile-chip';
+    badge.textContent = values[key] ? values[key].toUpperCase() : '(unbound)';
+
+    const changeBtn = document.createElement('button');
+    changeBtn.type = 'button';
+    changeBtn.className = 'pill-btn';
+    changeBtn.textContent = 'Change';
+
+    const hint = document.createElement('span');
+    hint.className = 'settings-save-hint';
+
+    const warn = document.createElement('span');
+    warn.style.cssText = 'font-size:11px; color:#e0a030; width:100%;';
+
+    row.append(nameEl, badge, changeBtn);
+
+    if (unbindable) {
+      const unbindBtn = document.createElement('button');
+      unbindBtn.type = 'button';
+      unbindBtn.className = 'pill-btn';
+      unbindBtn.textContent = '✕';
+      unbindBtn.title = 'Unbind';
+      unbindBtn.addEventListener('click', async () => {
+        values[key] = '';
+        badge.textContent = '(unbound)';
+        await _saveSetting(key, '', hint);
+        refreshConflictWarnings();
+      });
+      row.appendChild(unbindBtn);
+    }
+
+    row.append(hint, warn);
+    group.appendChild(row);
+    rowEls[key] = { badge, warn };
+
+    changeBtn.addEventListener('click', () => {
+      const prevLabel = changeBtn.textContent;
+      changeBtn.textContent = 'press a key…';
+      changeBtn.disabled = true;
+
+      function cleanup() {
+        document.removeEventListener('keydown', onKeydown, true);
+        changeBtn.textContent = prevLabel;
+        changeBtn.disabled = false;
+      }
+      function onKeydown(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.code === 'Escape') { cleanup(); return; }
+        const name = CODE_TO_KEYNAME[e.code];
+        if (!name) {
+          warn.textContent = 'unsupported key, try another';
+          return; // stay in recording mode
+        }
+        cleanup();
+        values[key] = name;
+        badge.textContent = name.toUpperCase();
+        _saveSetting(key, name, hint);
+        refreshConflictWarnings();
+      }
+      document.addEventListener('keydown', onKeydown, true);
+    });
+  });
+
+  refreshConflictWarnings();
+  container.appendChild(group);
+}
+
+
 async function loadSettingsPanel() {
   const llmEl = document.getElementById('settings-llm-status');
   if (llmEl) {
@@ -2743,6 +2889,7 @@ async function loadSettingsPanel() {
     await _renderActivityAwareness(conf, fieldsEl);
     await _renderJobAlerts(conf, fieldsEl);
     await _renderPcControl(conf, fieldsEl);
+    await _renderKeybinds(conf, fieldsEl);
   } catch (_) {
     fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
   }
