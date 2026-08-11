@@ -33,12 +33,16 @@ def show() -> None:
 
 
 def start(port: int, token: str) -> None:
-    """Spawn the dedicated GUI thread and block until the window is ready
-    (or has failed to start) -- mirrors ScreenOverlay.start()'s handshake."""
-    threading.Thread(
-        target=_run, args=(port, token), daemon=True, name="vesper-ui-window",
-    ).start()
-    _ready.wait(timeout=5.0)
+    """Disabled for now: pywebview's webview.start() hard-requires the
+    process's real main thread (unconditional check in
+    webview/__init__.py -- no bypass), which a dedicated background
+    thread can never satisfy. voice/ui_server.py calls this
+    unconditionally; leaving is_available() permanently False here means
+    it transparently falls back to _open_app_window() (Edge/Chrome
+    subprocess), i.e. today's known-working behavior, until
+    voice/main.py is restructured to give pywebview the main thread and
+    move its own interactive loop to a background thread instead."""
+    return
 
 
 def _on_closing(window) -> bool:

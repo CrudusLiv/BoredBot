@@ -66,3 +66,17 @@ def test_run_marks_available_and_starts_webview_on_success(monkeypatch):
     assert ui_window.is_available() is True
     assert ui_window._window is fake_window
     assert start_calls == [True]
+
+
+def test_start_is_disabled_pending_main_thread_redesign(monkeypatch):
+    """pywebview's webview.start() hard-requires the real process
+    MainThread (verified against site-packages/webview/__init__.py) --
+    this module's dedicated-thread design can't satisfy that, so start()
+    is a deliberate no-op until voice/main.py is restructured to give
+    pywebview the main thread. _run()/_create_window() stay in place,
+    unused by start() for now, for that follow-up to build on."""
+    calls = []
+    monkeypatch.setattr(ui_window, "_create_window", lambda port, token: calls.append(True))
+    ui_window.start(7070, "tok")
+    assert calls == []
+    assert ui_window.is_available() is False
