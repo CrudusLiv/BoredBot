@@ -27,6 +27,7 @@ _OPTIONS = ClaudeAgentOptions(
     mcp_servers={},
     strict_mcp_config=True,
     setting_sources=[],
+    include_partial_messages=True,
 )
 
 
