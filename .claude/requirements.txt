@@ -41,6 +41,7 @@ faster-whisper>=1.0
 edge-tts>=6.0
 sounddevice>=0.4
 numpy>=1.26
+windows-capture
 
 # Kokoro local TTS (alternative to edge-tts — offline, high quality)
 kokoro>=0.9
