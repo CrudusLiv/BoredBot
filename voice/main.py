@@ -113,6 +113,26 @@ def _run_smoke_test() -> None:
     print(f"[smoke-test] OK — {len(modules)} modules imported")
 
 
+def _maybe_start_screen_read(conf: dict) -> "threading.Event | None":
+    """Starts the screen-read overlay + hotkey thread if enabled. Returns
+    the stop_event to signal on shutdown, or None if the feature is off."""
+    if not conf.get("screen_read_enabled", False):
+        return None
+    from voice import screen_capture, screen_overlay, screen_read, screen_read_hotkeys
+
+    overlay = screen_overlay.ScreenOverlay()
+    overlay.start()
+    hotkeys = screen_read_hotkeys.ScreenReadHotkeys(
+        overlay, screen_capture.capture_active_monitor, screen_read.ask_about_images,
+    )
+    stop_event = threading.Event()
+    threading.Thread(
+        target=hotkeys.run, args=(stop_event,), daemon=True, name="vesper-screen-read",
+    ).start()
+    print("[screen-read] armed")
+    return stop_event
+
+
 def run() -> None:
     # Earliest point that can read a persisted API key: llm.get_status() below
     # checks os.environ directly, before Brain (and its own load_env() call)
@@ -210,6 +230,8 @@ def run() -> None:
             daemon=True, name="vesper-clap",
         ).start()
         print("[clap] double-clap interrupt armed")
+
+    _screen_read_stop = _maybe_start_screen_read(conf)
 
     # Proactive TTS: heartbeat pushes spoken text here; proactive speaker thread consumes it
     speak_queue: queue.Queue[str] = queue.Queue()
@@ -402,6 +424,8 @@ def run() -> None:
             hb.stop()
         if _clap_stop:
             _clap_stop.set()
+        if _screen_read_stop:
+            _screen_read_stop.set()
         print("\nGoodbye.")
 
 if __name__ == "__main__":
