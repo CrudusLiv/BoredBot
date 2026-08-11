@@ -14,5 +14,6 @@
   "requires_confirmation": ["create_note", "append_note", "forget_fact", "launch_app", "activate_profile"],
   "vad_silence_s": 0.5,
   "vad_max_s": 8.0,
-  "vad_silence_threshold": 0.01
+  "vad_silence_threshold": 0.01,
+  "screen_read_enabled": true
 }
