@@ -53,11 +53,8 @@ def _vk_code(key: str) -> int:
     return ord(key[0].upper())
 
 
-def record_ptt(key: str = "space", on_press=None) -> Optional[bytes]:
-    """Block until PTT key pressed; record while held; return WAV bytes or None.
-
-    on_press: callable fired the instant the PTT key is first detected.
-    Used for barge-in: pass tts.stop_speaking to cancel ongoing TTS.
+def is_ptt_down(key: str = "space") -> bool:
+    """Non-blocking check: is the PTT key currently held?
 
     Polls win32api.GetAsyncKeyState for raw global key state rather than
     installing a keyboard hook. A hook only sees keystrokes Windows routes
@@ -67,23 +64,29 @@ def record_ptt(key: str = "space", on_press=None) -> Optional[bytes]:
     either restriction.
     """
     try:
+        import win32api
+    except ImportError as exc:
+        raise RuntimeError(
+            f"Voice mode requires extra deps: pip install pywin32  ({exc})"
+        ) from exc
+    return bool(win32api.GetAsyncKeyState(_vk_code(key)) & 0x8000)
+
+
+def record_while_held(key: str = "space", on_press=None) -> Optional[bytes]:
+    """Record audio while the PTT key stays held. Assumes the key is
+    already down when called (see is_ptt_down) — no wait-for-press loop.
+    Returns WAV bytes, or None if the clip was too short to be speech.
+
+    on_press: callable fired once, immediately. Used for barge-in: pass
+    tts.stop_speaking to cancel ongoing TTS.
+    """
+    try:
         import numpy as np
         import sounddevice as sd
-        import win32api
     except ImportError as exc:
         raise RuntimeError(
             f"Voice mode requires extra deps: pip install sounddevice pywin32 numpy  ({exc})"
         ) from exc
-
-    vk = _vk_code(key)
-
-    def is_down() -> bool:
-        return bool(win32api.GetAsyncKeyState(vk) & 0x8000)
-
-    print(f"  [hold {key} to speak]", end="\r", flush=True)
-
-    while not is_down():
-        time.sleep(POLL_INTERVAL_S)
 
     if on_press:
         try:
@@ -97,7 +100,7 @@ def record_ptt(key: str = "space", on_press=None) -> Optional[bytes]:
     block_size = 1024
 
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32") as stream:
-        while is_down():
+        while is_ptt_down(key):
             data, _ = stream.read(block_size)
             chunks.append(data.copy())
             # Emit RMS amplitude for the mic volume ring in the orb UI
@@ -128,3 +131,15 @@ def record_ptt(key: str = "space", on_press=None) -> Optional[bytes]:
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(pcm.tobytes())
     return buf.getvalue()
+
+
+def record_ptt(key: str = "space", on_press=None) -> Optional[bytes]:
+    """Block until PTT key pressed; record while held; return WAV bytes or None.
+
+    on_press: callable fired the instant the PTT key is first detected.
+    Used for barge-in: pass tts.stop_speaking to cancel ongoing TTS.
+    """
+    print(f"  [hold {key} to speak]", end="\r", flush=True)
+    while not is_ptt_down(key):
+        time.sleep(POLL_INTERVAL_S)
+    return record_while_held(key, on_press=on_press)

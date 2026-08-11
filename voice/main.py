@@ -122,11 +122,17 @@ def run() -> None:
     _load_data_dir_env()
 
     parser = argparse.ArgumentParser(description="Vesper voice assistant")
-    parser.add_argument("--text",     action="store_true", help="Text mode instead of push-to-talk voice")
+    parser.add_argument("--voice",   action="store_true", help="Voice-only mode (push-to-talk, no keyboard input)")
+    parser.add_argument("--text",     action="store_true", help="Text-only mode (no voice/push-to-talk)")
     parser.add_argument("--smoke-test", action="store_true", help="Import all modules and exit 0 (CI check, no audio hardware needed)")
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     args = parser.parse_args()
-    args.voice = not args.text
+    if args.voice and args.text:
+        parser.error("--voice and --text are mutually exclusive")
+    # Default (neither flag): both input paths are live at once. `--voice`/
+    # `--text` narrow to exactly one.
+    use_voice = args.voice or not args.text
+    use_text = args.text or not args.voice
 
     if args.version:
         print(_get_version())
@@ -174,14 +180,15 @@ def run() -> None:
 
     _show_notices()
     print("Vesper. Ctrl-C to quit.")
-    if args.voice:
-        print(f"Hold [{conf.get('ptt_key', '`')}] to speak.")
+    if use_voice:
+        print(f"Hold [{conf.get('ptt_key', '`')}] to speak.", end="")
+        print("  Or type below." if use_text else "")
     print()
 
     # Double-clap barge-in: interrupts TTS mid-reply — a hands-free way to
     # stop speech without needing to hold the PTT key.
     _clap_stop: threading.Event | None = None
-    if args.voice and conf.get("clap_enabled", False):
+    if use_voice and conf.get("clap_enabled", False):
         from voice import clap_detector as _clap
 
         def _on_clap() -> None:
@@ -220,8 +227,9 @@ def run() -> None:
         )
         hb.start()
 
-    # Proactive speaker runs only in voice mode; text mode drains via loop
-    if args.voice and proactive_tts:
+    # Proactive speaker runs whenever voice output is available; text-only
+    # mode drains the same queue as printed lines in the loop below instead.
+    if use_voice and proactive_tts:
         _start_proactive_speaker(speak_queue, _stop_proactive)
 
     ui_port = int(conf.get("ui_port", 7070))
@@ -241,10 +249,30 @@ def run() -> None:
         except Exception:
             pass
 
+    # Hybrid/text-only: a background thread feeds completed typed lines into
+    # a queue so the main loop can poll it alongside the PTT key rather than
+    # blocking on input(). Pure voice-only mode never starts this thread, so
+    # record_ptt()'s own blocking wait-for-press loop is unaffected below.
+    _STDIN_CLOSED = object()
+    _text_queue: "queue.Queue[object]" = queue.Queue()
+    if use_text:
+        def _read_text_input() -> None:
+            while True:
+                try:
+                    line = input("you: ").strip()
+                except EOFError:
+                    _text_queue.put(_STDIN_CLOSED)
+                    return
+                if line:
+                    _text_queue.put(line)
+
+        threading.Thread(target=_read_text_input, daemon=True, name="vesper-text-input").start()
+
     try:
         while True:
-            # Text mode: drain and print any proactive messages before prompting
-            if not args.voice:
+            # Drain and print any proactive messages before prompting —
+            # spoken via the proactive speaker thread too when use_voice.
+            if use_text:
                 while True:
                     try:
                         text = speak_queue.get_nowait()
@@ -252,7 +280,11 @@ def run() -> None:
                     except queue.Empty:
                         break
 
-            if args.voice:
+            user_text: str | None = None
+            input_source: str | None = None
+
+            if use_voice and not use_text:
+                # Pure voice mode — unchanged: block on the PTT key.
                 from voice import silence
                 from voice.audio import record_ptt
                 from voice.stt import transcribe
@@ -275,19 +307,67 @@ def run() -> None:
                 if not user_text.strip():
                     _emit({"type": "state", "value": "idle"})
                     continue
-            else:
-                try:
-                    user_text = input("you: ").strip()
-                except EOFError:
+                input_source = "voice"
+
+            elif use_text and not use_voice:
+                # Pure text mode — unchanged: block on stdin.
+                item = _text_queue.get()
+                if item is _STDIN_CLOSED:
                     break
-                if not user_text:
-                    continue
+                user_text = item
+                input_source = "text"
+
+            else:
+                # Hybrid: poll for a typed line or a PTT press, whichever
+                # comes first.
+                from voice import silence
+                from voice.audio import is_ptt_down, record_while_held
+                from voice.stt import transcribe
+                from voice.tts import stop_speaking
+
+                while True:
+                    try:
+                        item = _text_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    else:
+                        if item is _STDIN_CLOSED:
+                            user_text, input_source = None, "eof"
+                            break
+                        user_text, input_source = item, "text"
+                        break
+
+                    if not silence.is_silenced() and is_ptt_down(conf.get("ptt_key", "`")):
+                        _emit({"type": "state", "value": "listening"})
+                        audio = record_while_held(key=conf.get("ptt_key", "`"), on_press=stop_speaking)
+                        if audio is None:
+                            _emit({"type": "state", "value": "idle"})
+                            continue
+                        try:
+                            transcript = transcribe(audio)
+                        except Exception as _stt_err:
+                            print(f"\n[STT error] {_stt_err}")
+                            _emit({"type": "state", "value": "idle"})
+                            continue
+                        if transcript.strip():
+                            user_text, input_source = transcript, "voice"
+                            break
+                        _emit({"type": "state", "value": "idle"})
+                        continue
+
+                    time.sleep(0.05)
+
+                if input_source == "eof":
+                    break
+
+            if not user_text or not user_text.strip():
+                continue
 
             _ks_action = _match_killswitch(user_text)
             if _ks_action:
                 _msg = _apply_killswitch(_ks_action)
                 print(f"vesper: {_msg}")
-                if args.voice and not cfg.is_quiet_hours():
+                if input_source == "voice" and not cfg.is_quiet_hours():
                     from voice.tts import speak
                     speak(_msg, force=True)
                 continue
@@ -295,9 +375,9 @@ def run() -> None:
             print("vesper: ", end="", flush=True)
             utt = None
             try:
-                for chunk in brain.turn(user_text, source="voice" if args.voice else "text"):
+                for chunk in brain.turn(user_text, source=input_source):
                     print(chunk, end=" ", flush=True)
-                    if args.voice and not cfg.is_quiet_hours():
+                    if input_source == "voice" and not cfg.is_quiet_hours():
                         if utt is None:
                             from voice.tts import begin_utterance
                             _emit({"type": "state", "value": "speaking"})
@@ -311,11 +391,12 @@ def run() -> None:
 
             if utt is not None:
                 utt.close()
-            elif args.voice:
+            elif input_source == "voice":
                 _emit({"type": "state", "value": "idle"})
 
     except KeyboardInterrupt:
         brain.save()
+        brain.close()
         _stop_proactive.set()
         if hb:
             hb.stop()

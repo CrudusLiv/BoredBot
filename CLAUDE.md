@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Vesper is a personal second brain. Two layers live here:
 
-1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk audio, faster-whisper STT, edge-tts TTS, multi-turn brain via `claude -p` subprocess. The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice`.
+1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk audio, faster-whisper STT, Chatterbox Turbo TTS (local, GPU-accelerated, voice-cloning capable; falls back to edge-tts), multi-turn brain via the Claude Agent SDK (`ClaudeSDKClient`, same Max-plan OAuth session `claude -p` always used — no API key needed). The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice`.
 2. **Claude Code agent system** — `.claude/scripts/`, `.claude/hooks/`, and `.claude/settings.json` are the running agent layer (memory reflection, vector indexing, integrations).
 
-The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. `core/dashboard.py` + `integrations/discord_webhook.py` are likewise dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today.
+The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. `core/dashboard.py` + `integrations/discord_webhook.py` are likewise dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today. `voice/mcp_server.py` (the `claude -p` subprocess MCP server) is retired the same way — kept for history, not imported by anything — superseded by `voice/agent_tools.py`.
 
 The personal vault (notes, schedules, finances) lives locally at `Dynamous/Memory/` — gitignored. Each machine keeps its own vault.
 
@@ -68,7 +68,8 @@ The DB lives at `.claude/data/memory.db` (gitignored). Embeddings use `fast-all-
 | Path | Purpose |
 |------|---------|
 | `voice/main.py` | Entry point — PTT loop |
-| `voice/brain.py` | Multi-turn LLM via `claude -p`, ReAct tool loop |
+| `voice/brain.py` | Multi-turn brain — persistent `ClaudeSDKClient` session, async-to-sync bridge onto a background event loop |
+| `voice/agent_tools.py` | In-process `@tool` adapters the SDK calls directly (search, notes, calendar, email, PC control, memory); retires the old `mcp_server.py` subprocess |
 | `voice/ui_server.py` | FastAPI server, WebSocket broadcast, sidebar endpoints |
 | `voice/static/orb.html` | Three.js orb UI |
 | `voice/heartbeat.py` | Daemon thread — calendar, email, deadlines checks |

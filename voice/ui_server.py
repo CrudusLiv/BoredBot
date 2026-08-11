@@ -115,6 +115,13 @@ async def index() -> HTMLResponse:
     html = (_STATIC / "orb.html").read_text(encoding="utf-8")
     html = html.replace("__VESPER_RENDER_MODE__", mode)
     html = html.replace("__VESPER_AVATAR_VRM_URL__", f"/static/avatar/models/{vrm_name}")
+    # Embed the session token server-side so the page works whether it was
+    # opened via the tray's app-window launch (?t=... in the URL) or by
+    # navigating to this URL directly, e.g. http://localhost:7070 as the
+    # README documents — the latter had no token anywhere, so every
+    # state-changing request (including the chat box's /input POST) 401'd
+    # silently.
+    html = html.replace("__VESPER_TOKEN__", TOKEN)
     return HTMLResponse(html)
 
 

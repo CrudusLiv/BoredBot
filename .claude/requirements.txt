@@ -48,3 +48,6 @@ soundfile>=0.12
 
 # Chatterbox Turbo local TTS (default — GPU-accelerated, open-source)
 chatterbox-tts
+
+# Voice brain (in-process Claude Agent SDK, replaces the claude -p subprocess)
+claude-agent-sdk>=0.2.134

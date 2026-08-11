@@ -12,17 +12,22 @@ cd Vesper
 pip install -e ".[core]"
 ```
 
-That installs the full working voice app: web/async stack (FastAPI, uvicorn), speech-to-text (faster-whisper), text-to-speech (edge-tts), audio I/O, and the setup UI.
+That installs the full working voice app: web/async stack (FastAPI, uvicorn), speech-to-text (faster-whisper), text-to-speech (edge-tts fallback — add `tts-chatterbox` below for the default engine), audio I/O, and the setup UI.
 
 Optional dependency groups:
 
 ```powershell
+# Chatterbox Turbo — the default TTS engine (local, GPU-accelerated, voice-cloning capable)
+pip install -e ".[core,tts-chatterbox]"
+
 # Offline, higher-quality neural TTS (~300 MB model download on first use)
 pip install -e ".[core,tts-kokoro]"
 
 # Everything needed to build the Windows .exe
 pip install -e ".[core,build]"
 ```
+
+Without `tts-chatterbox`, Vesper still runs — `voice/tts.py` falls back to edge-tts and prints a warning.
 
 ## Run
 
@@ -44,10 +49,10 @@ The first launch opens a small setup wizard (identity, LLM backend, optional API
 Vesper can run with **no API keys at all**:
 
 - **Speech-to-text** — `faster-whisper` runs fully local and offline (installed with the `core` group).
-- **Text-to-speech** — `edge-tts` is the default engine: free, no API key, requires an internet connection.
-- **LLM** — auto-detects, in priority order, a local Ollama server, a local LM Studio server, the `ANTHROPIC_API_KEY` env var, then falls back to the `claude` CLI subprocess. So it needs *either* a local model server running, *or* the `claude` CLI installed and authenticated, *or* an Anthropic API key — one of the three, not all.
+- **Text-to-speech** — Chatterbox Turbo is the default: local, GPU-accelerated, supports voice cloning from a short reference clip (needs the `tts-chatterbox` extra). Falls back to `edge-tts` (free, no API key, needs internet) if Chatterbox isn't installed or fails to load.
+- **LLM (conversation)** — the multi-turn brain runs on the Claude Agent SDK, authenticated the same way the `claude` CLI always was: its own Max-plan OAuth session, no API key needed. Background one-off tasks (e.g. draft-writing jobs) go through a separate, simpler router that auto-detects a local Ollama server, a local LM Studio server, or the `ANTHROPIC_API_KEY` env var before falling back to the `claude` CLI directly.
 
-Optional upgrades: an `ANTHROPIC_API_KEY` for the Anthropic API backend, an `ELEVENLABS_API_KEY` for higher-quality (paid) TTS, or the `tts-kokoro` extra for offline neural TTS.
+Optional upgrades: an `ANTHROPIC_API_KEY` for the Anthropic API backend used by background jobs, an `ELEVENLABS_API_KEY` for higher-quality (paid) TTS, the `tts-chatterbox` extra for the default local voice engine (with cloning), or `tts-kokoro` for offline neural TTS.
 
 ## Build the Windows executable
 

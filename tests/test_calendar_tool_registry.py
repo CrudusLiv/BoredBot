@@ -1,6 +1,6 @@
-"""voice/tools/__init__.py — create_calendar_event must be registered so
-its description reaches the system prompt (voice.tools._tool_descriptions()),
-even though voice/mcp_server.py is what actually executes it."""
+"""voice/tools/__init__.py — create_calendar_event must be registered in
+this legacy REGISTRY/dispatch() list, even though voice/agent_tools.py is
+what actually executes it for live conversation."""
 from __future__ import annotations
 
 from voice import tools

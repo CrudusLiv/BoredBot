@@ -1,13 +1,11 @@
 """Tool registry for Vesper voice assistant.
 
-Tools are registered with _register(name, description, fn). brain.py reads
-REGISTRY/_tool_descriptions() to build the system prompt's tool list, but
+Tools are registered with _register(name, description, fn), but brain.py
 does NOT call dispatch() here for live tool calls — those go through
-voice/mcp_server.py, a separate hand-wired @mcp.tool() server that
-voice/llm.py::stream_mcp() spawns as a subprocess for claude -p's native
-MCP tool calling. Adding a tool to this registry alone does not make it
-callable in conversation; it must also get an @mcp.tool() wrapper in
-mcp_server.py.
+voice/agent_tools.py, whose @tool-decorated adapters the Claude Agent SDK
+calls directly, in-process. Adding a tool to this registry alone does not
+make it callable in conversation; it must also get an entry in
+agent_tools.py.
 """
 from __future__ import annotations
 import json

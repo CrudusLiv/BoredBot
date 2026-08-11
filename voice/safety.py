@@ -5,7 +5,8 @@ brain.py dispatches them. Approval is routed, in order:
   1. kill switch paused        -> auto-deny
   2. HTTP bridge to ui_server  -> in-orb approve/deny card (voice/confirm.py),
                                    reachable whether this call runs in-process
-                                   or from a separate subprocess
+                                   (voice/agent_tools.py, today) or from a
+                                   separate subprocess
   3. frozen .exe               -> tkinter dialog
   4. console                   -> [y/N] prompt
 Every path times out to DENY after `confirm_timeout_seconds` so a
@@ -46,8 +47,8 @@ def confirm_with_reason(tool_name: str, args: dict) -> tuple[bool, str]:
         args_str = args_str[:77] + "..."
 
     # HTTP bridge to the running UI server — works whether this call happens
-    # in-process (brain.py, historically) or from a separate subprocess
-    # (voice/mcp_server.py, spawned fresh per turn by claude -p). Falls
+    # in-process (voice/agent_tools.py, today) or from a separate subprocess
+    # (a historical mcp_server.py design this stayed compatible with). Falls
     # through to the tkinter/console paths on any failure: server not
     # running (ui_enabled=False), wrong/missing token, or no client
     # connected to hear the confirm card (server-side has_clients() check).
