@@ -23,6 +23,10 @@ _INSTRUCTION = (
 
 _OPTIONS = ClaudeAgentOptions(
     system_prompt="Respond in plain text only, no markdown formatting, be concise.",
+    allowed_tools=[],
+    mcp_servers={},
+    strict_mcp_config=True,
+    setting_sources=[],
 )
 
 
