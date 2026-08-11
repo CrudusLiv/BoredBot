@@ -49,6 +49,7 @@ core = [
     "pystray==0.19.5",
     "Pillow==12.2.0",
     "customtkinter==5.2.2",
+    "pywebview",
     # Windows-only
     "pywin32==312",
     "windows-capture==2.0.1",
