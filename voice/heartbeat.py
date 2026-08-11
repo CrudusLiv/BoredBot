@@ -157,10 +157,15 @@ _DEADLINE_ROW_RE = re.compile(r"^[-*]\s*(?:nogcal:\s*)?\d{4}-\d{2}-\d{2}\s+[—�
 # Markdown bullet + the nogcal: sync marker — file plumbing, never spoken text.
 _DEADLINE_PREFIX_RE = re.compile(r"^[-*]\s*(?:nogcal:\s*)?")
 
+_DEADLINE_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+
 
 def _fetch_deadlines() -> list[str]:
-    """Return deadline rows from DEADLINES.md as display text (bullet and
-    nogcal: marker stripped — every consumer speaks or shows them).
+    """Return not-yet-past deadline rows from DEADLINES.md as display text
+    (bullet and nogcal: marker stripped — every consumer speaks or shows
+    them). Past-due rows are _check_deadline_thresholds's job (it announces
+    "overdue" once and tracks it separately); this feed backs the "Upcoming"
+    briefing lines, so a row that's already due has no business in it.
     [] if no vault configured."""
     try:
         from voice import config as cfg
@@ -170,11 +175,17 @@ def _fetch_deadlines() -> list[str]:
         p = vault / "DEADLINES.md"
         if not p.exists():
             return []
-        return [
-            _DEADLINE_PREFIX_RE.sub("", ln.strip())
-            for ln in p.read_text(encoding="utf-8").splitlines()
-            if _DEADLINE_ROW_RE.match(ln.strip())
-        ]
+        today = datetime.now(cfg.get_timezone()).date().isoformat()
+        rows = []
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            stripped = ln.strip()
+            if not _DEADLINE_ROW_RE.match(stripped):
+                continue
+            m = _DEADLINE_DATE_RE.search(stripped)
+            if m and m.group(1) < today:
+                continue
+            rows.append(_DEADLINE_PREFIX_RE.sub("", stripped))
+        return rows
     except Exception:
         return []
 
