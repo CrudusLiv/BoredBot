@@ -8,6 +8,10 @@
 #  - Model files (whisper) are NOT bundled — they download to
 #    the user's cache on first run, keeping the installer small
 #  - Kokoro (~800MB via torch) is NOT bundled — optional, installed separately
+#  - webview/clr_loader are collected via collect_all(): the edgechromium
+#    backend bridges into the OS-provided WebView2 runtime through a
+#    .NET-hosted control, so its assemblies must ship with the exe even
+#    though the WebView2 runtime itself does not
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_all
 
 block_cipher = None
@@ -24,12 +28,14 @@ hiddenimports = [
     "uvicorn.lifespan.on",
     "starlette.routing",
     "starlette.staticfiles",
+    "webview.platforms.edgechromium",
+    "webview.platforms.winforms",
 ]
 
 for pkg in ("sounddevice", "onnxruntime", "ctranslate2"):
     binaries += collect_dynamic_libs(pkg)
 
-for pkg in ("faster_whisper",):
+for pkg in ("faster_whisper", "webview", "clr_loader"):
     _datas, _binaries, _hidden = collect_all(pkg)
     datas += _datas
     binaries += _binaries
