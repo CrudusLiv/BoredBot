@@ -50,6 +50,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from voice import ui_window
+
 # Session token: generated once per process start, never persisted to disk.
 # Carried by the browser as a `?t=` query param on the initial page load, then
 # attached to every fetch() (X-Vesper-Token header) and the /ws handshake
@@ -666,9 +668,18 @@ def _open_app_window(port: int) -> None:
 _ui_port: int = 7070  # set by start(); lets open_window() reuse the real port
 
 
+def _show_window() -> None:
+    """Prefer the native pywebview window; fall back to the Edge/Chrome
+    subprocess launch if it was never available (see voice/ui_window.py)."""
+    if ui_window.is_available():
+        ui_window.show()
+    else:
+        _open_app_window(_ui_port)
+
+
 def open_window() -> None:
     """Open the orb as its own app window (tray 'Open Vesper')."""
-    _open_app_window(_ui_port)
+    _show_window()
 
 
 def ensure_window_open() -> None:
@@ -676,11 +687,11 @@ def ensure_window_open() -> None:
     Called on wake-word trigger so saying the wake word brings the orb back
     after the window was closed, without spawning duplicates while it's up."""
     if not has_clients():
-        _open_app_window(_ui_port)
+        _show_window()
 
 
 def start(port: int = 7070) -> None:
-    """Start uvicorn in a daemon thread and open the browser."""
+    """Start uvicorn in a daemon thread, then open the orb window."""
     global _ui_port
     _ui_port = port
 
@@ -691,4 +702,5 @@ def start(port: int = 7070) -> None:
     threading.Thread(target=_run, daemon=True, name="vesper-ui").start()
     threading.Event().wait(0.8)
 
-    _open_app_window(port)
+    ui_window.start(port, TOKEN)
+    _show_window()
