@@ -137,6 +137,12 @@ DEFAULTS: dict[str, Any] = {
     "vad_silence_s": 0.6,
     "vad_max_s": 8.0,
     "vad_silence_threshold": 0.01,
+    # Screen-read overlay (capture -> vision call -> never-focus overlay)
+    "screen_read_enabled": False,          # opt-in; dormant until enabled
+    "screen_read_capture_hotkey": "f9",
+    "screen_read_ask_hotkey": "f10",
+    "screen_read_copy_hotkey": "f11",
+    "screen_read_dismiss_hotkey": "f12",
 }
 
 
