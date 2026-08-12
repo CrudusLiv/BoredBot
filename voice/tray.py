@@ -13,8 +13,30 @@ from typing import Callable
 _icon = None  # pystray.Icon, set by start()
 _port: int = 7070
 
+# So a glance at the taskbar tray answers "is she running / paused / stuck"
+# without opening the window: the tray icon's orb color tracks the same
+# `state` events the orb UI listens to (voice/ui_server.py::post_event),
+# and greys out on killswitch pause. Labels/colors keyed by the `value` of
+# {"type": "state", "value": ...} events emitted from voice/main.py and
+# voice/brain.py.
+_STATE_COLORS: dict[str, tuple] = {
+    "idle": ((68, 34, 170, 220), (102, 85, 187, 255)),      # violet -- default
+    "listening": ((34, 140, 90, 220), (90, 200, 140, 255)),  # green
+    "thinking": ((176, 128, 32, 220), (216, 172, 80, 255)),  # amber
+    "speaking": ((32, 110, 176, 220), (80, 160, 216, 255)),  # blue
+    "error": ((176, 40, 40, 220), (216, 90, 90, 255)),       # red
+}
+_STATE_LABELS: dict[str, str] = {
+    "idle": "idle", "listening": "listening…", "thinking": "thinking…",
+    "speaking": "speaking…", "error": "error",
+}
+_PAUSED_COLORS = ((90, 90, 90, 200), (130, 130, 130, 220))  # desaturated grey
 
-def _make_image():
+_current_state = "idle"
+_paused = False
+
+
+def _make_image(fill=(68, 34, 170, 220), outline=(102, 85, 187, 255)):
     try:
         from PIL import Image, ImageDraw
     except ImportError:
@@ -23,9 +45,46 @@ def _make_image():
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     d.ellipse([4, 4, 60, 60], outline=(136, 102, 204, 120), width=3)   # lilac ring
-    d.ellipse([12, 12, 52, 52], fill=(68, 34, 170, 220), outline=(102, 85, 187, 255), width=1)  # violet orb
+    d.ellipse([12, 12, 52, 52], fill=fill, outline=outline, width=1)  # state-colored orb
     d.ellipse([22, 18, 28, 24], fill=(136, 204, 34, 200))               # yellow-green highlight
     return img
+
+
+def set_state(value: str) -> None:
+    """Update the tray orb's color/tooltip for a conversational-state change
+    (idle/listening/thinking/speaking/error). Safe no-op before the tray
+    starts or for an unrecognized value."""
+    global _current_state
+    if value not in _STATE_COLORS:
+        return
+    _current_state = value
+    _refresh()
+
+
+def set_paused(paused: bool) -> None:
+    """Update the tray orb to reflect killswitch pause state. Safe no-op
+    before the tray starts."""
+    global _paused
+    _paused = bool(paused)
+    _refresh()
+
+
+def _refresh() -> None:
+    if _icon is None:
+        return
+    try:
+        if _paused:
+            fill, outline = _PAUSED_COLORS
+            title = "Vesper — paused"
+        else:
+            fill, outline = _STATE_COLORS.get(_current_state, _STATE_COLORS["idle"])
+            title = f"Vesper — {_STATE_LABELS.get(_current_state, _current_state)}"
+        img = _make_image(fill, outline)
+        if img is not None:
+            _icon.icon = img
+        _icon.title = title
+    except Exception:
+        pass
 
 
 def notify(title: str, message: str) -> None:
@@ -116,6 +175,16 @@ def start(port: int = 7070, on_quit: Callable | None = None) -> None:
         pystray.MenuItem("Stop until next logon", _stop_until_logon),
     )
     _icon = pystray.Icon("Vesper", img, "Vesper", menu)
+
+    # Sync the orb color/tooltip to whatever the killswitch already says
+    # (e.g. paused from a previous session) instead of waiting for the next
+    # state-change event to correct it.
+    try:
+        from voice import killswitch
+        _paused_at_start = killswitch.is_paused()
+    except Exception:
+        _paused_at_start = False
+    set_paused(_paused_at_start)
 
     def _run():
         try:

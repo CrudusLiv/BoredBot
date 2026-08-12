@@ -126,7 +126,12 @@ async def index() -> HTMLResponse:
     # state-changing request (including the chat box's /input POST) 401'd
     # silently.
     html = html.replace("__VESPER_TOKEN__", TOKEN)
-    return HTMLResponse(html)
+    # no-store: orb.html is re-read from disk on every request (it's the
+    # UI's whole codebase, effectively), so a client caching it defeats that
+    # -- WebView2's on-disk HTTP cache in particular survives across process
+    # restarts (it's tied to the persistent user-data profile, not the
+    # process), so "restart Vesper" alone doesn't guarantee a fresh page.
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 class _TextInput(BaseModel):
@@ -679,10 +684,21 @@ async def _drain() -> None:
 def post_event(event: dict[str, Any]) -> None:
     """Thread-safe: enqueue an event for broadcast to all WS clients.
     `state` events additionally derive and enqueue an `emotion` event for
-    the avatar's face -- see voice/avatar_emotion.py."""
+    the avatar's face -- see voice/avatar_emotion.py. `state` and
+    `killswitch` events also update the tray icon's color/tooltip (see
+    voice/tray.py::set_state/set_paused) so the taskbar tray answers
+    "is she running/paused" without opening the orb window -- done outside
+    the `_loop and _queue` gate below since the tray has no websocket."""
+    event_type = event.get("type")
+    if event_type == "state":
+        from voice import tray
+        tray.set_state(event.get("value", ""))
+    elif event_type == "killswitch":
+        from voice import tray
+        tray.set_paused(bool(event.get("paused")))
     if _loop and _queue:
         _loop.call_soon_threadsafe(_queue.put_nowait, event)
-        if event.get("type") == "state":
+        if event_type == "state":
             from voice.avatar_emotion import classify
             derived = classify(event.get("value", ""))
             if derived:
@@ -731,7 +747,10 @@ def ensure_window_open() -> None:
 
 
 def start(port: int = 7070) -> None:
-    """Start uvicorn in a daemon thread, then open the orb window."""
+    """Start uvicorn in a daemon thread. Does not open a window -- the
+    caller (voice/main.py::run()) is responsible for that, since
+    ui_window.start() must run on the process's real main thread, which
+    this function isn't guaranteed to be called from."""
     global _ui_port
     _ui_port = port
 
@@ -741,6 +760,3 @@ def start(port: int = 7070) -> None:
 
     threading.Thread(target=_run, daemon=True, name="vesper-ui").start()
     threading.Event().wait(0.8)
-
-    ui_window.start(port, TOKEN)
-    _show_window()

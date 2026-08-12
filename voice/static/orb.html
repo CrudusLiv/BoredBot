@@ -2384,6 +2384,29 @@ document.getElementById('jobs-text-filter')?.addEventListener('input', renderJob
 async function _renderActivityAwareness(conf, container) {
   let procs = Array.isArray(conf.silence_when_running) ? conf.silence_when_running.slice() : [];
 
+  // Discovered-apps autocomplete, same Start Menu scan _renderPcControl uses
+  // (GET /cmd/pc-control/apps -> voice/tools/pc_control.py::discover_apps),
+  // but offering exe basenames (what silence_when_running actually stores,
+  // e.g. "Discord.exe") rather than the spoken names PC control shows.
+  // Best-effort: an empty or failed scan just means no suggestions, not a
+  // broken editor -- manual entry always still works.
+  let discoveredExeNames = [];
+  try {
+    const dr = await vfetch('/cmd/pc-control/apps');
+    if (dr.ok) {
+      const dd = await dr.json();
+      const apps = Array.isArray(dd.apps) ? dd.apps : [];
+      const seen = new Set();
+      apps.forEach(a => {
+        const base = String(a.target || '').split(/[\\/]/).pop();
+        if (base && base.toLowerCase().endsWith('.exe') && !seen.has(base.toLowerCase())) {
+          seen.add(base.toLowerCase());
+          discoveredExeNames.push(base);
+        }
+      });
+    }
+  } catch (_) { /* no suggestions available */ }
+
   const group = document.createElement('div');
   group.style.cssText = 'margin-top:8px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);';
 
@@ -2440,27 +2463,38 @@ async function _renderActivityAwareness(conf, container) {
       const x = document.createElement('button');
       x.type = 'button';
       x.textContent = '✕';
-      x.style.cssText = 'background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:12px; line-height:1;';
+      x.style.cssText = 'background:none; border:none; color: var(--text-dim); cursor:pointer; padding:0; font-size:12px; line-height:1;';
       x.addEventListener('click', () => { procs.splice(i, 1); renderChips(); persist(); });
       chip.appendChild(x);
       chipsEl.appendChild(chip);
     });
   }
 
-  // Add row: free-text input + add button
+  // Add row: free-text input (with discovered-apps autocomplete) + add button
   const addRow = document.createElement('div');
   addRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; align-items:center;';
   const freeInput = document.createElement('input');
   freeInput.className = 'settings-input';
   freeInput.type = 'text';
-  freeInput.placeholder = 'exe name (e.g. game.exe)';
+  freeInput.placeholder = discoveredExeNames.length
+    ? 'exe name (e.g. game.exe) — start typing to search'
+    : 'exe name (e.g. game.exe)';
   freeInput.style.flex = '1';
+  const datalistId = 'activity-awareness-discovered-' + Math.random().toString(36).slice(2);
+  const datalist = document.createElement('datalist');
+  datalist.id = datalistId;
+  discoveredExeNames.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n;
+    datalist.appendChild(opt);
+  });
+  freeInput.setAttribute('list', datalistId);
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'pill-btn';
   addBtn.textContent = 'add';
   addRow.append(freeInput, addBtn);
-  group.append(addRow, listHint);
+  group.append(datalist, addRow, listHint);
 
   function addExe(raw) {
     const exe = _normExe(raw);
@@ -2537,7 +2571,7 @@ async function _renderJobAlerts(conf, container) {
       const x = document.createElement('button');
       x.type = 'button';
       x.textContent = '✕';
-      x.style.cssText = 'background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:12px; line-height:1;';
+      x.style.cssText = 'background:none; border:none; color: var(--text-dim); cursor:pointer; padding:0; font-size:12px; line-height:1;';
       x.addEventListener('click', () => { senders.splice(i, 1); renderChips(); persist(); });
       chip.appendChild(x);
       chipsEl.appendChild(chip);
@@ -2675,7 +2709,7 @@ async function _renderPcControl(conf, container) {
       const x = document.createElement('button');
       x.type = 'button';
       x.textContent = '\u2715';
-      x.style.cssText = 'background:none; border:none; color:inherit; cursor:pointer; padding:0; font-size:12px; line-height:1;';
+      x.style.cssText = 'background:none; border:none; color: var(--text-dim); cursor:pointer; padding:0; font-size:12px; line-height:1;';
       x.addEventListener('click', () => { delete apps[name]; renderRows(); persist(); });
       row.append(label, x);
       listEl.appendChild(row);
@@ -2991,7 +3025,16 @@ async function _loadWeatherStatus(el) {
   } catch (_) { el.textContent = 'No weather right now.'; }
 }
 
+let _settingsPanelGeneration = 0;
+
 async function loadSettingsPanel() {
+  // openPanel() and each tab's click handler can both call this (e.g.
+  // opening the panel while it's already showing Config re-triggers a
+  // load alongside the tab click's own load) -- _renderAccordionSection
+  // appends its header immediately but awaits its body, so two concurrent
+  // runs interleave and duplicate every section. This generation token
+  // makes a superseded run stop appending as soon as a newer one starts.
+  const myGeneration = ++_settingsPanelGeneration;
   const accEl = document.getElementById('settings-accordion');
   if (!accEl) return;
   accEl.innerHTML = '';
@@ -3000,11 +3043,17 @@ async function loadSettingsPanel() {
     const r = await vfetch('/cmd/settings');
     conf = await r.json();
   } catch (_) {
-    accEl.innerHTML = paneErr(null, 'Settings won\'t load.');
+    if (myGeneration === _settingsPanelGeneration) accEl.innerHTML = paneErr(null, 'Settings won\'t load.');
     return;
   }
+  if (myGeneration !== _settingsPanelGeneration) return;
 
-  await _renderAccordionSection(accEl, { title: 'Identity & Vault', defaultOpen: true }, async (body) => {
+  const section = async (opts, renderBody) => {
+    if (myGeneration !== _settingsPanelGeneration) return;
+    await _renderAccordionSection(accEl, opts, renderBody);
+  };
+
+  section({ title: 'Identity & Vault', defaultOpen: true }, async (body) => {
     _appendField(body, conf, { key: 'user_name', label: 'Display name', type: 'text' });
     _appendField(body, conf, { key: 'vault_path', label: 'Obsidian vault folder (optional)', type: 'text' });
     _appendField(body, conf, { key: 'city', label: 'City (weather)', type: 'text' });
@@ -3017,7 +3066,7 @@ async function loadSettingsPanel() {
     await _loadWeatherStatus(wx);
   });
 
-  await _renderAccordionSection(accEl, { title: 'Voice', defaultOpen: false }, async (body) => {
+  section({ title: 'Voice', defaultOpen: false }, async (body) => {
     let engineCtrl = null;
     const dependentWraps = [];
     [
@@ -3039,7 +3088,7 @@ async function loadSettingsPanel() {
     applyVisibility();
   });
 
-  await _renderAccordionSection(accEl, { title: 'LLM backend', defaultOpen: false }, async (body) => {
+  section({ title: 'LLM backend', defaultOpen: false }, async (body) => {
     _appendField(body, conf, { key: 'llm_backend', label: 'LLM backend', type: 'select', opts: ['auto', 'ollama', 'lmstudio', 'anthropic', 'claude_cli'] });
     const status = document.createElement('div');
     status.id = 'settings-llm-status';
@@ -3065,18 +3114,21 @@ async function loadSettingsPanel() {
     await _loadLlmStatus(status);
   });
 
-  await _renderAccordionSection(accEl, { title: 'Automations', defaultOpen: false }, async (body) => {
+  section({ title: 'Automations', defaultOpen: false }, async (body) => {
     _appendField(body, conf, { key: 'quiet_hours_start', label: 'Quiet hours start', type: 'text' });
     _appendField(body, conf, { key: 'quiet_hours_end', label: 'Quiet hours end', type: 'text' });
-    await _renderActivityAwareness(conf, body);
     await _renderJobAlerts(conf, body);
   });
 
-  await _renderAccordionSection(accEl, { title: 'Apps', defaultOpen: false }, async (body) => {
+  section({ title: 'Activity awareness', defaultOpen: false }, async (body) => {
+    await _renderActivityAwareness(conf, body);
+  });
+
+  section({ title: 'Apps', defaultOpen: false }, async (body) => {
     await _renderPcControl(conf, body);
   });
 
-  await _renderAccordionSection(accEl, { title: 'Safety', defaultOpen: false }, async (body) => {
+  section({ title: 'Safety', defaultOpen: false }, async (body) => {
     const label = document.createElement('div');
     label.className = 'settings-field-label';
     label.textContent = 'Confirm before';

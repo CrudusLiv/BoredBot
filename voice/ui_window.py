@@ -1,24 +1,28 @@
-"""Native window for the orb UI -- pywebview (WebView2) on its own thread.
+"""Native window for the orb UI -- pywebview (WebView2), given the real
+process main thread by voice/main.py::run() (pywebview's webview.start()
+hard-requires it; there is no bypass for running it off-thread).
 
-Runs on a dedicated thread with its own GUI loop, the same shape
-voice/screen_overlay.py uses for the screen-read overlay. The window is
-created once, hidden, and kept alive for the process lifetime: the native
-close button hides it instead of destroying it (see _on_closing), so
-voice/ui_server.py's start()/open_window()/ensure_window_open() can just
-call show() again rather than recreating a window or a browser subprocess.
+The window is created once, shown automatically when webview.start()
+initializes the GUI loop, and kept alive for the process lifetime: the
+native close button hides it instead of destroying it (see _on_closing),
+so voice/ui_server.py's open_window()/ensure_window_open() can just call
+show() again rather than recreating a window or a browser subprocess.
+(window.show() must never be called before webview.start() has run --
+pywebview's Window API methods block on a readiness event that only gets
+set once the real GUI loop is initialized, and time out with
+WebViewException('Main window failed to start') otherwise.)
 
-If pywebview/WebView2 aren't available, is_available() stays False forever
-and voice/ui_server.py falls back to its Edge/Chrome subprocess launch."""
+If pywebview/WebView2 aren't available, start() returns without blocking,
+is_available() stays False forever, and voice/ui_server.py falls back to
+its Edge/Chrome subprocess launch."""
 from __future__ import annotations
 
 import logging
-import threading
 
 logger = logging.getLogger(__name__)
 
 _window = None
 _available = False
-_ready = threading.Event()
 
 
 def is_available() -> bool:
@@ -33,16 +37,21 @@ def show() -> None:
 
 
 def start(port: int, token: str) -> None:
-    """Disabled for now: pywebview's webview.start() hard-requires the
-    process's real main thread (unconditional check in
-    webview/__init__.py -- no bypass), which a dedicated background
-    thread can never satisfy. voice/ui_server.py calls this
-    unconditionally; leaving is_available() permanently False here means
-    it transparently falls back to _open_app_window() (Edge/Chrome
-    subprocess), i.e. today's known-working behavior, until
-    voice/main.py is restructured to give pywebview the main thread and
-    move its own interactive loop to a background thread instead."""
-    return
+    """Create the native window and run pywebview's GUI loop on the calling
+    thread -- must be called from the process's real main thread. Blocks for
+    the rest of the process's life on success. Returns (without blocking) if
+    window creation fails, e.g. no WebView2 runtime -- the caller is
+    expected to fall back to voice/ui_server.py's Edge/Chrome subprocess
+    launch in that case."""
+    global _window, _available
+    try:
+        window, webview_mod = _create_window(port, token)
+    except Exception:
+        logger.exception("[ui_window] native window unavailable, falling back to browser launch")
+        return
+    _window = window
+    _available = True
+    webview_mod.start()
 
 
 def _on_closing(window) -> bool:
@@ -53,26 +62,13 @@ def _on_closing(window) -> bool:
 
 
 def _create_window(port: int, token: str):
-    """Import pywebview and create the hidden window. Split out from _run()
-    so tests can monkeypatch this one call to simulate success/failure
-    without a real WebView2 runtime."""
+    """Import pywebview and create the window (shown by default once the GUI
+    loop starts -- see start()). Split out from start() so tests can
+    monkeypatch this one call to simulate success/failure without a real
+    WebView2 runtime."""
     import webview
 
     url = f"http://127.0.0.1:{port}?t={token}"
-    window = webview.create_window("Vesper", url, width=900, height=700, hidden=True)
+    window = webview.create_window("Vesper", url, width=900, height=700)
     window.events.closing += lambda: _on_closing(window)
     return window, webview
-
-
-def _run(port: int, token: str) -> None:
-    global _window, _available
-    try:
-        window, webview_mod = _create_window(port, token)
-    except Exception:
-        logger.exception("[ui_window] native window unavailable, falling back to browser launch")
-        _ready.set()
-        return
-    _window = window
-    _available = True
-    _ready.set()
-    webview_mod.start()

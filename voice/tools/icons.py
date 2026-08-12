@@ -12,8 +12,16 @@ from pathlib import Path
 def resolve_exe_path(target: str) -> str | None:
     """Resolve a PC-control target or an activity-awareness exe name to a
     real, existing .exe path, or None if it can't be resolved: a non-exe
-    path/URI (e.g. "spotify:"), a missing file, or a bare name with no
-    matching Start Menu shortcut."""
+    path/URI (e.g. "spotify:"), a missing file, or a bare name matched by
+    none of the lookups below.
+
+    A bare name (most activity-awareness entries -- "game.exe" typed by hand,
+    not picked from the PC-control autocomplete) tries, in order: the Start
+    Menu shortcut scan, the Windows "App Paths" registry, PATH, then the
+    currently-running process list. Many exes -- games launched via a
+    launcher, background/helper processes -- have no Start Menu shortcut at
+    all, which is why some activity-awareness entries showed no icon while
+    every PC-control one (always shortcut- or hand-path-backed) did."""
     target = (target or "").strip()
     if not target:
         return None
@@ -23,15 +31,72 @@ def resolve_exe_path(target: str) -> str | None:
             return None
         p = Path(target)
         return str(p) if p.is_file() else None
-    # bare name (e.g. "zoom.exe" or "zoom") -- match against the Start Menu scan
-    from voice.tools import pc_control
     name = target.lower()
     if not name.endswith(".exe"):
         name += ".exe"
+    from voice.tools import pc_control
     for app in pc_control.discover_apps():
         app_target = app.get("target", "")
         if Path(app_target).name.lower() == name:
             return app_target
+    found = _app_paths_registry(name)
+    if found:
+        return found
+    found = _on_path(name)
+    if found:
+        return found
+    found = _running_process(name)
+    if found:
+        return found
+    return None
+
+
+def _app_paths_registry(name: str) -> str | None:
+    """Look up name in the Windows "App Paths" registry key, which many
+    installers populate independently of a Start Menu shortcut. Checks
+    HKCU before HKLM (matches shell resolution order). Fails closed (None)
+    on any error, including not running on Windows."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    subkey = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\\" + name
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                value, _ = winreg.QueryValueEx(key, None)
+                if value and Path(value).is_file():
+                    return value
+        except OSError:
+            continue
+    return None
+
+
+def _on_path(name: str) -> str | None:
+    """Look up name on PATH via shutil.which."""
+    import shutil
+    return shutil.which(name)
+
+
+def _running_process(name: str) -> str | None:
+    """Find name among currently-running processes and return its exe path.
+    Lazy psutil import, fail-open -- same contract as
+    voice/activity.py::running_processes()."""
+    try:
+        import psutil
+    except Exception:
+        return None
+    try:
+        for proc in psutil.process_iter(["name", "exe"]):
+            try:
+                if (proc.info.get("name") or "").lower() == name:
+                    exe = proc.info.get("exe")
+                    if exe and Path(exe).is_file():
+                        return exe
+            except Exception:
+                continue
+    except Exception:
+        return None
     return None
 
 
