@@ -19,9 +19,11 @@ Endpoints:
   GET  /cmd/llm/status  → active LLM backend/model/availability JSON
   GET  /cmd/llm/detect  → force LLM backend re-detection JSON
   GET  /cmd/calendar    → upcoming events JSON
+  GET  /cmd/reminders   → upcoming reminders JSON
   GET  /cmd/tasks       → DEADLINES.md checklist JSON
   GET  /cmd/weather     → wttr.in current conditions JSON
   GET  /cmd/settings    → full config JSON
+  GET  /cmd/icon        → extracted app-icon PNG for a PC-control/activity-awareness target
   POST /cmd/settings    → patch one config key JSON
   GET  /cmd/notices     → recent proactive notices JSON
   GET  /cmd/jobs/list   → job-alert postings store JSON
@@ -304,6 +306,22 @@ async def calendar_events() -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.get("/cmd/reminders")
+async def reminders_list() -> JSONResponse:
+    def _run():
+        try:
+            import sys
+            sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+            from integrations import gtasks_write  # type: ignore
+            return {"reminders": gtasks_write.list_reminders(days=7)}
+        except Exception as exc:
+            return {"error": str(exc), "reminders": []}
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _run)
+    return JSONResponse(result)
+
+
 # ── Tasks / Deadlines ─────────────────────────────────────────────────────────
 
 @app.get("/cmd/tasks")
@@ -423,7 +441,8 @@ async def weather() -> JSONResponse:
 
 _SETTINGS_ALLOWED = {
     "user_name", "timezone_offset_hours", "city", "vault_path",
-    "tts_engine", "tts_voice", "elevenlabs_voice_id", "elevenlabs_batch_chars",
+    "tts_engine", "tts_voice", "tts_chatterbox_device", "tts_chatterbox_voice_path",
+    "elevenlabs_voice_id", "elevenlabs_batch_chars",
     "stt_beam_size", "stt_vad_filter", "stt_language",
     "llm_backend", "llm_ollama_model", "llm_lmstudio_model",
     "llm_anthropic_model", "heartbeat_interval_minutes",
@@ -455,6 +474,25 @@ async def pc_control_discover_apps() -> JSONResponse:
         return JSONResponse({"apps": pc_control.discover_apps()})
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/cmd/icon")
+async def get_icon(target: str) -> Response:
+    """Extracted app icon for a PC-control target or activity-awareness exe
+    name (voice/tools/icons.py::get_icon_png). Read-only, no token required
+    -- same tier as GET /cmd/pc-control/apps. 404 (not a broken image) on
+    anything unresolvable, so the frontend's <img onerror> can fall back to
+    text-only cleanly."""
+    from voice.tools import icons
+    loop = asyncio.get_event_loop()
+    png = await loop.run_in_executor(None, icons.get_icon_png, target)
+    if png is None:
+        return JSONResponse({"error": "icon not found"}, status_code=404)
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 class _SettingsPatch(BaseModel):

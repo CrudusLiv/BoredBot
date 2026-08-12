@@ -1,6 +1,6 @@
 {
   "model": "sonnet",
-  "tts_engine": "elevenlabs",
+  "tts_engine": "chatterbox",
   "tts_voice": "en-GB-SoniaNeural",
   "elevenlabs_voice_id": "pFZP5JQG7iQjIQuC4Bku",
   "ptt_key": "`",
@@ -11,7 +11,7 @@
   "heartbeat_interval_minutes": 30,
   "ui_enabled": true,
   "ui_port": 7070,
-  "requires_confirmation": ["create_note", "append_note", "forget_fact", "launch_app", "activate_profile"],
+  "requires_confirmation": ["create_note", "append_note", "forget_fact", "launch_app", "activate_profile", "create_calendar_event", "complete_deadline", "delete_calendar_event", "create_reminder"],
   "vad_silence_s": 0.5,
   "vad_max_s": 8.0,
   "vad_silence_threshold": 0.01,

@@ -76,6 +76,17 @@ def test_patch_keybind_round_trips(client, key, value):
     assert got[key] == value
 
 
+@pytest.mark.parametrize("key,value", [
+    ("tts_chatterbox_device", "cpu"),
+    ("tts_chatterbox_voice_path", "C:\\voice\\clip.wav"),
+])
+def test_patch_chatterbox_field_round_trips(client, key, value):
+    r = client.post("/cmd/settings", headers=_hdr(), json={"key": key, "value": value})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got[key] == value
+
+
 def test_patch_screen_read_hotkey_can_be_unbound(client):
     r = client.post("/cmd/settings", headers=_hdr(),
                      json={"key": "screen_read_capture_hotkey", "value": ""})

@@ -316,7 +316,7 @@ def run() -> None:
                     time.sleep(0.5)
                     continue
                 _emit({"type": "state", "value": "listening"})
-                audio = record_ptt(key=conf.get("ptt_key", "`"), on_press=stop_speaking)
+                audio = record_ptt(key=cfg.load().get("ptt_key", "`"), on_press=stop_speaking)
                 if audio is None:
                     _emit({"type": "state", "value": "idle"})
                     continue
@@ -359,9 +359,10 @@ def run() -> None:
                         user_text, input_source = item, "text"
                         break
 
-                    if not silence.is_silenced() and is_ptt_down(conf.get("ptt_key", "`")):
+                    _ptt_key = cfg.load().get("ptt_key", "`")
+                    if not silence.is_silenced() and is_ptt_down(_ptt_key):
                         _emit({"type": "state", "value": "listening"})
-                        audio = record_while_held(key=conf.get("ptt_key", "`"), on_press=stop_speaking)
+                        audio = record_while_held(key=_ptt_key, on_press=stop_speaking)
                         if audio is None:
                             _emit({"type": "state", "value": "idle"})
                             continue

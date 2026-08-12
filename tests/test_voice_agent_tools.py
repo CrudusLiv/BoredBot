@@ -26,12 +26,19 @@ def test_upcoming_events_delegates(monkeypatch):
     assert agent_tools.upcoming_events_tool(days=14) == "14 days"
 
 
+def test_upcoming_reminders_delegates(monkeypatch):
+    monkeypatch.setattr(agent_tools, "upcoming_reminders", lambda days=7: f"{days} days")
+    assert agent_tools.upcoming_reminders_tool(days=14) == "14 days"
+
+
 @pytest.mark.parametrize("tool_fn_name,wrapper_name,arg_name,arg_value", [
     ("append_note", "append_note_tool", "path", "x.md"),
     ("create_note", "create_note_tool", "path", "y.md"),
     ("forget", "forget_fact_tool", "key", "some-key"),
     ("complete_deadline", "complete_deadline_tool", "query", "renew passport"),
     ("create_calendar_event", "create_calendar_event_tool", "title", "Dentist"),
+    ("delete_calendar_event", "delete_calendar_event_tool", "title", "Dentist"),
+    ("create_reminder", "create_reminder_tool", "title", "Reorganize emails"),
 ])
 def test_confirmation_gated_tools_block_on_confirm(
     monkeypatch, tool_fn_name, wrapper_name, arg_name, arg_value,
@@ -49,7 +56,7 @@ def test_confirmation_gated_tools_block_on_confirm(
     kwargs = {arg_name: arg_value}
     if wrapper_name in ("append_note_tool", "create_note_tool"):
         kwargs["text"] = "body"
-    if wrapper_name == "create_calendar_event_tool":
+    if wrapper_name in ("create_calendar_event_tool", "delete_calendar_event_tool", "create_reminder_tool"):
         kwargs["date"] = "2026-08-10"
     result = wrapper(**kwargs)
     assert underlying_called == []
@@ -90,6 +97,32 @@ def test_create_calendar_event_approved_runs_underlying_tool(monkeypatch):
     )
     result = agent_tools.create_calendar_event_tool(title="Dentist", date="2026-08-10")
     assert result == "created Dentist on 2026-08-10"
+
+
+def test_delete_calendar_event_approved_runs_underlying_tool(monkeypatch):
+    monkeypatch.setattr(agent_tools, "requires_confirmation", lambda name: True)
+    monkeypatch.setattr(
+        agent_tools, "confirm_with_reason", lambda name, args: (True, "user"),
+    )
+    monkeypatch.setattr(
+        agent_tools, "delete_calendar_event",
+        lambda title, date: f"deleted {title} on {date}",
+    )
+    result = agent_tools.delete_calendar_event_tool(title="Dentist", date="2026-08-10")
+    assert result == "deleted Dentist on 2026-08-10"
+
+
+def test_create_reminder_approved_runs_underlying_tool(monkeypatch):
+    monkeypatch.setattr(agent_tools, "requires_confirmation", lambda name: True)
+    monkeypatch.setattr(
+        agent_tools, "confirm_with_reason", lambda name, args: (True, "user"),
+    )
+    monkeypatch.setattr(
+        agent_tools, "create_reminder",
+        lambda title, date, description="": f"created reminder {title} on {date}",
+    )
+    result = agent_tools.create_reminder_tool(title="Reorganize emails", date="2026-08-12")
+    assert result == "created reminder Reorganize emails on 2026-08-12"
 
 
 def test_media_control_delegates(monkeypatch):
@@ -151,6 +184,7 @@ def test_vesper_tools_registers_every_sync_tool():
         "write_draft_tool", "write_scratch_tool", "upcoming_events_tool",
         "remember_fact_tool", "forget_fact_tool", "complete_deadline_tool",
         "triage_inbox_tool", "filter_subscriptions_tool", "create_calendar_event_tool",
+        "delete_calendar_event_tool", "create_reminder_tool", "upcoming_reminders_tool",
         "media_control_tool", "set_volume_tool", "launch_app_tool",
         "list_windows_tool", "focus_window_tool",
     }

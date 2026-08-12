@@ -1,17 +1,21 @@
-"""Shared Google OAuth2 -- used by Gmail and Calendar.
+"""Shared Google OAuth2 -- used by Gmail, Calendar, and Tasks (reminders).
 
 First run opens a browser for consent; subsequent runs use the cached
-refresh token at .claude/data/google_token.json.
+refresh token at .claude/data/google_token.json. If SCOPES grows (e.g. this
+module adding the Tasks scope), a cached token that predates the new scope
+is detected and a fresh consent flow runs automatically instead of failing
+later with an opaque 403 from the API.
 
 Setup:
-1. Google Cloud Console -> enable Gmail API + Calendar API.
+1. Google Cloud Console -> enable Gmail API + Calendar API + Tasks API.
 2. Credentials -> OAuth client ID -> Desktop app -> download JSON.
 3. Add to .env:
        GOOGLE_CLIENT_ID=<client_id from the JSON>
        GOOGLE_CLIENT_SECRET=<client_secret from the JSON>
 
-Both Gmail and Calendar scopes are requested up front so the user only
-consents once. Read-only -- no compose, no event create/delete."""
+Calendar and Tasks scopes include write access: gcal_write.py can create
+and delete events, gtasks_write.py can create reminders. Gmail stays
+read-only."""
 from __future__ import annotations
 
 import os
@@ -27,6 +31,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/tasks",
 ]
 
 
@@ -62,7 +67,14 @@ def get_credentials():
 
     creds = None
     if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+        # Deliberately NOT passing scopes=SCOPES here: Credentials.
+        # from_authorized_user_info only reads the file's own "scopes" field
+        # when the scopes argument is None -- pass SCOPES explicitly and it
+        # echoes SCOPES back as creds.scopes regardless of what was actually
+        # granted, making the mismatch check below always pass trivially.
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
+        if creds and not set(SCOPES).issubset(set(creds.scopes or [])):
+            creds = None  # cached token predates a scope we now need — re-auth
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())

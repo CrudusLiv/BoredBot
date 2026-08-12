@@ -9,3 +9,18 @@ from voice import tools
 def test_create_calendar_event_is_registered():
     names = {t["name"] for t in tools.REGISTRY}
     assert "create_calendar_event" in names
+
+
+def test_delete_calendar_event_is_registered():
+    names = {t["name"] for t in tools.REGISTRY}
+    assert "delete_calendar_event" in names
+
+
+def test_create_reminder_is_registered():
+    names = {t["name"] for t in tools.REGISTRY}
+    assert "create_reminder" in names
+
+
+def test_upcoming_reminders_is_registered():
+    names = {t["name"] for t in tools.REGISTRY}
+    assert "upcoming_reminders" in names

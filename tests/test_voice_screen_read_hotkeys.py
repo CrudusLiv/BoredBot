@@ -1,10 +1,14 @@
-"""Tests for voice/screen_read_hotkeys.py::ScreenReadHotkeys. The hotkey
-poll loop itself (run()) is not exercised here -- GetAsyncKeyState is a
-raw OS poll with no meaningful behavior to unit test, consistent with how
-voice/audio.py::is_ptt_down is only exercised indirectly elsewhere. This
-file tests the batch-management methods run() calls into."""
+"""Tests for voice/screen_read_hotkeys.py::ScreenReadHotkeys. Most of this
+file tests the batch-management methods run() calls into -- the raw
+GetAsyncKeyState poll itself has no meaningful behavior to unit test,
+consistent with how voice/audio.py::is_ptt_down is only exercised
+indirectly elsewhere. One test does exercise run() directly: it must
+reload config on each poll tick rather than snapshotting it once, so a
+hotkey changed via the Config UI takes effect without restarting Vesper."""
 from __future__ import annotations
 
+import threading
+import time
 from unittest.mock import MagicMock
 
 from voice.screen_read_hotkeys import ScreenReadHotkeys
@@ -90,3 +94,39 @@ def test_dismiss_calls_overlay_dismiss():
     hk, overlay, _, _ = _hotkeys()
     hk.dismiss()
     overlay.dismiss.assert_called_once()
+
+
+def test_run_picks_up_hotkey_change_without_restart(monkeypatch):
+    """A hotkey changed via the Config UI (which just rewrites config.json)
+    must take effect on the poll loop's next tick -- not require restarting
+    Vesper. Regression test for run() snapshotting config once outside the
+    loop instead of reloading it each tick."""
+    hk, overlay, capture_fn, _ = _hotkeys()
+
+    configs = [{"screen_read_capture_hotkey": "f9"}, {"screen_read_capture_hotkey": "f6"}]
+    calls = {"n": 0}
+
+    def fake_load():
+        idx = min(calls["n"], len(configs) - 1)
+        calls["n"] += 1
+        return configs[idx]
+
+    monkeypatch.setattr("voice.screen_read_hotkeys.cfg.load", fake_load)
+    monkeypatch.setattr("voice.screen_read_hotkeys._is_down", lambda key: key == "f6")
+    monkeypatch.setattr("voice.screen_read_hotkeys.time.sleep", lambda _s: None)
+
+    stop_event = threading.Event()
+
+    def _stop_after_a_few_ticks():
+        while calls["n"] < 5:
+            time.sleep(0.01)
+        stop_event.set()
+
+    threading.Thread(target=_stop_after_a_few_ticks, daemon=True).start()
+    hk.run(stop_event)
+
+    for _ in range(200):
+        if capture_fn.called:
+            break
+        time.sleep(0.01)
+    capture_fn.assert_called()

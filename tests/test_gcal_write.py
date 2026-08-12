@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def _import_module():
     repo_root = Path(__file__).resolve().parents[1]
@@ -71,3 +73,47 @@ def test_parse_deadline_row():
     m = _import_module()
     parsed = m.parse_deadlines_md("- 2026-06-10 — DIP209 — Capstone deadline\n- nogcal: 2026-06-11 — CS101 — skip me\n")
     assert parsed == [("2026-06-10", "DIP209 — Capstone deadline")]
+
+
+def test_delete_event_no_match_returns_none(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.delete_event("Ghost event", "2026-08-12")
+    assert result is None
+    service.events.return_value.delete.assert_not_called()
+
+
+def test_delete_event_one_match_deletes_and_returns_id(monkeypatch):
+    m = _import_module()
+    service = _stub_service([
+        {"id": "evt42", "summary": "Reorganize emails", "start": {"date": "2026-08-12"}},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.delete_event("Reorganize emails", "2026-08-12")
+    assert result == "evt42"
+    service.events.return_value.delete.assert_called_once_with(
+        calendarId="primary", eventId="evt42",
+    )
+
+
+def test_delete_event_case_insensitive_match(monkeypatch):
+    m = _import_module()
+    service = _stub_service([
+        {"id": "evt42", "summary": "REORGANIZE EMAILS", "start": {"date": "2026-08-12"}},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.delete_event("reorganize emails", "2026-08-12")
+    assert result == "evt42"
+
+
+def test_delete_event_multiple_matches_raises_and_does_not_delete(monkeypatch):
+    m = _import_module()
+    service = _stub_service([
+        {"id": "evt1", "summary": "Standup", "start": {"date": "2026-08-12"}},
+        {"id": "evt2", "summary": "Standup", "start": {"date": "2026-08-12"}},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    with pytest.raises(ValueError, match="2 events match"):
+        m.delete_event("Standup", "2026-08-12")
+    service.events.return_value.delete.assert_not_called()

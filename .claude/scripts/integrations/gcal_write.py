@@ -1,15 +1,20 @@
-"""Section 6: one-way Google Calendar push.
+"""Google Calendar push + delete.
 
 Public API:
     create_event(title, date, description="", calendar_id="primary") -> event_id | None
+    delete_event(title, date, calendar_id="primary") -> event_id | None
     parse_gcal_tags(text) -> list[(date, title)]
     parse_deadlines_md(text) -> list[(date, title)]
 
 Dedup is by (title, date) on the same calendar, case-insensitive.
-If a matching event already exists, returns None and does NOT insert.
+If a matching event already exists, create_event() returns None and does
+NOT insert.
 
-This module never deletes or updates events. Manual edits in GCal are
-preserved; the side-effect surface is strictly additive.
+Deletion only happens on an explicit, confirmed, exact title+date match via
+delete_event() — never as a side effect of the automated sync paths.
+parse_gcal_tags()/parse_deadlines_md() still feed a strictly additive push;
+they never delete. Manual edits in GCal outside of an explicit
+delete_event() call are still preserved.
 """
 from __future__ import annotations
 
@@ -68,6 +73,43 @@ def create_event(
     }
     created = service.events().insert(calendarId=calendar_id, body=body).execute()
     return created.get("id")
+
+
+def delete_event(
+    title: str,
+    date: str,
+    calendar_id: str = "primary",
+) -> Optional[str]:
+    """Delete the event titled `title` on `date` (YYYY-MM-DD).
+    Returns the deleted event's ID, or None if no matching event was found.
+    Raises ValueError if more than one event matches — never guesses which
+    one to delete."""
+    service = _get_service()
+    end = (date_cls.fromisoformat(date) + timedelta(days=1)).isoformat()
+
+    existing = service.events().list(
+        calendarId=calendar_id,
+        timeMin=f"{date}T00:00:00Z",
+        timeMax=f"{end}T00:00:00Z",
+        singleEvents=True,
+    ).execute()
+    title_norm = title.strip().lower()
+    matches = []
+    for ev in existing.get("items") or []:
+        ev_title = (ev.get("summary") or "").strip().lower()
+        ev_start = (ev.get("start") or {}).get("date") or (ev.get("start") or {}).get("dateTime", "")[:10]
+        if ev_title == title_norm and ev_start == date:
+            matches.append(ev)
+
+    if not matches:
+        return None
+    if len(matches) > 1:
+        titles = ", ".join(repr(m.get("summary", "")) for m in matches)
+        raise ValueError(f"{len(matches)} events match {title!r} on {date}: {titles}")
+
+    event_id = matches[0]["id"]
+    service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+    return event_id
 
 
 def parse_gcal_tags(text: str) -> list[tuple[str, str]]:

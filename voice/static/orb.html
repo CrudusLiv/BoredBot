@@ -30,18 +30,69 @@
        silver/red/purple so OFFLINE is never mistaken for thinking-mode red */
     --conn-online: #2fd8c4;
     --conn-offline: #e0a52c;
-    --text: #c9cbd4;
-    --text-dim: #7a7d88;
-    --mono: 'Cascadia Mono', Consolas, monospace;
+    /* text tiers — each contrast-checked (WCAG relative luminance) against
+       --bg; see tests/test_orb_ui_contrast.py. --text-faint may only be
+       used at --fs-2xs or larger. */
+    --text: #e4e6f0;
+    --text-dim: #9096a8;
+    --text-faint: #7a8078;
+    /* type families — bundled locally under voice/static/fonts/, no
+       runtime network dependency (same convention as three.min.js) */
+    --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+    --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    /* type scale — nothing in the UI goes below --fs-2xs */
+    --fs-2xs: 11px;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-base: 15px;
+    --fs-md: 17px;
+    --fs-lg: 22px;
+    /* letter-spacing scale */
+    --track-label: 0.08em;
+    --track-none: 0;
+    /* card-grouping spacing scale */
+    --gap-tight: 8px;
+    --gap-base: 16px;
+    --gap-loose: 20px;
+    --gap-section: 10px;
     /* live mode color (JS writes these every frame as the orb cross-fades
        between default/listening/thinking/speaking) — everything below that's
        meant to "feel like the same system" as the orb reads off these three numbers */
     --mode-r: 220; --mode-g: 232; --mode-b: 255;
   }
+
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap;
+    src: url('/static/fonts/IBMPlexMono-Medium.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url('/static/fonts/IBMPlexMono-SemiBold.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 700; font-display: swap;
+    src: url('/static/fonts/IBMPlexMono-Bold.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/IBMPlexSans-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap;
+    src: url('/static/fonts/IBMPlexSans-Medium.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap;
+    src: url('/static/fonts/IBMPlexSans-SemiBold.woff2') format('woff2');
+  }
   body {
     width: 100vw; height: 100vh; overflow: hidden;
     background: radial-gradient(ellipse at center, #0d0d15 0%, #07070b 100%);
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
   }
   canvas { display: block; position: fixed; inset: 0; }
   #starfield { z-index: 0; pointer-events: none; }
@@ -258,7 +309,7 @@
     padding: 10px 12px; border-radius: 10px; border-left: 3px solid #28285a;
     background: rgba(255,255,255,0.03);
     font-size: 12px; color: #8888c0; line-height: 1.65; word-break: break-word;
-    margin-bottom: 2px;
+    margin-bottom: var(--gap-section);
     animation: driftIn var(--dur-item) var(--ease-soft) both;
   }
   .notice-entry.unread { border-left-color: #7755cc; color: #b0b0d4; }
@@ -284,14 +335,14 @@
     font-weight: 300; font-variant-numeric: tabular-nums;
   }
   #clock-date {
-    font-size: 9px; color: #3d3d70; letter-spacing: 2px;
+    font-size: var(--fs-2xs); color: var(--text-faint); letter-spacing: var(--track-label);
     text-transform: uppercase; margin-top: 3px;
   }
 
   /* ── Calendar events ────────────────────────────── */
   .cal-event {
     padding: 10px 12px; border-radius: 10px; border-left: 3px solid #3344aa;
-    background: rgba(255,255,255,0.03); margin-bottom: 6px;
+    background: rgba(255,255,255,0.03); margin-bottom: var(--gap-section);
     font-size: 12px; color: #8888c0; line-height: 1.5; word-break: break-word;
     animation: driftIn var(--dur-item) var(--ease-soft) both;
   }
@@ -318,6 +369,23 @@
     height: 14px; transition: color var(--dur-soft) var(--ease-soft);
   }
   .settings-save-hint.saved { color: #66cc44; }
+  .app-icon { width: 16px; height: 16px; flex-shrink: 0; border-radius: 3px; object-fit: contain; }
+
+  .acc-section { border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .acc-section:first-child { border-top: 1px solid rgba(255,255,255,0.08); }
+  .acc-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 2px; cursor: pointer; user-select: none;
+  }
+  .acc-head:hover { background: rgba(255,255,255,0.04); }
+  .acc-name {
+    font-size: var(--fs-xs); letter-spacing: var(--track-label); text-transform: uppercase;
+    color: #a0a0cc; font-weight: 600;
+  }
+  .acc-chev { color: var(--accent); font-size: 11px; transition: transform 0.15s; }
+  .acc-head.open .acc-chev { transform: rotate(90deg); }
+  .acc-body { display: none; padding: 4px 2px 16px; }
+  .acc-body.open { display: block; }
 
   /* ── Apps panel ──────────────────────────────────── */
   .apps-columns { display: flex; gap: 12px; flex: 1; min-height: 0; }
@@ -326,7 +394,7 @@
     font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
     color: #6868a4; font-weight: 600; margin-bottom: 8px;
   }
-  .apps-col-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .apps-col-list { overflow-y: auto; display: flex; flex-direction: column; gap: var(--gap-section); }
   .app-row {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03);
@@ -346,7 +414,7 @@
 
   /* ── Shared chip style (Activity awareness, Job alerts) ──────────── */
   .profile-chip {
-    display: inline-block; font-size: 10px; color: var(--text);
+    display: inline-block; font-size: var(--fs-xs); color: var(--text);
     background: rgba(106,79,200,0.16); border: 1px solid var(--line-dim);
     border-radius: 999px; padding: 2px 8px; margin: 2px 4px 0 0;
   }
@@ -362,18 +430,18 @@ body::after {
 @media (prefers-reduced-motion: reduce) { body::after { display: none; } }
 
 /* wordmark + status readouts go mono — instrument labels, not prose */
-#name { font-family: var(--mono); color: #9ba0b0; letter-spacing: 10px; }
-#clock-time { font-family: var(--mono); }
-#clock-date { font-family: var(--mono); }
+#name { font-family: var(--font-mono); color: #9ba0b0; letter-spacing: 10px; }
+#clock-time { font-family: var(--font-mono); }
+#clock-date { font-family: var(--font-mono); }
 
 /* input bar: rectangular, hairline steel — console, not chat app */
 #input-text {
   border-radius: 6px; background: rgba(10,10,16,0.92);
-  border: 1px solid var(--line-dim); font-family: var(--mono);
+  border: 1px solid var(--line-dim); font-family: var(--font-mono);
   font-size: 13px; color: var(--text);
 }
 #input-text:focus { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,0.10); }
-#input-text::placeholder { color: #4a4d58; }
+#input-text::placeholder { color: var(--text-faint); }
 #send-btn {
   border-radius: 6px; border: 1px solid var(--line-dim);
   background: rgba(14,14,22,0.92); color: var(--text-dim);
@@ -395,7 +463,7 @@ body::after {
 #side-panel { background: var(--glass-bg-raise); border-left: 1px solid var(--glass-border); }
 #tab-rail { background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: var(--radius-md);
 }
-.ptab { border-radius: var(--radius-sm); font-family: var(--mono); letter-spacing: 0.08em; }
+.ptab { border-radius: var(--radius-sm); font-family: var(--font-mono); letter-spacing: 0.08em; }
 .ptab.active {
   color: rgb(var(--mode-r), var(--mode-g), var(--mode-b)) !important;
   border-color: rgba(var(--mode-r), var(--mode-g), var(--mode-b), 0.55) !important;
@@ -414,17 +482,17 @@ body::after {
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   padding:16px 22px; z-index:40; min-width:300px; text-align:center;
   box-shadow: 0 20px 70px rgba(0,0,0,.5); }
-#confirm-title { font-family:var(--mono); font-size:10px; letter-spacing:.22em;
+#confirm-title { font-family:var(--font-mono); font-size:var(--fs-2xs); letter-spacing:var(--track-label);
   color:var(--text-dim); margin-bottom:6px; }
-#confirm-tool { font-family:var(--mono); color:#b9a5f5; font-size:14px; }
-#confirm-args { font-family:var(--mono); color:var(--text-dim); font-size:11px;
+#confirm-tool { font-family:var(--font-mono); color:#b9a5f5; font-size:var(--fs-base); }
+#confirm-args { font-family:var(--font-mono); color:var(--text-dim); font-size:var(--fs-2xs);
   margin:4px 0 10px; word-break:break-all; }
 #confirm-countdown { height:2px; background:var(--line-dim); margin-bottom:12px; border-radius: 2px; overflow: hidden; }
 #confirm-countdown-fill { height:100%; width:100%; background:var(--accent); transition:width .1s linear; }
 #confirm-actions { display:flex; gap:10px; justify-content:center; }
 #confirm-actions button { padding:6px 18px; border-radius:999px; border:1px solid var(--line);
-  background:transparent; color:var(--text); cursor:pointer; font-size:11px;
-  font-family:var(--mono); letter-spacing:.12em;
+  background:transparent; color:var(--text); cursor:pointer; font-size:var(--fs-xs);
+  font-family:var(--font-mono); letter-spacing:var(--track-label);
   transition: background var(--dur-soft) var(--ease-soft), border-color var(--dur-soft) var(--ease-soft); }
 #confirm-approve { border-color:var(--accent); color:var(--accent); }
 #confirm-actions button:hover { background:rgba(255,255,255,.08); }
@@ -435,16 +503,16 @@ body::after {
 #pause-toggle:hover { border-color:var(--line); color:var(--text); }
 #pause-toggle.active { border-color:var(--danger); color:var(--danger); }
 #paused-chip { position:absolute; top:22px; left:60px; z-index:30; color:var(--danger);
-  font-family:var(--mono); font-size:10px; letter-spacing:.24em; }
+  font-family:var(--font-mono); font-size:var(--fs-2xs); letter-spacing:var(--track-label); }
 body.paused #conn-status { display:none; }
 #usage-readout { position:absolute; left:18px; bottom:18px; z-index:30; color:var(--text-dim);
-  font-size:10px; letter-spacing:.12em; font-family:var(--mono); }
+  font-size:var(--fs-2xs); letter-spacing:var(--track-label); font-family:var(--font-mono); }
 #conn-status { position:absolute; top:22px; left:64px; z-index:30; color:var(--text-dim);
-  font-size:10px; letter-spacing:.18em; font-family:var(--mono); }
+  font-size:var(--fs-2xs); letter-spacing:var(--track-label); font-family:var(--font-mono); }
 #conn-status.online { color: var(--conn-online); }
 #conn-status.offline { color: var(--conn-offline); }
 #tool-ticker { position:absolute; right:18px; bottom:56px; z-index:30; color:var(--text-dim);
-  font-size:10px; letter-spacing:.1em; font-family:var(--mono);
+  font-size:var(--fs-2xs); letter-spacing:var(--track-label); font-family:var(--font-mono);
   opacity:0; transition:opacity var(--dur-soft) var(--ease-soft); max-width:40vw; overflow:hidden;
   text-overflow:ellipsis; white-space:nowrap; }
 .notice-entry { position:relative; padding-right:26px; }
@@ -466,28 +534,30 @@ body.paused #conn-status { display:none; }
 /* top-left readouts */
 #conn-status { top: 20px; left: 26px; }
 #backend-readout { position: fixed; top: 20px; left: 118px; z-index: 30;
-  font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: #4a4d58; }
+  font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: var(--track-label); color: var(--text-faint); }
 body.paused #conn-status { display: block; }
 
 /* rails — soft glass cards */
-#left-rail { position: fixed; left: 26px; top: 96px; width: 196px; z-index: 6;
-  font-family: var(--mono); display: flex; flex-direction: column; gap: 13px;
-  padding: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border);
+#left-rail { position: fixed; left: 26px; top: 96px; width: 220px; z-index: 6;
+  font-family: var(--font-mono); display: flex; flex-direction: column; gap: var(--gap-loose);
+  padding: 20px; background: var(--glass-bg); border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   box-shadow: 0 12px 40px rgba(0,0,0,.28); }
-.rail-lbl { font-size: 9px; letter-spacing: .2em; color: var(--text-dim); text-transform: uppercase; }
-.rail-val { font-size: 13px; color: var(--text); letter-spacing: .1em; margin-top: 3px; }
-.rail-sub { font-size: 9.5px; color: #4a4d58; letter-spacing: .05em; margin-top: 3px; line-height: 1.5; }
+.rail-lbl { font-size: var(--fs-2xs); letter-spacing: var(--track-label); color: var(--text-dim); text-transform: uppercase; font-weight: 500; }
+.rail-val { font-size: var(--fs-md); color: var(--text); letter-spacing: var(--track-none); margin-top: 5px; font-weight: 600; }
+.rail-sub { font-size: var(--fs-xs); color: var(--text-faint); letter-spacing: var(--track-none); margin-top: 5px; line-height: 1.5; }
 .rail-hair { height: 1px; background: var(--line-dim); }
 #rail-state.listening { color: var(--accent); }
 #rail-state.thinking  { color: #a98ef0; }
 #rail-state.speaking  { color: #b7a6ec; }
 #rail-state.error     { color: var(--danger); }
+body.silenced #rail-state,
+body.silenced #rail-state-sub { color: var(--text-dim); }
 #usage-readout { position: static; font-size: 12px; }
 #killswitch-row { display: flex; align-items: center; justify-content: space-between; }
-#pause-toggle { position: static; padding: 3px 9px; font-family: var(--mono);
-  font-size: 9px; letter-spacing: .14em; }
-#paused-chip { position: static; margin-top: 6px; }
+#pause-toggle { position: static; padding: 4px 10px; font-family: var(--font-mono);
+  font-size: var(--fs-2xs); letter-spacing: var(--track-label); }
+#paused-chip { position: static; margin-top: 6px; font-size: var(--fs-2xs); }
 #feed-count { color: var(--accent); letter-spacing: .1em; }
 .notice-entry { padding-right: 44px; }
 .notice-acts { position: absolute; top: 3px; right: 2px; display: flex; }
@@ -497,10 +567,10 @@ body.paused #conn-status { display: block; }
 #feed-markall { font-size: 9px; padding: 4px 12px; }
 #tool-ticker { position: static; opacity: 1; max-width: none; white-space: normal;
   overflow: visible; text-overflow: clip; min-height: 16px; }
-.tool-line { font-size: 9.5px; color: var(--text-dim); letter-spacing: .05em; margin-top: 4px;
+.tool-line { font-size: var(--fs-2xs); color: var(--text-dim); letter-spacing: var(--track-none); margin-top: 4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   animation: driftIn var(--dur-item) var(--ease-soft) both; }
-.tool-line.done { color: #4a4d58; }
+.tool-line.done { color: var(--text-faint); }
 
 /* chat strip — column-reverse keeps the newest line visible while collapsed */
 #chat-strip { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
@@ -516,9 +586,9 @@ body.paused #conn-status { display: block; }
   border-radius: var(--radius-lg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   box-shadow: 0 14px 50px rgba(0,0,0,.35);
   scrollbar-width: thin; scrollbar-color: #2a2d36 transparent; }
-.strip-line { font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+.strip-line { font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.55;
   color: var(--text); margin: 3px 0; flex-shrink: 0; }
-.strip-line .who { font-size: 9px; letter-spacing: .14em; margin-right: 8px; }
+.strip-line .who { font-size: var(--fs-2xs); letter-spacing: var(--track-label); margin-right: 8px; }
 .strip-line.user .who { color: #a98ef0; }
 .strip-line.assistant .who { color: var(--accent); }
 #input-bar { width: clamp(280px, calc(100vw - 560px), 620px); }
@@ -527,7 +597,7 @@ body.paused #conn-status { display: block; }
 #panel-edge { top: auto; right: 26px; bottom: 22px; transform: none;
   width: auto; height: auto; padding: 6px 12px; border-radius: 4px;
   border: 1px solid var(--line-dim); border-right: 1px solid var(--line-dim);
-  font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+  font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: var(--track-label);
   color: var(--text-dim); background: rgba(12,12,18,.9); }
 #notice-badge { top: -3px; right: -3px; }
 
@@ -549,7 +619,7 @@ body.paused #conn-status { display: block; }
 
 /* narrow windows: slim the rail so the orb keeps its stage */
 @media (max-width: 1024px) {
-  #left-rail { width: 168px; }
+  #left-rail { width: 190px; }
   #chat-strip, #input-bar { width: clamp(250px, calc(100vw - 470px), 620px); }
 }
 
@@ -596,7 +666,7 @@ body.paused #conn-status { display: block; }
 #presence-dot.speaking::before { border-color: rgba(183,166,236,.45); }
 #presence-dot.error     { background: var(--danger); box-shadow: 0 0 8px rgba(230,86,76,.55); }
 #presence-dot.error::before { border-color: rgba(230,86,76,.55); }
-#presence-remark { font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+#presence-remark { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em;
   color: var(--text-dim); opacity: .85; transition: opacity var(--dur-soft) var(--ease-soft); }
 
 #tab-divider { background: var(--line-dim); margin: 12px 0 0; }
@@ -625,17 +695,17 @@ body.paused #conn-status { display: block; }
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border);
   transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
 #side-panel .search-bar:focus-within { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
-#side-panel .search-bar input { color: var(--text); font-family: var(--mono); font-size: 12px; }
-#side-panel .search-bar input::placeholder { color: #4a4d58; }
+#side-panel .search-bar input { color: var(--text); font-family: var(--font-mono); font-size: 12px; }
+#side-panel .search-bar input::placeholder { color: var(--text-faint); }
 #side-panel .search-bar-btn { border-left: 1px solid var(--glass-border); color: var(--text-dim);
-  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
   transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
 #side-panel .search-bar-btn:hover { color: #b9a5f5; background: rgba(106,79,200,.14); }
 
 /* pills → rounded glass buttons, lift on hover */
 #side-panel .pill-btn { border-radius: 999px;
   background: rgba(14,14,22,.55); border: 1px solid var(--glass-border); color: var(--text-dim);
-  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
   transition: color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft),
     border-color var(--dur-soft) var(--ease-soft), transform var(--dur-soft) var(--ease-soft); }
 #side-panel .pill-btn:hover { border-color: var(--core); color: #b9a5f5;
@@ -645,7 +715,7 @@ body.paused #conn-status { display: block; }
 /* panel rows + section labels → mono instrument labels, steel rules */
 #side-panel .panel-row { border-bottom: 1px solid var(--line-dim); }
 #side-panel .panel-row-label, #side-panel .apps-col-label,
-#side-panel .settings-field-label { color: var(--text-dim); font-family: var(--mono);
+#side-panel .settings-field-label { color: var(--text-dim); font-family: var(--font-mono);
   letter-spacing: .16em; font-weight: 500; }
 #side-panel .panel-output, #side-panel .panel-output { color: var(--text); }
 
@@ -655,7 +725,7 @@ body.paused #conn-status { display: block; }
   transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
 #ptab-notices .notice-entry.unread { border-left-color: var(--core); color: var(--text); }
 #ptab-notices .notice-entry.urgent { border-left-color: var(--danger); }
-#ptab-notices .notice-time { color: var(--text-dim); }
+#ptab-notices .notice-time { color: var(--text-dim); font-size: var(--fs-2xs); }
 
 /* calendar events */
 #side-panel .cal-event { border-radius: var(--radius-sm); background: rgba(255,255,255,.03);
@@ -675,15 +745,15 @@ body.paused #conn-status { display: block; }
 
 /* jobs table — cells inherit, so set readable colors here */
 #jobs-table { color: var(--text); }
-#jobs-table th { color: var(--text-dim); font-family: var(--mono);
-  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 500; }
+#jobs-table th { color: var(--text-dim); font-family: var(--font-mono);
+  font-size: var(--fs-2xs); letter-spacing: var(--track-label); text-transform: uppercase; font-weight: 500; }
 #jobs-table a { color: var(--text); }
 #jobs-table a:hover { color: var(--accent); }
 
 /* settings fields */
 #side-panel .settings-input, #side-panel .settings-select { border-radius: var(--radius-sm);
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border); color: var(--text);
-  font-family: var(--mono); font-size: 12px;
+  font-family: var(--font-mono); font-size: 12px;
   transition: border-color var(--dur-soft) var(--ease-soft), box-shadow var(--dur-soft) var(--ease-soft); }
 #side-panel .settings-input:focus, #side-panel .settings-select:focus { border-color: var(--core); box-shadow: 0 0 0 3px rgba(106,79,200,.14); }
 #side-panel .settings-save-hint { color: var(--text-dim); transition: color var(--dur-soft) var(--ease-soft); }
@@ -694,7 +764,7 @@ body.paused #conn-status { display: block; }
   transition: border-color var(--dur-soft) var(--ease-soft), background var(--dur-soft) var(--ease-soft); }
 #side-panel .app-row-name { color: var(--text); }
 #side-panel .app-alias-input { border-radius: var(--radius-sm); background: rgba(10,10,16,.6);
-  border: 1px solid var(--glass-border); color: var(--text); font-family: var(--mono); }
+  border: 1px solid var(--glass-border); color: var(--text); font-family: var(--font-mono); }
 
 /* chat bubbles */
 #side-panel .chat-bubble { border-radius: var(--radius-md); animation: driftIn var(--dur-item) var(--ease-soft) both; }
@@ -704,10 +774,10 @@ body.paused #conn-status { display: block; }
 
 /* empty + error copy in Vesper's voice — one styled line, never raw JSON */
 #side-panel .pane-empty, #side-panel .chat-empty, #side-panel .notices-empty {
-  font-family: var(--mono); font-size: 11px; letter-spacing: .05em; line-height: 1.7;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; line-height: 1.7;
   color: var(--text-dim); text-align: center; margin-top: 30px; text-transform: none; }
 #side-panel .pane-empty.err { color: var(--danger); }
-#side-panel .pane-err-detail { display: block; margin-top: 7px; font-size: 10px;
+#side-panel .pane-err-detail { display: block; margin-top: 7px; font-size: var(--fs-2xs);
   letter-spacing: 0; color: var(--text-dim); word-break: break-word; }
 
 /* ═══ Mode-reactive chrome: the orb cross-fades between four colors
@@ -754,8 +824,8 @@ body.paused #conn-status { display: block; }
   padding: 14px 10px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a2d36 transparent;
   background: rgba(10,10,16,.35); border: none; border-right: 1px solid var(--line-dim);
   border-radius: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
-.tab-group { font-family: var(--mono); font-size: 8.5px; letter-spacing: .22em;
-  text-transform: uppercase; color: #4a4d58; padding: 14px 10px 5px; }
+.tab-group { font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--text-faint); padding: 14px 10px 5px; }
 #tab-rail .tab-group:first-child { padding-top: 2px; }
 .ptab { flex: none; text-align: left; padding: 8px 10px; font-size: 10px; }
 .ptab-content { grid-column: 2; grid-row: 3; padding: 18px 26px 24px; }
@@ -765,37 +835,37 @@ body.paused #conn-status { display: block; }
    logical block bounded in its own card so panes read in sections. ═══ */
 #side-panel { width: min(1280px, 96vw); height: min(90vh, 920px);
   grid-template-columns: 210px minmax(0, 1fr); }
-.ptab { font-size: 12.5px; padding: 9px 12px; letter-spacing: .06em; }
-.tab-group { font-size: 10px; }
-#presence-remark { font-size: 12px; }
+.ptab { font-size: var(--fs-xs); padding: 9px 12px; letter-spacing: var(--track-label); }
+.tab-group { font-size: var(--fs-2xs); }
+#presence-remark { font-size: var(--fs-xs); }
 .ptab-content { padding: 22px 30px 28px; gap: 14px; }
 
-/* body copy: 12-13px → 14px+ */
-#side-panel .panel-output, #side-panel .panel-output { font-size: 14.5px; line-height: 1.8; }
-#side-panel .chat-bubble { font-size: 14.5px; line-height: 1.65; padding: 11px 15px; }
-#side-panel .bubble-time { font-size: 11px; }
-#side-panel .task-name { font-size: 14.5px; }
-#side-panel .cal-event { font-size: 13.5px; padding: 12px 14px; }
-#side-panel .cal-event-time { font-size: 11px; }
-#side-panel .app-row-name { font-size: 13.5px; }
-#ptab-notices .notice-entry { font-size: 13.5px; line-height: 1.6; }
+/* body copy, snapped onto the governed type scale (Task 1) */
+#side-panel .panel-output, #side-panel .panel-output { font-size: var(--fs-base); line-height: 1.8; }
+#side-panel .chat-bubble { font-size: var(--fs-base); line-height: 1.65; padding: 11px 15px; }
+#side-panel .bubble-time { font-size: var(--fs-2xs); }
+#side-panel .task-name { font-size: var(--fs-base); }
+#side-panel .cal-event { font-size: var(--fs-sm); padding: 12px 14px; }
+#side-panel .cal-event-time { font-size: var(--fs-2xs); }
+#side-panel .app-row-name { font-size: var(--fs-sm); }
+#ptab-notices .notice-entry { font-size: var(--fs-sm); line-height: 1.6; }
 #side-panel .settings-input, #side-panel .settings-select,
-#side-panel .search-bar input { font-size: 14px; }
-#side-panel .settings-save-hint { font-size: 11px; height: 16px; }
-#side-panel .search-bar-btn, #side-panel .pill-btn { font-size: 12.5px; }
-#side-panel .chat-empty, #side-panel .notices-empty, #side-panel .pane-empty { font-size: 13.5px; }
+#side-panel .search-bar input { font-size: var(--fs-base); }
+#side-panel .settings-save-hint { font-size: var(--fs-2xs); height: 16px; }
+#side-panel .search-bar-btn, #side-panel .pill-btn { font-size: var(--fs-xs); }
+#side-panel .chat-empty, #side-panel .notices-empty, #side-panel .pane-empty { font-size: var(--fs-sm); }
 
 /* section headers: readable size + accent tick so the eye can anchor */
 #side-panel .panel-row-label, #side-panel .apps-col-label {
-  font-size: 11.5px; letter-spacing: .12em;
+  font-size: var(--fs-xs); letter-spacing: var(--track-label);
   border-left: 2px solid var(--core); padding-left: 8px; }
-#side-panel .settings-field-label { font-size: 11.5px; letter-spacing: .1em; }
+#side-panel .settings-field-label { font-size: var(--fs-xs); letter-spacing: var(--track-label); }
 
 /* section cards: bounded blocks instead of one undivided surface */
 #side-panel .panel-row, #side-panel .apps-col, #ptab-finance form {
   background: rgba(255,255,255,.025); border: 1px solid var(--line-dim);
-  border-radius: var(--radius-md); padding: 16px 18px; }
-#side-panel .panel-row:last-child { padding-bottom: 16px; }
+  border-radius: var(--radius-md); padding: var(--gap-loose); }
+#side-panel .panel-row:last-child { padding-bottom: var(--gap-loose); }
 
 /* single-column fallback: nav becomes a horizontal scroll rail on top.
    Must stay LAST — the workspace/readability #side-panel rules above share
@@ -950,6 +1020,8 @@ body.paused #conn-status { display: block; }
       <button class="pill-btn" id="cal-refresh-btn">refresh</button>
     </div>
     <div id="calendar-list"></div>
+    <div class="panel-row-label" style="margin-top:18px; margin-bottom:8px;">Reminders</div>
+    <div id="reminders-list"></div>
     <div class="panel-row-label" style="margin-top:18px; margin-bottom:8px;">Deadlines</div>
     <div id="tasks-list"></div>
   </div>
@@ -992,16 +1064,7 @@ body.paused #conn-status { display: block; }
   </div>
 
   <div id="ptab-settings" class="ptab-content">
-    <div style="margin-bottom:18px;">
-      <div class="panel-row-label" style="margin-bottom:8px;">LLM Backend</div>
-      <div id="settings-llm-status" class="panel-output" style="font-size:12px; min-height:16px; margin-bottom:8px;"></div>
-      <button class="pill-btn" id="settings-llm-detect">re-detect</button>
-    </div>
-    <div style="margin-bottom:18px;">
-      <div class="panel-row-label" style="margin-bottom:8px;">Weather</div>
-      <div id="settings-weather-status" class="panel-output" style="font-size:12px; min-height:16px;"></div>
-    </div>
-    <div id="settings-fields"></div>
+    <div id="settings-accordion"></div>
   </div>
 
 </div>
@@ -1508,7 +1571,7 @@ function animate(nowMs) {
   lastFrame = nowMs || 0;
   t += 0.016;
 
-  const paused = document.body.classList.contains('paused');
+  const paused = document.body.classList.contains('paused') || document.body.classList.contains('silenced');
   const tgt = STATES[state];
   const lf = 0.05;
 
@@ -1976,13 +2039,19 @@ vfetch('/cmd/killswitch').then(r => r.json()).then(d => setPaused(!!d.paused)).c
 
 // Live "silenced" indicator: driven by busy_state WS events from the heartbeat's
 // activity-awareness gate (voice/heartbeat.py _broadcast_busy). Shows which app
-// is holding proactive output; hides when it closes.
+// is holding proactive output; hides when it closes. Also dims the orb (like
+// killswitch pause) and swaps the top state subtitle so the primary readout —
+// not just this rail chip — reflects that PTT is currently gated off.
+const rsSub = document.getElementById('rail-state-sub');
+let rsSubDefault = rsSub ? rsSub.textContent : '';
 function setBusyState(ev) {
   const sec = document.getElementById('busy-sec');
   const hair = document.getElementById('busy-hair');
   const sub = document.getElementById('busy-sub');
-  if (!sec) return;
   const busy = !!(ev && ev.busy);
+  document.body.classList.toggle('silenced', busy);
+  if (rsSub) rsSub.textContent = busy ? (ev.proc ? 'silenced · ' + ev.proc : 'silenced') : rsSubDefault;
+  if (!sec) return;
   sec.hidden = !busy;
   if (hair) hair.hidden = !busy;
   if (sub) sub.textContent = busy ? (ev.proc ? 'silenced · ' + ev.proc : 'silenced') : '—';
@@ -2012,8 +2081,7 @@ vfetch('/cmd/usage').then(r => r.json()).then(d => {
     if (hb) hb.textContent = (c.heartbeat_enabled === false ? 'off' :
       'every ' + (c.heartbeat_interval_minutes ?? 30) + 'm')
       + ' · quiet ' + (c.quiet_hours_start || '22:00') + '–' + (c.quiet_hours_end || '09:00');
-    const sub = document.getElementById('rail-state-sub');
-    if (sub && c.ptt_key) sub.textContent = `hold [${c.ptt_key}] to talk`;
+    if (rsSub && c.ptt_key) { rsSub.textContent = `hold [${c.ptt_key}] to talk`; rsSubDefault = rsSub.textContent; }
   }).catch(() => {});
   loadNotices();
   const ma = document.getElementById('feed-markall');
@@ -2090,6 +2158,34 @@ async function loadCalendar() {
     });
   } catch (_) {
     list.innerHTML = paneErr(null, 'Calendar\'s offline. Try later.');
+  }
+
+  const remindersList = document.getElementById('reminders-list');
+  if (remindersList) {
+    remindersList.innerHTML = '<div class="notices-empty">one moment…</div>';
+    try {
+      const r = await vfetch('/cmd/reminders');
+      const d = await r.json();
+      remindersList.innerHTML = '';
+      if (errText(d)) {
+        remindersList.innerHTML = paneErr(errText(d), 'Reminders won\'t load.');
+      } else {
+        const reminders = d.reminders || [];
+        if (!reminders.length) {
+          remindersList.innerHTML = '<div class="notices-empty">Nothing due. For now.</div>';
+        } else {
+          reminders.forEach(rem => {
+            const div = document.createElement('div');
+            div.className = 'cal-event';
+            const due = (rem.due || '').slice(0, 10);
+            div.innerHTML = `<span class="cal-event-time">${escHtml(due)}</span><span class="cal-event-title">${escHtml(rem.title || '(no title)')}</span>`;
+            remindersList.appendChild(div);
+          });
+        }
+      }
+    } catch (_) {
+      remindersList.innerHTML = paneErr(null, 'Reminders won\'t load.');
+    }
   }
 
   const tasksList = document.getElementById('tasks-list');
@@ -2334,6 +2430,12 @@ async function _renderActivityAwareness(conf, container) {
       const chip = document.createElement('span');
       chip.className = 'profile-chip';
       chip.style.cssText = 'display:inline-flex; align-items:center; gap:6px;';
+      const icon = document.createElement('img');
+      icon.className = 'app-icon';
+      icon.src = '/cmd/icon?target=' + encodeURIComponent(p);
+      icon.alt = '';
+      icon.onerror = () => { icon.style.display = 'none'; };
+      chip.appendChild(icon);
       chip.append(document.createTextNode(p));
       const x = document.createElement('button');
       x.type = 'button';
@@ -2558,13 +2660,18 @@ async function _renderPcControl(conf, container) {
       const label = document.createElement('span');
       label.className = 'profile-chip';
       label.style.cssText = 'display:inline-flex; align-items:center; gap:6px; flex:1; overflow:hidden;';
+      const icon = document.createElement('img');
+      icon.className = 'app-icon';
+      icon.src = '/cmd/icon?target=' + encodeURIComponent(apps[name]);
+      icon.alt = '';
+      icon.onerror = () => { icon.style.display = 'none'; };
       const nameSpan = document.createElement('span');
       nameSpan.textContent = name;
       nameSpan.style.fontWeight = '600';
       const targetSpan = document.createElement('span');
       targetSpan.textContent = ' \u2192 ' + apps[name];
       targetSpan.style.cssText = 'color: var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-      label.append(nameSpan, targetSpan);
+      label.append(icon, nameSpan, targetSpan);
       const x = document.createElement('button');
       x.type = 'button';
       x.textContent = '\u2715';
@@ -2777,139 +2884,210 @@ async function _renderKeybinds(conf, container) {
 }
 
 
-async function loadSettingsPanel() {
-  const llmEl = document.getElementById('settings-llm-status');
-  if (llmEl) {
-    try {
-      const r = await vfetch('/cmd/llm/status');
-      const d = await r.json();
-      llmEl.textContent = `${d.backend} · ${d.model || '—'} · ${d.available ? 'online' : 'offline'}`;
-    } catch (_) { if (llmEl) llmEl.textContent = 'backend won\'t answer.'; }
-  }
-  const wxEl = document.getElementById('settings-weather-status');
-  if (wxEl) {
-    try {
-      const r = await vfetch('/cmd/weather');
-      if (r.ok) {
-        const d = await r.json();
-        wxEl.textContent = `${d.city}: ${d.temp_c}°C, ${d.desc} · humidity ${d.humidity}%`;
-      } else if (r.status === 400) {
-        // 400 is only ever the no-city-configured case (see /cmd/weather in
-        // ui_server.py); real fetch/API failures come back as 500. Show the
-        // Vesper line instead of the raw "no city configured — set..." text.
-        wxEl.textContent = "No city set. I'm not guessing your weather.";
-      } else {
-        const d = await r.json();
-        wxEl.textContent = errText(d) || 'No weather right now.';
-      }
-    } catch (_) { if (wxEl) wxEl.textContent = 'No weather right now.'; }
-  }
-  const fieldsEl = document.getElementById('settings-fields');
-  if (!fieldsEl) return;
-  try {
-    const r = await vfetch('/cmd/settings');
-    const conf = await r.json();
-    const FIELDS = [
-      { key: 'user_name',             label: 'Display name',      type: 'text'   },
-      { key: 'vault_path',            label: 'Obsidian vault folder (optional)', type: 'text' },
-      { key: 'city',                  label: 'City (weather)',     type: 'text'   },
-      { key: 'timezone_offset_hours', label: 'UTC offset (hours)', type: 'number' },
-      { key: 'tts_engine',            label: 'TTS engine',         type: 'select', opts: ['edge','kokoro','elevenlabs'] },
-      { key: 'elevenlabs_voice_id',    label: 'ElevenLabs voice ID',            type: 'text',   showIf: 'elevenlabs' },
-      { key: 'elevenlabs_batch_chars', label: 'ElevenLabs batch size (chars)',  type: 'number',  showIf: 'elevenlabs' },
-      { key: 'llm_backend',           label: 'LLM backend',        type: 'select', opts: ['auto','ollama','lmstudio','anthropic','claude_cli'] },
-      { key: 'quiet_hours_start',     label: 'Quiet hours start',  type: 'text'   },
-      { key: 'quiet_hours_end',       label: 'Quiet hours end',    type: 'text'   },
-    ];
-    fieldsEl.innerHTML = '';
-    let engineCtrl = null;
-    const engineDependentWraps = [];
-    FIELDS.forEach(({ key, label, type, opts, showIf }) => {
-      const val = conf[key] ?? '';
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'margin-bottom:14px;';
-      const lbl = document.createElement('div');
-      lbl.className = 'settings-field-label';
-      lbl.textContent = label;
-      let ctrl;
-      if (type === 'select') {
-        ctrl = document.createElement('select');
-        ctrl.className = 'settings-select';
-        (opts || []).forEach(o => {
-          const opt = document.createElement('option');
-          opt.value = o; opt.textContent = o;
-          if (o === String(val)) opt.selected = true;
-          ctrl.appendChild(opt);
-        });
-      } else {
-        ctrl = document.createElement('input');
-        ctrl.className = 'settings-input';
-        ctrl.type = type;
-        ctrl.value = String(val);
-      }
-      ctrl.dataset.key = key;
-      const hint = document.createElement('div');
-      hint.className = 'settings-save-hint';
-      hint.id = 'hint-' + key;
-      async function saveField() {
-        const k = ctrl.dataset.key;
-        let v = ctrl.value;
-        if (type === 'number') v = parseFloat(v);
-        try {
-          const res = await vfetch('/cmd/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: k, value: v }),
-          });
-          const h = document.getElementById('hint-' + k);
-          if (h) {
-            h.textContent = res.ok ? 'saved' : 'error';
-            h.className = 'settings-save-hint' + (res.ok ? ' saved' : '');
-            setTimeout(() => { h.textContent = ''; h.className = 'settings-save-hint'; }, 1800);
-          }
-        } catch (_) {}
-      }
-      ctrl.addEventListener('change', saveField);
-      if (type !== 'select') ctrl.addEventListener('blur', saveField);
-      if (key === 'tts_engine') engineCtrl = ctrl;
-      if (showIf) engineDependentWraps.push({ wrap, showIf });
-      wrap.append(lbl, ctrl, hint);
-      fieldsEl.appendChild(wrap);
+// Creates one labeled settings field (text/number/select), wires
+// change/blur -> POST /cmd/settings, and appends it to `container`.
+// Returns {ctrl, wrap} so callers needing cross-field behavior (e.g. the
+// Voice section's engine-conditional visibility) can hold onto the control.
+function _appendField(container, conf, { key, label, type, opts }) {
+  const val = conf[key] ?? '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-bottom:14px;';
+  const lbl = document.createElement('div');
+  lbl.className = 'settings-field-label';
+  lbl.textContent = label;
+  let ctrl;
+  if (type === 'select') {
+    ctrl = document.createElement('select');
+    ctrl.className = 'settings-select';
+    (opts || []).forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      if (o === String(val)) opt.selected = true;
+      ctrl.appendChild(opt);
     });
-    // Progressive disclosure: ElevenLabs-only fields stay hidden unless that
-    // engine is selected, so switching engines doesn't leave dead controls visible.
-    function applyEngineVisibility() {
-      const engine = engineCtrl ? engineCtrl.value : '';
-      engineDependentWraps.forEach(({ wrap, showIf }) => {
-        wrap.style.display = engine === showIf ? '' : 'none';
-      });
-    }
-    if (engineCtrl) engineCtrl.addEventListener('change', applyEngineVisibility);
-    applyEngineVisibility();
-    await _renderActivityAwareness(conf, fieldsEl);
-    await _renderJobAlerts(conf, fieldsEl);
-    await _renderPcControl(conf, fieldsEl);
-    await _renderKeybinds(conf, fieldsEl);
-  } catch (_) {
-    fieldsEl.innerHTML = paneErr(null, 'Settings won\'t load.');
+  } else {
+    ctrl = document.createElement('input');
+    ctrl.className = 'settings-input';
+    ctrl.type = type;
+    ctrl.value = String(val);
   }
+  ctrl.dataset.key = key;
+  const hint = document.createElement('div');
+  hint.className = 'settings-save-hint';
+  hint.id = 'hint-' + key;
+  async function saveField() {
+    let v = ctrl.value;
+    if (type === 'number') v = parseFloat(v);
+    try {
+      const res = await vfetch('/cmd/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: v }),
+      });
+      hint.textContent = res.ok ? 'saved' : 'error';
+      hint.className = 'settings-save-hint' + (res.ok ? ' saved' : '');
+      setTimeout(() => { hint.textContent = ''; hint.className = 'settings-save-hint'; }, 1800);
+    } catch (_) {}
+  }
+  ctrl.addEventListener('change', saveField);
+  if (type !== 'select') ctrl.addEventListener('blur', saveField);
+  wrap.append(lbl, ctrl, hint);
+  container.appendChild(wrap);
+  return { ctrl, wrap };
 }
 
-document.getElementById('settings-llm-detect')?.addEventListener('click', async () => {
-  const btn = document.getElementById('settings-llm-detect');
-  const el  = document.getElementById('settings-llm-status');
-  if (btn) btn.disabled = true;
-  if (el) el.textContent = 'detecting…';
+// Generic collapsible section for the Config tab's accordion layout.
+// renderBody(bodyEl) populates the section (can be async, e.g. sections
+// that fetch status text or the PC-control discover_apps() list).
+async function _renderAccordionSection(container, { title, defaultOpen }, renderBody) {
+  const section = document.createElement('div');
+  section.className = 'acc-section';
+
+  const head = document.createElement('div');
+  head.className = 'acc-head' + (defaultOpen ? ' open' : '');
+  const name = document.createElement('span');
+  name.className = 'acc-name';
+  name.textContent = title;
+  const chev = document.createElement('span');
+  chev.className = 'acc-chev';
+  chev.textContent = '▸';
+  head.append(name, chev);
+
+  const body = document.createElement('div');
+  body.className = 'acc-body' + (defaultOpen ? ' open' : '');
+
+  head.addEventListener('click', () => {
+    head.classList.toggle('open');
+    body.classList.toggle('open');
+  });
+
+  section.append(head, body);
+  container.appendChild(section);
+  await renderBody(body);
+}
+
+async function _loadLlmStatus(el) {
+  if (!el) return;
   try {
-    const r = await vfetch('/cmd/llm/detect');
+    const r = await vfetch('/cmd/llm/status');
     const d = await r.json();
-    if (el) el.textContent = `detected: ${d.detected}`;
-    setTimeout(loadSettingsPanel, 600);
+    el.textContent = `${d.backend} · ${d.model || '—'} · ${d.available ? 'online' : 'offline'}`;
+  } catch (_) { el.textContent = 'backend won\'t answer.'; }
+}
+
+async function _loadWeatherStatus(el) {
+  if (!el) return;
+  try {
+    const r = await vfetch('/cmd/weather');
+    if (r.ok) {
+      const d = await r.json();
+      el.textContent = `${d.city}: ${d.temp_c}°C, ${d.desc} · humidity ${d.humidity}%`;
+    } else if (r.status === 400) {
+      el.textContent = "No city set. I'm not guessing your weather.";
+    } else {
+      const d = await r.json();
+      el.textContent = errText(d) || 'No weather right now.';
+    }
+  } catch (_) { el.textContent = 'No weather right now.'; }
+}
+
+async function loadSettingsPanel() {
+  const accEl = document.getElementById('settings-accordion');
+  if (!accEl) return;
+  accEl.innerHTML = '';
+  let conf;
+  try {
+    const r = await vfetch('/cmd/settings');
+    conf = await r.json();
   } catch (_) {
-    if (el) el.textContent = 'detect failed';
+    accEl.innerHTML = paneErr(null, 'Settings won\'t load.');
+    return;
   }
-  if (btn) btn.disabled = false;
-});
+
+  await _renderAccordionSection(accEl, { title: 'Identity & Vault', defaultOpen: true }, async (body) => {
+    _appendField(body, conf, { key: 'user_name', label: 'Display name', type: 'text' });
+    _appendField(body, conf, { key: 'vault_path', label: 'Obsidian vault folder (optional)', type: 'text' });
+    _appendField(body, conf, { key: 'city', label: 'City (weather)', type: 'text' });
+    const wx = document.createElement('div');
+    wx.id = 'settings-weather-status';
+    wx.className = 'panel-output';
+    wx.style.cssText = 'font-size:12px; min-height:16px; margin:-4px 0 14px;';
+    body.appendChild(wx);
+    _appendField(body, conf, { key: 'timezone_offset_hours', label: 'UTC offset (hours)', type: 'number' });
+    await _loadWeatherStatus(wx);
+  });
+
+  await _renderAccordionSection(accEl, { title: 'Voice', defaultOpen: false }, async (body) => {
+    let engineCtrl = null;
+    const dependentWraps = [];
+    [
+      { key: 'tts_engine', label: 'TTS engine', type: 'select', opts: ['chatterbox', 'edge', 'kokoro', 'elevenlabs'] },
+      { key: 'tts_chatterbox_device', label: 'Chatterbox device', type: 'select', opts: ['cuda', 'cpu'], showIf: 'chatterbox' },
+      { key: 'tts_chatterbox_voice_path', label: 'Chatterbox voice clone (.wav)', type: 'text', showIf: 'chatterbox' },
+      { key: 'elevenlabs_voice_id', label: 'ElevenLabs voice ID', type: 'text', showIf: 'elevenlabs' },
+      { key: 'elevenlabs_batch_chars', label: 'ElevenLabs batch size (chars)', type: 'number', showIf: 'elevenlabs' },
+    ].forEach(f => {
+      const { ctrl, wrap } = _appendField(body, conf, f);
+      if (f.key === 'tts_engine') engineCtrl = ctrl;
+      if (f.showIf) dependentWraps.push({ wrap, showIf: f.showIf });
+    });
+    function applyVisibility() {
+      const engine = engineCtrl ? engineCtrl.value : '';
+      dependentWraps.forEach(({ wrap, showIf }) => { wrap.style.display = engine === showIf ? '' : 'none'; });
+    }
+    if (engineCtrl) engineCtrl.addEventListener('change', applyVisibility);
+    applyVisibility();
+  });
+
+  await _renderAccordionSection(accEl, { title: 'LLM backend', defaultOpen: false }, async (body) => {
+    _appendField(body, conf, { key: 'llm_backend', label: 'LLM backend', type: 'select', opts: ['auto', 'ollama', 'lmstudio', 'anthropic', 'claude_cli'] });
+    const status = document.createElement('div');
+    status.id = 'settings-llm-status';
+    status.className = 'panel-output';
+    status.style.cssText = 'font-size:12px; min-height:16px; margin-bottom:8px;';
+    const detectBtn = document.createElement('button');
+    detectBtn.className = 'pill-btn';
+    detectBtn.textContent = 're-detect';
+    body.append(status, detectBtn);
+    detectBtn.addEventListener('click', async () => {
+      detectBtn.disabled = true;
+      status.textContent = 'detecting…';
+      try {
+        const r = await vfetch('/cmd/llm/detect');
+        const d = await r.json();
+        status.textContent = `detected: ${d.detected}`;
+        setTimeout(() => _loadLlmStatus(status), 600);
+      } catch (_) {
+        status.textContent = 'detect failed';
+      }
+      detectBtn.disabled = false;
+    });
+    await _loadLlmStatus(status);
+  });
+
+  await _renderAccordionSection(accEl, { title: 'Automations', defaultOpen: false }, async (body) => {
+    _appendField(body, conf, { key: 'quiet_hours_start', label: 'Quiet hours start', type: 'text' });
+    _appendField(body, conf, { key: 'quiet_hours_end', label: 'Quiet hours end', type: 'text' });
+    await _renderActivityAwareness(conf, body);
+    await _renderJobAlerts(conf, body);
+  });
+
+  await _renderAccordionSection(accEl, { title: 'Apps', defaultOpen: false }, async (body) => {
+    await _renderPcControl(conf, body);
+  });
+
+  await _renderAccordionSection(accEl, { title: 'Safety', defaultOpen: false }, async (body) => {
+    const label = document.createElement('div');
+    label.className = 'settings-field-label';
+    label.textContent = 'Confirm before';
+    const list = document.createElement('div');
+    list.className = 'panel-output';
+    list.style.cssText = 'font-size:12px; margin-bottom:14px;';
+    list.textContent = (conf.requires_confirmation || []).join(', ') || '(none configured)';
+    body.append(label, list);
+    await _renderKeybinds(conf, body);
+  });
+}
 
 // Normalise a free-typed exe name: lowercase, and append ".exe" if the user
 // left it off (they match running-process names, which carry ".exe" on Windows).

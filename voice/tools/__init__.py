@@ -43,7 +43,7 @@ from voice.tools.email import triage_inbox, filter_subscriptions
 from voice.tools.search import search_vault
 from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
-from voice.tools.calendar import upcoming_events, create_calendar_event
+from voice.tools.calendar import upcoming_events, create_calendar_event, delete_calendar_event, create_reminder, upcoming_reminders
 from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
 from voice.memory import remember, forget
 
@@ -78,6 +78,17 @@ _register("create_calendar_event",
     "Create an all-day Google Calendar event. REQUIRES CONFIRMATION. "
     "Args: title(str), date(str, YYYY-MM-DD), description(str, optional).",
     create_calendar_event)
+_register("delete_calendar_event",
+    "Delete a Google Calendar event by title + date. REQUIRES CONFIRMATION. "
+    "Args: title(str), date(str, YYYY-MM-DD).",
+    delete_calendar_event)
+_register("create_reminder",
+    "Create a Google Calendar reminder (Tasks API). REQUIRES CONFIRMATION. "
+    "Args: title(str), date(str, YYYY-MM-DD), description(str, optional).",
+    create_reminder)
+_register("upcoming_reminders",
+    "Fetch upcoming Google Calendar reminders (Tasks API). Args: days(int, default 7).",
+    upcoming_reminders)
 _register("remember_fact",
     "Remember a fact across sessions. Args: key(str), value(str).",
     remember)

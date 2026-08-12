@@ -83,21 +83,26 @@ class ScreenReadHotkeys:
         self._overlay.dismiss()
 
     def run(self, stop_event: threading.Event) -> None:
-        """Blocking poll loop -- call this on its own daemon thread."""
-        conf = cfg.load()
-        bindings = {
-            conf.get("screen_read_capture_hotkey", ""): self.add_capture,
-            conf.get("screen_read_ask_hotkey", ""): self.submit_ask,
-            conf.get("screen_read_copy_hotkey", ""): self.copy_last_response,
-            conf.get("screen_read_dismiss_hotkey", ""): self.dismiss,
-        }
-        bindings.pop("", None)  # unset hotkeys are no-ops, never polled
-        was_down = {key: False for key in bindings}
+        """Blocking poll loop -- call this on its own daemon thread.
+
+        Reloads config every tick (not just once at the top) so a hotkey
+        changed via the Config UI takes effect immediately instead of
+        requiring a restart."""
+        was_down: dict[str, bool] = {}
 
         while not stop_event.is_set():
+            conf = cfg.load()
+            bindings = {
+                conf.get("screen_read_capture_hotkey", ""): self.add_capture,
+                conf.get("screen_read_ask_hotkey", ""): self.submit_ask,
+                conf.get("screen_read_copy_hotkey", ""): self.copy_last_response,
+                conf.get("screen_read_dismiss_hotkey", ""): self.dismiss,
+            }
+            bindings.pop("", None)  # unset hotkeys are no-ops, never polled
+
             for key, action in bindings.items():
                 down = _is_down(key)
-                if down and not was_down[key]:
+                if down and not was_down.get(key, False):
                     threading.Thread(target=action, daemon=True).start()
                 was_down[key] = down
             time.sleep(0.05)
