@@ -1464,6 +1464,7 @@ let volAmp    = 0;
 // back to a slow synthetic idle pulse if mic access is denied/unavailable.
 let micAmp = 0;
 let micLive = false;
+let gotServerAmplitude = false; // set by the websocket 'amplitude' handler below
 function initMicReactivity() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
   navigator.mediaDevices.getUserMedia({ audio: true, video: false })
@@ -1490,7 +1491,13 @@ function initMicReactivity() {
     })
     .catch(() => { micLive = false; }); // denied/unavailable — synthetic fallback in getMicAmp()
 }
-if (VESPER_RENDER_MODE === 'orb') initMicReactivity();
+// Give the websocket a couple seconds to prove real amplitude data is
+// flowing (i.e. voice/main.py is attached) before falling back to asking
+// the browser/OS for mic permission — avoids the prompt on every normal
+// launch, keeping it only for a standalone preview with no backend loop.
+if (VESPER_RENDER_MODE === 'orb') {
+  setTimeout(() => { if (!gotServerAmplitude) initMicReactivity(); }, 2000);
+}
 function getMicAmp(tNow) {
   if (micLive) return micAmp;
   return REDUCED ? 0.12 : 0.16 + 0.10 * Math.sin(tNow * 0.55); // slow synthetic idle pulse
@@ -1932,6 +1939,7 @@ setInterval(updateNoticeBadge, 60000);
     } else if (ev.type === 'tool') {
       showToolActivity(ev);
     } else if (ev.type === 'amplitude') {
+      gotServerAmplitude = true;
       volTarget = Math.min((ev.value || 0) * 10, 1.0);
     } else if (ev.type === 'viseme') {
       window.dispatchEvent(new CustomEvent('vesper:viseme', { detail: ev }));
