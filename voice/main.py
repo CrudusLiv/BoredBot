@@ -423,7 +423,7 @@ def run() -> None:
     ui_port = int(conf.get("ui_port", 7070))
     if conf.get("ui_enabled", False):
         from voice import ui_server, tray
-        ui_server.start(port=ui_port)
+        ui_server.start(port=ui_port, host=str(conf.get("ui_host", "127.0.0.1")))
         ui_server.set_brain(brain)
         # os._exit: the main loop blocks on audio, so a SystemExit raised in
         # the tray thread would never reach it. Exit code 0 keeps the

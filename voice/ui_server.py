@@ -746,17 +746,22 @@ def ensure_window_open() -> None:
         _show_window()
 
 
-def start(port: int = 7070) -> None:
+def start(port: int = 7070, host: str = "127.0.0.1") -> None:
     """Start uvicorn in a daemon thread. Does not open a window -- the
     caller (voice/main.py::run()) is responsible for that, since
     ui_window.start() must run on the process's real main thread, which
-    this function isn't guaranteed to be called from."""
+    this function isn't guaranteed to be called from.
+
+    `host` defaults to loopback-only. Set config's `ui_host` to "0.0.0.0"
+    to reach the orb from another device (e.g. a phone over Tailscale) --
+    every state-changing endpoint still requires the per-process TOKEN, so
+    binding wider doesn't remove auth, just loopback-only network scope."""
     global _ui_port
     _ui_port = port
 
     def _run() -> None:
         import uvicorn
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")
+        uvicorn.run(app, host=host, port=port, log_level="error")
 
     threading.Thread(target=_run, daemon=True, name="vesper-ui").start()
     threading.Event().wait(0.8)

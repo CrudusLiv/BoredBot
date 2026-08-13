@@ -76,6 +76,7 @@ DEFAULTS: dict[str, Any] = {
     # UI
     "ui_enabled": False,
     "ui_port": 7070,
+    "ui_host": "127.0.0.1",         # bind address for the FastAPI/uvicorn server; set "0.0.0.0" to reach it from other devices (e.g. over Tailscale)
     "city": "",                     # for weather widget; empty = disabled
     "ui_render_mode": "orb",        # orb | avatar
     "ui_avatar_vrm_path": "",       # filename under voice/static/avatar/models/; empty = placeholder.vrm

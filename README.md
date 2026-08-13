@@ -1,6 +1,8 @@
 # Vesper
 
-Vesper is a local-first personal voice assistant. It listens via push-to-talk, transcribes speech, routes it through an LLM of your choice, and speaks back — all through a Three.js orb UI in the browser.
+Vesper is a local-first personal voice assistant. It listens via push-to-talk, transcribes speech, routes it through an LLM of your choice, and speaks back — all through a Three.js orb UI in its own native window.
+
+Beyond conversation, Vesper can read your screen on a hotkey, control your PC (launch apps, focus windows, media/volume), manage calendar events, reminders, and deadlines, and run a proactive heartbeat that checks calendar/email/deadlines/PRs/job alerts in the background.
 
 ---
 
@@ -38,9 +40,15 @@ py -m voice --smoke-test # import every module and exit — no audio hardware ne
 py -m voice --version    # print the installed version
 ```
 
-Open `http://localhost:7070` (Edge `--app` mode recommended) for the orb UI, if `ui_enabled` is set in `voice/config.json`. The HUD is a galaxy/atomic motif around the orb — rounded glass panels, a drifting parallax starfield, and orbiting status indicators — with state/usage readouts on the left and a **Modules** button (bottom-right) for chat, notices, finance, calendar, jobs, workspace, apps, profiles, and settings.
+If `ui_enabled` is set in `voice/config.json`, the orb UI opens automatically in its own native window (pywebview/WebView2), falling back to an Edge/Chrome `--app` subprocess if pywebview isn't available. It's also reachable directly at `http://localhost:7070`. The HUD is a galaxy/atomic motif around the orb — rounded glass panels, a drifting parallax starfield, and orbiting status indicators — with state/usage readouts on the left and a **Modules** button (bottom-right) for chat, notices, finance, calendar, reminders, deadlines, jobs, workspace, apps, profiles, and settings (including live keybind rebinding).
 
 Scroll down (or press →) to dock the orb into the corner and maximize the notices feed into a centered panel; scroll up, press ←, or hit Esc to bring the orb back.
+
+### Remote access (phone, tablet, another PC)
+
+By default the server binds to `127.0.0.1` — reachable only from the same machine. To use the orb from another device, set `"ui_host": "0.0.0.0"` in your config (repo `voice/config.json` for dev, or `%APPDATA%/Vesper/config.json` once installed) and restart Vesper. Then, from the other device, open `http://<this-pc's-address>:7070`.
+
+The recommended way to expose that address is [Tailscale](https://tailscale.com/) — install it on both the PC and phone, join the same tailnet, and use the PC's Tailscale IP or MagicDNS name instead of port-forwarding the router. All state-changing endpoints (settings, calendar writes, chat input) already require the per-process session token embedded in the page URL, so widening the bind address doesn't remove auth — it only extends network reach.
 
 ## First run
 
