@@ -80,6 +80,33 @@ def merge_events(md_text: str, pairs: list[tuple[str, str]]) -> tuple[str, list[
     return _insert_into_section(md_text, "## Active", new_rows), added
 
 
+def prune_deleted(md_text: str, events: Iterable[dict], keywords: list[str] | None,
+                   window_start: str, window_end: str) -> tuple[str, list[str]]:
+    """Remove nogcal ## Active rows dated inside [window_start, window_end]
+    (the calendar fetch window) that no longer match any event in `events` --
+    the source event was deleted straight from Google Calendar, so without
+    this the row would keep firing threshold alerts forever with no way to
+    clear it. Plain (non-nogcal) rows are left alone; they were never sourced
+    from a calendar import. Returns (new_text, removed)."""
+    current = {(date, _norm(title)) for date, title in filter_deadline_events(events, keywords or DEFAULT_KEYWORDS)}
+    lo, hi = _active_bounds(md_text)
+    section = md_text[lo:hi]
+    removed: list[str] = []
+    kept_lines: list[str] = []
+    for line in section.split("\n"):
+        row = line.strip()
+        m = _ROW_RE.match(row)
+        if m and row.startswith("- nogcal:"):
+            date, title = m.group(1), m.group(2)
+            if window_start <= date <= window_end and (date, _norm(title)) not in current:
+                removed.append(f"{date} — {title}")
+                continue
+        kept_lines.append(line)
+    if not removed:
+        return md_text, []
+    return md_text[:lo] + "\n".join(kept_lines) + md_text[hi:], removed
+
+
 def _active_bounds(text: str) -> tuple[int, int]:
     idx = text.find("## Active")
     if idx == -1:
@@ -125,6 +152,33 @@ def import_from_events(events: Iterable[dict], keywords: list[str] | None = None
     if added:
         p.write_text(new_text, encoding="utf-8")
     return added
+
+
+def sync_with_calendar(events: Iterable[dict], keywords: list[str] | None = None,
+                        days_back: int = 0, days_forward: int = 30) -> tuple[list[str], list[str]]:
+    """Two-way sync against a calendar fetch window covering
+    [today - days_back, today + days_forward]: adds newly-seen deadline
+    events (see import_from_events), then prunes nogcal rows dated inside
+    that same window whose source event is gone from `events` -- covers
+    deletions made directly in Google Calendar, which never touch
+    DEADLINES.md on their own. Returns (added, removed)."""
+    p = _path()
+    if p is None or not p.exists():
+        return [], []
+    events = list(events)
+    from datetime import datetime, timedelta
+    from voice import config as cfg
+    today = datetime.now(cfg.get_timezone()).date()
+    window_start = (today - timedelta(days=days_back)).isoformat()
+    window_end = (today + timedelta(days=days_forward)).isoformat()
+
+    text = p.read_text(encoding="utf-8")
+    pairs = filter_deadline_events(events, keywords or DEFAULT_KEYWORDS)
+    text, added = merge_events(text, pairs)
+    text, removed = prune_deleted(text, events, keywords, window_start, window_end)
+    if added or removed:
+        p.write_text(text, encoding="utf-8")
+    return added, removed
 
 
 def complete_deadline(query: str) -> str:

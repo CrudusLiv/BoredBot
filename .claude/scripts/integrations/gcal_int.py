@@ -24,16 +24,17 @@ def _service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
-def upcoming(days: int = 14, max_results: int = 50) -> list[dict]:
+def upcoming(days: int = 14, max_results: int = 50, days_back: int = 0) -> list[dict]:
     svc = _service()
     if not svc:
         return []
     now = datetime.now(timezone.utc)
+    earlier = now - timedelta(days=days_back)
     later = now + timedelta(days=days)
     try:
         resp = svc.events().list(
             calendarId="primary",
-            timeMin=now.isoformat(),
+            timeMin=earlier.isoformat(),
             timeMax=later.isoformat(),
             maxResults=max_results,
             singleEvents=True,

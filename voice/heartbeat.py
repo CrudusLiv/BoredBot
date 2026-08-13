@@ -138,13 +138,13 @@ def _count_unread() -> int:
         return 0
 
 
-def _fetch_events(days: int = 1, max_results: int = 10) -> list[dict]:
+def _fetch_events(days: int = 1, max_results: int = 10, days_back: int = 0) -> list[dict]:
     """Fetch calendar events; returns [] on any error."""
     try:
         import sys
         sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
         from integrations import gcal_int  # type: ignore
-        return gcal_int.upcoming(days=days, max_results=max_results) or []
+        return gcal_int.upcoming(days=days, max_results=max_results, days_back=days_back) or []
     except Exception:
         return []
 
@@ -696,17 +696,26 @@ class Heartbeat:
 
     def _check_deadline_import(self) -> None:
         """Calendar events that look like deadlines (per the keyword list)
-        become nogcal: rows in DEADLINES.md, so threshold alerts cover them."""
+        become nogcal: rows in DEADLINES.md, so threshold alerts cover them.
+        Also reconciles the other direction: a nogcal row whose source event
+        was deleted straight from Google Calendar (not through Vesper) gets
+        pruned here too, so it stops alerting forever with no way to clear."""
         from voice import config as cfg
         from voice import deadlines
         conf = cfg.load()
         if not conf.get("deadline_import_enabled", True):
             return
         days = int(conf.get("deadline_import_lookahead_days", 30))
-        events = _fetch_events(days=days, max_results=100)
-        added = deadlines.import_from_events(events, conf.get("deadline_import_keywords"))
+        days_back = int(conf.get("deadline_import_lookback_days", 3))
+        events = _fetch_events(days=days, max_results=100, days_back=days_back)
+        added, removed = deadlines.sync_with_calendar(
+            events, conf.get("deadline_import_keywords"),
+            days_back=days_back, days_forward=days,
+        )
         if added:
             _post(("Deadlines from calendar: " + "; ".join(added))[:160])
+        if removed:
+            _post(("Deadlines cleared (removed from calendar): " + "; ".join(removed))[:160])
 
     def _run_scheduled(self) -> None:
         """Run each _SCHEDULE task independently once its own interval has

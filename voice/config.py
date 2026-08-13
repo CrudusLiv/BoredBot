@@ -121,6 +121,7 @@ DEFAULTS: dict[str, Any] = {
         "renewal", "expires", "application", "interview", "appointment",
     ],
     "deadline_import_lookahead_days": 30,
+    "deadline_import_lookback_days": 3,
     # Job alerts (email-digest job tracker; Jobs panel in the orb UI)
     "job_alerts_enabled": False,           # opt-in: scan Gmail for job-alert digests
     "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],

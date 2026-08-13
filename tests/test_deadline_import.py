@@ -96,3 +96,73 @@ def test_complete_only_considers_active_rows():
     text, row = dl.complete(md, "past thing", today="2099-07-17")
     assert row is None
     assert text == md
+
+
+# ── prune_deleted ────────────────────────────────────────────────────────────
+
+def test_prune_removes_nogcal_row_whose_event_is_gone():
+    # The MPU row is inside the fetch window but no calendar event matches
+    # it any more -- the event was deleted from Google Calendar directly.
+    text, removed = dl.prune_deleted(MD, [], dl.DEFAULT_KEYWORDS,
+                                      window_start="2099-07-01", window_end="2099-08-31")
+    assert removed == ["2099-07-16 — MPU — Reflection submission"]
+    assert "Reflection submission" not in text
+    # The plain (non-nogcal) row is left alone even though it's also unmatched.
+    assert "CS101 — Assignment 1" in text
+
+
+def test_prune_keeps_row_still_present_in_events():
+    events = [_ev("MPU — Reflection submission", "2099-07-16")]
+    text, removed = dl.prune_deleted(MD, events, dl.DEFAULT_KEYWORDS,
+                                      window_start="2099-07-01", window_end="2099-08-31")
+    assert removed == []
+    assert text == MD
+
+
+def test_prune_ignores_rows_outside_the_fetch_window():
+    text, removed = dl.prune_deleted(MD, [], dl.DEFAULT_KEYWORDS,
+                                      window_start="2099-07-17", window_end="2099-08-31")
+    assert removed == []
+    assert text == MD
+
+
+def test_prune_never_touches_plain_rows():
+    # Plain rows are pushed TO gcal, never sourced FROM it -- pruning them
+    # on a calendar mismatch would delete user-authored deadlines.
+    text, removed = dl.prune_deleted(MD, [], dl.DEFAULT_KEYWORDS,
+                                      window_start="2099-07-01", window_end="2099-12-31")
+    assert removed == ["2099-07-16 — MPU — Reflection submission"]
+    assert "- 2099-08-01 — CS101 — Assignment 1" in text
+
+
+# ── sync_with_calendar ───────────────────────────────────────────────────────
+
+def test_sync_with_calendar_adds_and_prunes_in_one_pass(tmp_path, monkeypatch):
+    from datetime import date, timedelta, timezone
+    from voice import config as cfg
+
+    today = date.today()
+    stale_date = (today - timedelta(days=1)).isoformat()
+    new_date = (today + timedelta(days=5)).isoformat()
+
+    md = (
+        "# DEADLINES\n\n## Active\n\n"
+        f"- nogcal: {stale_date} — Personal — Old thing due\n"
+    )
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "DEADLINES.md").write_text(md, encoding="utf-8")
+    monkeypatch.setattr(cfg, "get_vault_dir", lambda: vault)
+    monkeypatch.setattr(cfg, "get_timezone", lambda: timezone.utc)
+
+    # The stale row's source event is absent from this fetch (deleted from
+    # Google Calendar), so it's pruned in the same pass a new event is added.
+    added, removed = dl.sync_with_calendar(
+        [_ev("Rent due", new_date)], dl.DEFAULT_KEYWORDS,
+        days_back=3, days_forward=30,
+    )
+    assert added == [f"{new_date} — Rent due"]
+    assert removed == [f"{stale_date} — Personal — Old thing due"]
+    text = (vault / "DEADLINES.md").read_text(encoding="utf-8")
+    assert "Rent due" in text
+    assert "Old thing due" not in text
