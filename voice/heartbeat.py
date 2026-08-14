@@ -190,6 +190,19 @@ def _fetch_deadlines() -> list[str]:
         return []
 
 
+def _fetch_reminders(days: int = 2) -> list[dict]:
+    """Fetch Google Tasks reminders (the "Reminders" feature); returns []
+    on any error. These live on a separate Tasks list, not the calendar or
+    DEADLINES.md, so briefings must query them explicitly."""
+    try:
+        import sys
+        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+        from integrations import gtasks_write  # type: ignore
+        return gtasks_write.list_reminders(days=days) or []
+    except Exception:
+        return []
+
+
 class Heartbeat:
     """Background daemon thread. Runs _SCHEDULE's event-triggered checks
     and schedules proactive spoken briefings when speak_queue is provided."""
@@ -792,6 +805,14 @@ class Heartbeat:
                 label = f"{e.get('summary', '(no title)')} (all day)"
             bucket = today_strs if start[:10] == str(today) else tomorrow_strs
             bucket.append(label)
+        tomorrow = today + timedelta(days=1)
+        for r in _fetch_reminders(days=2):
+            due = (r.get("due") or "")[:10]
+            label = f"{r.get('title', '(reminder)')} (reminder)"
+            if due == str(today):
+                today_strs.append(label)
+            elif due == str(tomorrow):
+                tomorrow_strs.append(label)
         if today_strs:
             parts.append(f"Today: {', '.join(today_strs[:3])}.")
         else:
@@ -829,6 +850,7 @@ class Heartbeat:
         tomorrow = today + timedelta(days=1)
         events = _fetch_events(days=2, max_results=10)
         tmr = [e for e in events if e.get("start", "")[:10] == str(tomorrow)]
+        reminders_tmr = [r for r in _fetch_reminders(days=2) if (r.get("due") or "")[:10] == str(tomorrow)]
         if tmr:
             first = tmr[0]
             summary = first.get("summary", "(no title)")
@@ -836,6 +858,15 @@ class Heartbeat:
                 parts.append(f"Tomorrow starts with {summary} at {first['start'][11:16]}.")
             else:
                 parts.append(f"Tomorrow: {summary}, all day.")
+            if reminders_tmr:
+                titles = ", ".join(r.get("title", "(reminder)") for r in reminders_tmr[:3])
+                parts.append(f"Also {len(reminders_tmr)} reminder{'s' if len(reminders_tmr) != 1 else ''}: {titles}.")
+        elif reminders_tmr:
+            titles = ", ".join(r.get("title", "(reminder)") for r in reminders_tmr[:3])
+            parts.append(
+                f"Nothing on the calendar tomorrow, but {len(reminders_tmr)} "
+                f"reminder{'s' if len(reminders_tmr) != 1 else ''}: {titles}."
+            )
         else:
             parts.append("Nothing scheduled for tomorrow.")
 
