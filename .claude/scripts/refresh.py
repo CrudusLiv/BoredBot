@@ -19,6 +19,7 @@ sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts" / "integrations"))
 import _env  # noqa: F401, E402
 
 from core import snapshot, vault_state_writer  # noqa: E402
+from finance import tracker as finance_tracker  # noqa: E402
 
 KL = timezone(timedelta(hours=8))
 
@@ -51,6 +52,10 @@ def main() -> int:
         curr["heartbeat_ran_at"] = prev_saved["heartbeat_ran_at"]
     vault_state_writer.write_all(curr)
     snapshot.save_state(curr)
+    # Re-derive this month's finance Summary/Timeline from whatever's in the
+    # Entries table -- picks up rows typed by hand in Obsidian, not just
+    # voice-logged ones. No-op if the current month has no file yet.
+    finance_tracker.recalc_month()
 
     github = curr.get("github") or {}
 

@@ -1464,7 +1464,7 @@ let volAmp    = 0;
 // back to a slow synthetic idle pulse if mic access is denied/unavailable.
 let micAmp = 0;
 let micLive = false;
-let gotServerAmplitude = false; // set by the websocket 'amplitude' handler below
+let backendAttached = false; // set by ws.onopen below — proves voice/main.py is running
 function initMicReactivity() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
   navigator.mediaDevices.getUserMedia({ audio: true, video: false })
@@ -1491,12 +1491,14 @@ function initMicReactivity() {
     })
     .catch(() => { micLive = false; }); // denied/unavailable — synthetic fallback in getMicAmp()
 }
-// Give the websocket a couple seconds to prove real amplitude data is
-// flowing (i.e. voice/main.py is attached) before falling back to asking
-// the browser/OS for mic permission — avoids the prompt on every normal
-// launch, keeping it only for a standalone preview with no backend loop.
+// Give the websocket a couple seconds to prove voice/main.py is attached
+// (ws.onopen) before falling back to asking the browser/OS for mic
+// permission — avoids the prompt on every normal launch, keeping it only
+// for a standalone preview with no backend loop. Note: this can't wait on
+// an actual 'amplitude' event instead — the backend only emits those while
+// a PTT recording is in progress, which never happens on a passive launch.
 if (VESPER_RENDER_MODE === 'orb') {
-  setTimeout(() => { if (!gotServerAmplitude) initMicReactivity(); }, 2000);
+  setTimeout(() => { if (!backendAttached) initMicReactivity(); }, 2000);
 }
 function getMicAmp(tNow) {
   if (micLive) return micAmp;
@@ -1925,6 +1927,7 @@ setInterval(updateNoticeBadge, 60000);
 (function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws?t=${encodeURIComponent(VESPER_TOKEN)}`);
   ws.onopen = () => {
+    backendAttached = true;
     setConn(true);
     vfetch('/cmd/killswitch').then(r => r.json()).then(d => setPaused(!!d.paused)).catch(() => {});
     updateNoticeBadge();
@@ -1939,7 +1942,6 @@ setInterval(updateNoticeBadge, 60000);
     } else if (ev.type === 'tool') {
       showToolActivity(ev);
     } else if (ev.type === 'amplitude') {
-      gotServerAmplitude = true;
       volTarget = Math.min((ev.value || 0) * 10, 1.0);
     } else if (ev.type === 'viseme') {
       window.dispatchEvent(new CustomEvent('vesper:viseme', { detail: ev }));

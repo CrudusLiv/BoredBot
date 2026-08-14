@@ -20,6 +20,7 @@ from voice.tools.email import triage_inbox, filter_subscriptions
 from voice.tools.search import search_vault
 from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
+from voice.tools.finance import log_expense, log_income
 from voice.tools.calendar import (
     upcoming_events, create_calendar_event, delete_calendar_event,
     create_reminder, upcoming_reminders,
@@ -80,6 +81,20 @@ def write_draft_tool(name: str, text: str) -> str:
     """Write (create or overwrite) a draft under drafts/active/ for later
     review. Does NOT require confirmation — nothing is sent or finalized."""
     return write_draft(name=name, text=text)
+
+
+def log_expense_tool(amount: float, category: str, note: str = "") -> str:
+    """Log an expense to this month's finance ledger. Does NOT require
+    confirmation. Args: amount(float), category(str, one word),
+    note(str, optional)."""
+    return log_expense(amount=amount, category=category, note=note)
+
+
+def log_income_tool(amount: float, category: str, note: str = "") -> str:
+    """Log income to this month's finance ledger. Does NOT require
+    confirmation. Args: amount(float), category(str, one word),
+    note(str, optional)."""
+    return log_income(amount=amount, category=category, note=note)
 
 
 def write_scratch_tool(path: str, text: str) -> str:
@@ -322,6 +337,22 @@ _agent_tools = [
         "focus_window_tool", focus_window_tool.__doc__ or "",
         {"name": str},
         focus_window_tool,
+    ),
+    _sdk_tool(
+        "log_expense_tool", log_expense_tool.__doc__ or "",
+        {"type": "object", "properties": {
+            "amount": {"type": "number"}, "category": {"type": "string"},
+            "note": {"type": "string"},
+        }, "required": ["amount", "category"]},
+        log_expense_tool,
+    ),
+    _sdk_tool(
+        "log_income_tool", log_income_tool.__doc__ or "",
+        {"type": "object", "properties": {
+            "amount": {"type": "number"}, "category": {"type": "string"},
+            "note": {"type": "string"},
+        }, "required": ["amount", "category"]},
+        log_income_tool,
     ),
 ]
 

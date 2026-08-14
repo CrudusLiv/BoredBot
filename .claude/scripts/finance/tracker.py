@@ -1,4 +1,4 @@
-"""Lightweight personal expense tracker.
+"""Lightweight personal expense/income tracker.
 
 Input format:
     <amount> <category> [note...]
@@ -8,9 +8,17 @@ Examples:
     12.50 transport bus to KLCC   -> RM12.50, transport, note "bus to KLCC"
     200 books semester textbooks  -> RM200, books, note "semester textbooks"
 
+log() also takes a `kind` of "expense" (default) or "income". The Summary
+block's headline total and category breakdown cover expenses only -- that's
+what the budget bar on the dashboard measures against -- with a separate
+income line alongside it.
+
 Output: one markdown table per month at `Dynamous/Memory/finance/YYYY-MM.md`,
-with running totals appended on each write. The format is human-readable in
-Obsidian and trivially parseable for future analytics.
+with running totals recomputed on each write. The format is human-readable in
+Obsidian and trivially parseable for future analytics. `finance/Finances.md`
+is a hand-authored dataviewjs dashboard (not written by this module) that
+reads these month files live, the same way HOME.md reads them for its
+Finance card.
 
 This module is USER-SUPPLIED DATA ONLY. It never talks to a bank, never makes
 purchases, never touches financial APIs. USER.md's hard-limit on "financial
@@ -68,16 +76,19 @@ def parse(text: str) -> dict | None:
     }
 
 
-def log(amount: float, category: str, note: str = "") -> dict:
-    """Append one expense to the current month's file. Returns totals.
+def log(amount: float, category: str, note: str = "", kind: str = "expense") -> dict:
+    """Append one entry to the current month's file. `kind` is "expense"
+    (default) or "income". Returns totals.
 
     Output dict: {
         "date": "YYYY-MM-DD HH:MM",
-        "month_total": float,
-        "category_total": float,
+        "month_total": float,       # this month's total for `kind`
+        "category_total": float,    # this category's total for `kind`
         "file": Path,
     }
     """
+    if kind not in ("expense", "income"):
+        raise ValueError(f"kind must be 'expense' or 'income', got {kind!r}")
     now = datetime.now(KL)
     month_file = _month_file(now)
     if not month_file.exists():
@@ -87,7 +98,7 @@ def log(amount: float, category: str, note: str = "") -> dict:
     timestamp = now.strftime("%m-%d %H:%M")
     # Escape pipes in note so the markdown table doesn't break.
     safe_note = (note or "").replace("|", "\\|")
-    row = f"| {timestamp} | {CURRENCY} {amount:,.2f} | `{category}` | {safe_note} |"
+    row = f"| {timestamp} | {CURRENCY} {amount:,.2f} | {kind} | `{category}` | {safe_note} |"
 
     text = month_file.read_text(encoding="utf-8")
     text = _insert_row(text, row)
@@ -95,10 +106,9 @@ def log(amount: float, category: str, note: str = "") -> dict:
     text = _refresh_timeline_block(text, now)
     month_file.write_text(text, encoding="utf-8")
 
-    _refresh_index()
     _refresh_neighbour_timelines(now)
 
-    totals = _month_and_category_totals(month_file, category)
+    totals = _month_and_category_totals(month_file, category, kind)
     return {
         "date": timestamp,
         "month_total": totals["month"],
@@ -107,20 +117,40 @@ def log(amount: float, category: str, note: str = "") -> dict:
     }
 
 
+def recalc_month(when: datetime | None = None) -> Path | None:
+    """Re-derive the Summary and Timeline sections of a month file from
+    whatever's currently in its Entries table. Picks up hand-edited rows
+    (typed straight into Obsidian) without requiring a new log() call.
+    No-op, returns None, if the month file doesn't exist yet."""
+    now = when or datetime.now(KL)
+    month_file = _month_file(now)
+    if not month_file.exists():
+        return None
+    text = month_file.read_text(encoding="utf-8")
+    text = _refresh_totals_block(text)
+    text = _refresh_timeline_block(text, now)
+    month_file.write_text(text, encoding="utf-8")
+    return month_file
+
+
 def month_summary(when: datetime | None = None) -> str:
     """Return a short human-readable summary for a given month (default: now)."""
     now = when or datetime.now(KL)
     month_file = _month_file(now)
     if not month_file.exists():
-        return f"No expenses logged for {now.strftime('%B %Y')} yet."
+        return f"No entries logged for {now.strftime('%B %Y')} yet."
     rows = _read_rows(month_file)
     if not rows:
-        return f"No expenses logged for {now.strftime('%B %Y')} yet."
-    total = sum(r["amount"] for r in rows)
+        return f"No entries logged for {now.strftime('%B %Y')} yet."
+    expense_rows = [r for r in rows if r["kind"] == "expense"]
+    income_rows = [r for r in rows if r["kind"] == "income"]
+    total = sum(r["amount"] for r in expense_rows)
     by_cat = defaultdict(float)
-    for r in rows:
+    for r in expense_rows:
         by_cat[r["category"]] += r["amount"]
-    lines = [f"{now.strftime('%B %Y')} -- {CURRENCY}{total:.2f} total"]
+    lines = [f"{now.strftime('%B %Y')} -- {CURRENCY}{total:.2f} spent"]
+    if income_rows:
+        lines.append(f"  income: {CURRENCY}{sum(r['amount'] for r in income_rows):.2f}")
     for cat, amt in sorted(by_cat.items(), key=lambda kv: -kv[1]):
         lines.append(f"  {cat}: {CURRENCY}{amt:.2f}")
     return "\n".join(lines)
@@ -134,7 +164,7 @@ ROW_RE = re.compile(
     # have thousand separators. Category may be wrapped in backticks.
     r"^\|\s*(?P<ts>(?:\d{4}-)?\d{2}-\d{2} \d{2}:\d{2})\s*\|\s*"
     + re.escape(CURRENCY)
-    + r"\s*(?P<amount>[\d,]+(?:\.\d+)?)\s*\|\s*`?(?P<category>[\w-]+)`?\s*\|\s*(?P<note>.*?)\s*\|\s*$"
+    + r"\s*(?P<amount>[\d,]+(?:\.\d+)?)\s*\|\s*(?P<kind>expense|income)\s*\|\s*`?(?P<category>[\w-]+)`?\s*\|\s*(?P<note>.*?)\s*\|\s*$"
 )
 # Section bounds use heading text directly -- no HTML comment markers
 # cluttering the rendered note. Each helper finds its section by header,
@@ -164,8 +194,8 @@ def _init_month_file(path: Path, now: datetime) -> None:
         f"## Summary\n\n"
         f"_(no entries yet)_\n\n"
         f"## Entries\n\n"
-        f"| Date | Amount | Category | Note |\n"
-        f"|---|---:|---|---|\n\n"
+        f"| Date | Amount | Type | Category | Note |\n"
+        f"|---|---:|---|---|---|\n\n"
         f"## Timeline\n\n"
         f"[[Finances|all months]]\n"
     )
@@ -226,16 +256,19 @@ def _insert_row(text: str, row: str) -> str:
 
 def _refresh_totals_block(text: str) -> str:
     rows = _parse_rows_from_text(text)
-    if not rows:
-        body = "_(no entries yet)_"
+    expense_rows = [r for r in rows if r["kind"] == "expense"]
+    income_rows = [r for r in rows if r["kind"] == "income"]
+
+    if not expense_rows:
+        head = ["_(no entries yet)_"]
     else:
-        total = sum(r["amount"] for r in rows)
+        total = sum(r["amount"] for r in expense_rows)
         by_cat: dict[str, float] = defaultdict(float)
-        for r in rows:
+        for r in expense_rows:
             by_cat[r["category"]] += r["amount"]
         head = [
             f"> [!summary] {CURRENCY} {total:,.2f}",
-            f"> {len(rows)} entries across {len(by_cat)} categor{'y' if len(by_cat) == 1 else 'ies'} this month.",
+            f"> {len(expense_rows)} entries across {len(by_cat)} categor{'y' if len(by_cat) == 1 else 'ies'} this month.",
             "",
             "| Category | Amount | Share |",
             "|---|---:|---:|",
@@ -243,7 +276,13 @@ def _refresh_totals_block(text: str) -> str:
         for cat, amt in sorted(by_cat.items(), key=lambda kv: -kv[1]):
             pct = (amt / total * 100) if total else 0.0
             head.append(f"| `{cat}` | {CURRENCY} {amt:,.2f} | {pct:.1f}% |")
-        body = "\n".join(head)
+
+    if income_rows:
+        income_total = sum(r["amount"] for r in income_rows)
+        head.append("")
+        head.append(f"**Income:** {CURRENCY} {income_total:,.2f}")
+
+    body = "\n".join(head)
     return _replace_section(text, SUMMARY_H, body)
 
 
@@ -300,56 +339,6 @@ def _refresh_neighbour_timelines(now: datetime) -> None:
             path.write_text(new_text, encoding="utf-8")
 
 
-def _refresh_index() -> None:
-    """Maintain a hub note at finance/Finances.md listing every month with
-    its total. The friendly filename ('Finances') shows up neatly in the
-    Obsidian graph view instead of the generic 'index'."""
-    if not _finance_dir().exists():
-        return
-    months = sorted(
-        (p for p in _finance_dir().iterdir() if p.is_file() and MONTH_RE.match(p.name)),
-        key=lambda p: p.name,
-        reverse=True,  # most recent first
-    )
-    if not months:
-        return
-    rows = ["| Month | Total | Top category |", "|---|---:|---|"]
-    grand_total = 0.0
-    for p in months:
-        entries = _read_rows(p)
-        total = sum(r["amount"] for r in entries)
-        grand_total += total
-        by_cat: dict[str, float] = defaultdict(float)
-        for r in entries:
-            by_cat[r["category"]] += r["amount"]
-        if by_cat:
-            top_cat, top_amt = max(by_cat.items(), key=lambda kv: kv[1])
-            top = f"`{top_cat}` ({CURRENCY} {top_amt:,.2f})"
-        else:
-            top = "_(empty)_"
-        # Pretty alias so the table reads "May 2026" instead of "2026-05".
-        try:
-            pretty = datetime.strptime(p.stem, "%Y-%m").strftime("%B %Y")
-        except ValueError:
-            pretty = p.stem
-        rows.append(f"| [[{p.stem}|{pretty}]] | {CURRENCY} {total:,.2f} | {top} |")
-    text = (
-        "---\n"
-        "type: finance-index\n"
-        "tags: [finance]\n"
-        "---\n\n"
-        "# Finances — all months\n\n"
-        f"> [!summary] Lifetime total\n> {CURRENCY} {grand_total:,.2f}\n\n"
-        + "\n".join(rows)
-        + "\n"
-    )
-    (_finance_dir() / "Finances.md").write_text(text, encoding="utf-8")
-    # Remove the legacy index.md if it's still around from earlier writes.
-    legacy = _finance_dir() / "index.md"
-    if legacy.exists():
-        legacy.unlink()
-
-
 def _parse_rows_from_text(text: str) -> list[dict]:
     bounds = _section_bounds(text, ENTRIES_H)
     if bounds is None:
@@ -367,6 +356,7 @@ def _parse_rows_from_text(text: str) -> list[dict]:
         rows.append({
             "ts": m.group("ts"),
             "amount": amount,
+            "kind": m.group("kind"),
             "category": m.group("category"),
             "note": m.group("note"),
         })
@@ -377,8 +367,8 @@ def _read_rows(path: Path) -> list[dict]:
     return _parse_rows_from_text(path.read_text(encoding="utf-8"))
 
 
-def _month_and_category_totals(path: Path, category: str) -> dict:
-    rows = _read_rows(path)
+def _month_and_category_totals(path: Path, category: str, kind: str = "expense") -> dict:
+    rows = [r for r in _read_rows(path) if r["kind"] == kind]
     month = sum(r["amount"] for r in rows)
     cat = sum(r["amount"] for r in rows if r["category"] == category.lower())
     return {"month": month, "category": cat}

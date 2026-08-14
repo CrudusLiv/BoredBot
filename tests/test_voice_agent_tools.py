@@ -187,5 +187,6 @@ def test_vesper_tools_registers_every_sync_tool():
         "delete_calendar_event_tool", "create_reminder_tool", "upcoming_reminders_tool",
         "media_control_tool", "set_volume_tool", "launch_app_tool",
         "list_windows_tool", "focus_window_tool",
+        "log_expense_tool", "log_income_tool",
     }
     assert registered_names == expected
