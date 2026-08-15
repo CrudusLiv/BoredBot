@@ -165,3 +165,46 @@ def test_list_reminders_error_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(m, "list_reminders", _boom)
     result = calendar_tools.upcoming_reminders(days=7)
     assert "unavailable" in result.lower()
+
+
+def test_completes_reminder_and_reports_title(monkeypatch):
+    m = _gtasks_write_module()
+    calls = []
+    monkeypatch.setattr(
+        m, "complete_reminder",
+        lambda title: calls.append(title) or "task123",
+    )
+    result = calendar_tools.complete_reminder("Reorganize emails")
+    assert calls == ["Reorganize emails"]
+    assert "Reorganize emails" in result
+    assert "done" in result.lower()
+
+
+def test_complete_reminder_no_match_is_reported(monkeypatch):
+    m = _gtasks_write_module()
+    monkeypatch.setattr(m, "complete_reminder", lambda title: None)
+    result = calendar_tools.complete_reminder("Ghost")
+    assert "no reminder" in result.lower()
+
+
+def test_complete_reminder_ambiguous_match_is_reported(monkeypatch):
+    m = _gtasks_write_module()
+
+    def _boom(title):
+        raise ValueError("2 reminders match 'Standup' -- be more specific.")
+
+    monkeypatch.setattr(m, "complete_reminder", _boom)
+    result = calendar_tools.complete_reminder("Standup")
+    assert "can't mark it done" in result.lower()
+    assert "2 reminders match" in result
+
+
+def test_complete_reminder_error_is_reported_not_raised(monkeypatch):
+    m = _gtasks_write_module()
+
+    def _boom(title):
+        raise RuntimeError("no creds")
+
+    monkeypatch.setattr(m, "complete_reminder", _boom)
+    result = calendar_tools.complete_reminder("Reorganize emails")
+    assert "unavailable" in result.lower()

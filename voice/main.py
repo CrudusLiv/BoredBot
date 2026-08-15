@@ -412,6 +412,7 @@ def run() -> None:
             speak_queue=speak_queue,
             proactive_tts=proactive_tts,
             context_poll_seconds=int(conf.get("context_poll_seconds", 60)),
+            brain=brain,
         )
         hb.start()
 
@@ -425,6 +426,8 @@ def run() -> None:
         from voice import ui_server, tray
         ui_server.start(port=ui_port, host=str(conf.get("ui_host", "127.0.0.1")))
         ui_server.set_brain(brain)
+        if hb is not None:
+            ui_server.set_heartbeat(hb)
         # os._exit: the main loop blocks on audio, so a SystemExit raised in
         # the tray thread would never reach it. Exit code 0 keeps the
         # start_voice.ps1 watchdog's fast-fail backoff out of the picture.

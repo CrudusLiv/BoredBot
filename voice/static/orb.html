@@ -750,6 +750,11 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
 #jobs-table a { color: var(--text); }
 #jobs-table a:hover { color: var(--accent); }
 
+/* heartbeat table — same inherit issue as jobs table above */
+#hb-table { color: var(--text); }
+#hb-table th { color: var(--text-dim); font-family: var(--font-mono);
+  font-size: var(--fs-2xs); letter-spacing: var(--track-label); text-transform: uppercase; font-weight: 500; }
+
 /* settings fields */
 #side-panel .settings-input, #side-panel .settings-select { border-radius: var(--radius-sm);
   background: rgba(10,10,16,.55); border: 1px solid var(--glass-border); color: var(--text);
@@ -880,6 +885,14 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
   .ptab { white-space: nowrap; }
   .ptab-content { grid-column: 1; grid-row: 4; padding: 16px 16px 20px; }
 }
+
+/* ── Mini mode (speaking popup window) ────────────────
+   Reuses the same page + WS connection as the main window -- just hides
+   every direct child of <body> except the two <canvas> elements
+   (#starfield background + #vesper-canvas, the actual orb mesh), so the
+   popup shows the orb reacting to state/viseme events with none of the
+   sidebar/chat/HUD chrome. See voice/ui_window.py::_create_mini_window. */
+body.mini > *:not(canvas) { display: none !important; }
 </style>
 </head>
 <body>
@@ -987,6 +1000,7 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
     <span class="tab-group">Work</span>
     <button class="ptab" data-tab="workspace" data-requires="vault">Workspace</button>
     <span class="tab-group">System</span>
+    <button class="ptab" data-tab="heartbeat">Heartbeat</button>
     <button class="ptab" data-tab="settings">Config</button>
   </div>
 
@@ -1063,6 +1077,24 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
     <div class="panel-output" id="workspace-content"></div>
   </div>
 
+  <div id="ptab-heartbeat" class="ptab-content">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div id="hb-busy-readout" class="panel-row-label">—</div>
+      <button class="pill-btn" id="hb-refresh-btn">refresh</button>
+    </div>
+    <table id="hb-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr>
+        <th style="text-align:left; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.12);">Task</th>
+        <th style="text-align:left; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.12);">State</th>
+        <th style="text-align:left; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.12);">Cadence</th>
+        <th style="text-align:left; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.12);">Last run</th>
+        <th style="text-align:left; padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.12);">Next due</th>
+      </tr></thead>
+      <tbody id="hb-body"></tbody>
+    </table>
+    <div id="hb-output" class="panel-output" style="margin-top:8px;"></div>
+  </div>
+
   <div id="ptab-settings" class="ptab-content">
     <div id="settings-accordion"></div>
   </div>
@@ -1099,6 +1131,11 @@ function vfetch(url, opts) {
 }
 const VESPER_RENDER_MODE = "__VESPER_RENDER_MODE__";
 const VESPER_AVATAR_VRM_URL = "__VESPER_AVATAR_VRM_URL__";
+// Speaking-popup mini window (voice/ui_window.py) opens this same page with
+// ?mini=1 -- the body.mini CSS rule above does the rest, no separate markup.
+if (new URLSearchParams(location.search).get('mini') === '1') {
+  document.body.classList.add('mini');
+}
 
 // ── Renderer ───────────────────────────────────────────────────────────────
 const scene  = new THREE.Scene();
@@ -1712,6 +1749,7 @@ if (VESPER_RENDER_MODE === 'orb') animate(0);
       if (t === 'settings') loadSettingsPanel();
       if (t === 'jobs') loadJobs();
       if (t === 'workspace') loadWorkspace();
+      if (t === 'heartbeat') loadHeartbeatStatus();
     }
   }
 
@@ -1737,6 +1775,7 @@ if (VESPER_RENDER_MODE === 'orb') animate(0);
       if (tab.dataset.tab === 'settings') loadSettingsPanel();
       if (tab.dataset.tab === 'jobs') loadJobs();
       if (tab.dataset.tab === 'workspace') loadWorkspace();
+      if (tab.dataset.tab === 'heartbeat') loadHeartbeatStatus();
     });
   });
 
@@ -2088,11 +2127,16 @@ vfetch('/cmd/usage').then(r => r.json()).then(d => {
   }).catch(() => {});
   vfetch('/cmd/settings').then(r => r.json()).then(c => {
     const hb = document.getElementById('hb-readout');
-    if (hb) hb.textContent = (c.heartbeat_enabled === false ? 'off' :
-      'every ' + (c.heartbeat_interval_minutes ?? 30) + 'm')
+    if (hb) hb.textContent = (c.heartbeat_enabled === false ? 'off' : 'running')
       + ' · quiet ' + (c.quiet_hours_start || '22:00') + '–' + (c.quiet_hours_end || '09:00');
     if (rsSub && c.ptt_key) { rsSub.textContent = `hold [${c.ptt_key}] to talk`; rsSubDefault = rsSub.textContent; }
   }).catch(() => {});
+  // Per-task cadence now replaces the old single global interval (see
+  // voice/heartbeat.py _SCHEDULE) -- this call also re-syncs the busy/
+  // silence rail indicator to the backend's actual current state,
+  // correcting a stale WS-driven value left over from before a
+  // reload/restart (see loadHeartbeatStatus).
+  loadHeartbeatStatus().catch(() => {});
   loadNotices();
   const ma = document.getElementById('feed-markall');
   if (ma) ma.onclick = () => {
@@ -2386,6 +2430,99 @@ function renderJobs() {
 document.getElementById('jobs-refresh-btn')?.addEventListener('click', loadJobs);
 document.getElementById('jobs-status-filter')?.addEventListener('change', renderJobs);
 document.getElementById('jobs-text-filter')?.addEventListener('input', renderJobs);
+
+// ── Heartbeat panel ──────────────────────────────────────────────────────────
+// Per-task cadence/last-run + the busy/silence gate (voice/heartbeat.py
+// status_snapshot(), GET /cmd/heartbeat/status). Also the fix for a stale
+// "silenced" rail chip: the rail only updates on busy_state WS pushes, which
+// fire on transition only -- a page reload or backend restart between
+// transitions leaves the old value showing, so this call also re-syncs it.
+const HB_TASK_LABELS = {
+  job_alerts: 'Job alerts',
+  morning_briefing: 'Morning briefing',
+  evening_wrap: 'Evening wrap',
+  nudges: 'Nudges',
+  gcal_sync: 'Calendar sync',
+  github_digest: 'GitHub digest',
+  urgent_email: 'Urgent email',
+  deadline_import: 'Deadline import',
+  deadline_thresholds: 'Deadline thresholds',
+  git_todo_summary: 'Git/todo summary',
+  build_watch: 'Build watch',
+  vault_daily_rollup: 'Vault daily rollup',
+  reminder_nags: 'Reminder nags',
+};
+
+function _hbFmtAgo(iso) {
+  if (!iso) return 'never';
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  return Math.round(s / 3600) + 'h ago';
+}
+
+function _hbFmtIn(s) {
+  if (s == null) return '—';
+  if (s <= 0) return 'due now';
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  return Math.round(s / 3600) + 'h';
+}
+
+function renderHeartbeatTasks(tasks) {
+  const body = document.getElementById('hb-body');
+  if (!body) return;
+  body.innerHTML = '';
+  if (!tasks.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 5;
+    td.style.cssText = 'padding:10px 8px;';
+    td.innerHTML = paneEmpty('No tasks reported — heartbeat may be disabled or not yet running.');
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  tasks.forEach(t => {
+    const tr = document.createElement('tr');
+    [
+      HB_TASK_LABELS[t.name] || t.name,
+      t.enabled ? 'enabled' : 'disabled',
+      t.cadence_label || ('every ' + t.interval_minutes + 'm'),
+      _hbFmtAgo(t.last_run),
+      _hbFmtIn(t.due_in_seconds),
+    ].forEach((val, i) => {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.06);';
+      if (i === 1 && !t.enabled) td.style.color = 'var(--text-dim)';
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+}
+
+async function loadHeartbeatStatus() {
+  const out = document.getElementById('hb-output');
+  const busyEl = document.getElementById('hb-busy-readout');
+  try {
+    const r = await vfetch('/cmd/heartbeat/status');
+    const d = await r.json();
+    setBusyState({ busy: d.busy, proc: d.busy_proc });
+    if (busyEl) busyEl.textContent = d.busy ? ('Silenced · ' + (d.busy_proc || '—')) : 'Not silenced';
+    renderHeartbeatTasks(d.tasks || []);
+    const hb = document.getElementById('hb-readout');
+    if (hb && d.tasks && d.tasks.length) {
+      const active = d.tasks.filter(t => t.enabled).length;
+      hb.textContent = hb.textContent.replace(/^(running|off)/, `${active}/${d.tasks.length} tasks`);
+    }
+    if (out) out.textContent = '';
+  } catch (err) {
+    if (out) out.innerHTML = paneErr(err.message, "Heartbeat status won't load.");
+  }
+}
+
+document.getElementById('hb-refresh-btn')?.addEventListener('click', loadHeartbeatStatus);
 
 // Curated "Activity awareness" group appended to the Cfg tab: an enable toggle
 // (activity_awareness_enabled) + an editable chip list of exe names
@@ -3096,6 +3233,43 @@ async function loadSettingsPanel() {
     }
     if (engineCtrl) engineCtrl.addEventListener('change', applyVisibility);
     applyVisibility();
+  });
+
+  section({ title: 'Speaking', defaultOpen: false }, async (body) => {
+    const duckWrap = document.createElement('label');
+    duckWrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:10px; cursor:pointer;';
+    const duckToggle = document.createElement('input');
+    duckToggle.type = 'checkbox';
+    duckToggle.checked = conf.audio_duck_enabled === true;
+    const duckText = document.createElement('span');
+    duckText.className = 'settings-field-label';
+    duckText.textContent = 'Duck other audio while speaking';
+    const duckHint = document.createElement('span');
+    duckHint.className = 'settings-save-hint';
+    duckWrap.append(duckToggle, duckText, duckHint);
+    body.appendChild(duckWrap);
+    duckToggle.addEventListener('change', () => _saveSetting('audio_duck_enabled', duckToggle.checked, duckHint));
+
+    _appendField(body, conf, { key: 'audio_duck_percent', label: 'Duck to % of current volume', type: 'number' });
+
+    const popupWrap = document.createElement('label');
+    popupWrap.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:10px; cursor:pointer;';
+    const popupToggle = document.createElement('input');
+    popupToggle.type = 'checkbox';
+    popupToggle.checked = conf.speaking_popup_enabled === true;
+    const popupText = document.createElement('span');
+    popupText.className = 'settings-field-label';
+    popupText.textContent = 'Show speaking popup (when main window is closed)';
+    const popupHint = document.createElement('span');
+    popupHint.className = 'settings-save-hint';
+    popupWrap.append(popupToggle, popupText, popupHint);
+    body.appendChild(popupWrap);
+    popupToggle.addEventListener('change', () => _saveSetting('speaking_popup_enabled', popupToggle.checked, popupHint));
+
+    _appendField(body, conf, {
+      key: 'speaking_popup_corner', label: 'Popup corner', type: 'select',
+      opts: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+    });
   });
 
   section({ title: 'LLM backend', defaultOpen: false }, async (body) => {

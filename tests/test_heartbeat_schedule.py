@@ -85,6 +85,38 @@ def test_config_override_changes_interval(tmp_path, monkeypatch):
     assert calls["_check_github_digest"] == 2
 
 
+def test_nudges_default_interval_is_well_under_nudge_window(tmp_path, monkeypatch):
+    """nudges must poll faster than the default 15-minute nudge_minutes
+    window, or an event's heads-up can close between checks and never get
+    caught (was a 30-minute gate; regression guard for the fix)."""
+    hb = _hb(monkeypatch, tmp_path)
+    calls: dict[str, int] = {}
+    _stub_all_tasks(monkeypatch, hb, calls)
+
+    t = [0.0]
+    monkeypatch.setattr(hb_mod.time, "monotonic", lambda: t[0])
+    hb._run_scheduled()
+
+    t[0] = 6 * 60.0  # 6 minutes later -- past the 5-min default, still
+    calls["_check_nudges"] = 0             # well inside a 15-min window
+    hb._run_scheduled()
+    assert calls["_check_nudges"] == 1
+
+
+def test_nudges_interval_is_config_overridable(tmp_path, monkeypatch):
+    hb = _hb(monkeypatch, tmp_path, conf={"nudge_check_interval_minutes": 1})
+    calls: dict[str, int] = {}
+    _stub_all_tasks(monkeypatch, hb, calls)
+
+    t = [0.0]
+    monkeypatch.setattr(hb_mod.time, "monotonic", lambda: t[0])
+    hb._run_scheduled()
+
+    t[0] = 90.0  # 1.5 minutes later -- past the 1-min override
+    hb._run_scheduled()
+    assert calls["_check_nudges"] == 2
+
+
 def test_task_that_raises_still_advances_last_run(tmp_path, monkeypatch, capsys):
     hb = _hb(monkeypatch, tmp_path)
     calls: dict[str, int] = {}

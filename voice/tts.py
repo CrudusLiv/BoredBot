@@ -78,6 +78,37 @@ _active_utterance: "Utterance | None" = None
 _utterance_lock = threading.Lock()
 
 
+def _on_speak_start() -> None:
+    """Fired once audio starts physically playing (speaking.set()). Best-
+    effort, fire-and-forget -- matches this module's existing pattern for
+    UI side-effects (see _broadcast_viseme)."""
+    try:
+        from voice import audio_duck
+        audio_duck.duck()
+    except Exception:
+        pass
+    try:
+        from voice import ui_window
+        ui_window.show_mini()
+    except Exception:
+        pass
+
+
+def _on_speak_end() -> None:
+    """Fired once audio has fully stopped (speaking.clear()) -- restores
+    whatever _on_speak_start() changed."""
+    try:
+        from voice import audio_duck
+        audio_duck.restore()
+    except Exception:
+        pass
+    try:
+        from voice import ui_window
+        ui_window.hide_mini()
+    except Exception:
+        pass
+
+
 def speak(text: str, on_done=None, force: bool = False) -> None:
     """Synthesise and play in a daemon thread (non-blocking).
 
@@ -230,6 +261,7 @@ class Utterance:
                     _utt_play(path, mci_type, text)
         finally:
             speaking.clear()
+            _on_speak_end()
             self._fire_done()
 
     def _fire_done(self) -> None:
@@ -523,9 +555,11 @@ def _mci_play(tmp_path: str, file_type: str, text: str, on_done=None) -> None:
                 _current_alias = alias
             _broadcast_viseme(alias, text)
             speaking.set()
+            _on_speak_start()
             _mci(f"play {alias} wait")
         finally:
             speaking.clear()
+            _on_speak_end()
             with _alias_lock:
                 _current_alias = None
             try:
@@ -549,6 +583,7 @@ def _utt_play(tmp_path: str, file_type: str, text: str) -> None:
             _current_alias = alias
         _broadcast_viseme(alias, text)
         speaking.set()
+        _on_speak_start()
         _mci(f"play {alias} wait")
     finally:
         with _alias_lock:

@@ -93,3 +93,16 @@ def test_patch_screen_read_hotkey_can_be_unbound(client):
     assert r.status_code == 200, r.text
     got = client.get("/cmd/settings").json()
     assert got["screen_read_capture_hotkey"] == ""
+
+
+@pytest.mark.parametrize("key,value", [
+    ("audio_duck_enabled", True),
+    ("audio_duck_percent", 40),
+    ("speaking_popup_enabled", False),
+    ("speaking_popup_corner", "bottom-left"),
+])
+def test_patch_speaking_field_round_trips(client, key, value):
+    r = client.post("/cmd/settings", headers=_hdr(), json={"key": key, "value": value})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got[key] == value

@@ -123,3 +123,61 @@ def test_list_reminders_default_tasklist_is_at_default(monkeypatch):
     m.list_reminders(days=7)
     _, kwargs = service.tasks.return_value.list.call_args
     assert kwargs["tasklist"] == "@default"
+
+
+def test_due_reminders_maps_fields(monkeypatch):
+    m = _import_module()
+    service = _stub_service_for_list([
+        {"id": "t1", "title": "Overdue thing", "due": "2026-08-10T00:00:00.000Z", "notes": "n"},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.due_reminders()
+    assert result == [
+        {"id": "t1", "title": "Overdue thing", "due": "2026-08-10T00:00:00.000Z", "notes": "n"},
+    ]
+
+
+def test_due_reminders_has_no_lower_bound(monkeypatch):
+    m = _import_module()
+    service = _stub_service_for_list([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.due_reminders()
+    _, kwargs = service.tasks.return_value.list.call_args
+    assert "dueMin" not in kwargs
+    assert "dueMax" in kwargs
+    assert kwargs["showCompleted"] is False
+
+
+def test_complete_reminder_marks_matching_task_done(monkeypatch):
+    m = _import_module()
+    service = _stub_service_for_list([
+        {"id": "t1", "title": "Renew passport"},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.complete_reminder("renew passport")
+    assert result == "t1"
+    _, kwargs = service.tasks.return_value.patch.call_args
+    assert kwargs["tasklist"] == "@default"
+    assert kwargs["task"] == "t1"
+    assert kwargs["body"] == {"status": "completed"}
+
+
+def test_complete_reminder_no_match_returns_none(monkeypatch):
+    m = _import_module()
+    service = _stub_service_for_list([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    assert m.complete_reminder("Ghost") is None
+    service.tasks.return_value.patch.assert_not_called()
+
+
+def test_complete_reminder_ambiguous_raises(monkeypatch):
+    m = _import_module()
+    service = _stub_service_for_list([
+        {"id": "t1", "title": "Standup"},
+        {"id": "t2", "title": "Standup"},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    import pytest
+    with pytest.raises(ValueError):
+        m.complete_reminder("Standup")
+    service.tasks.return_value.patch.assert_not_called()

@@ -156,6 +156,33 @@ def month_summary(when: datetime | None = None) -> str:
     return "\n".join(lines)
 
 
+def day_summary(when: datetime | None = None) -> str:
+    """Return a short human-readable summary of a single day's entries
+    (default: today), or "" if nothing was logged that day. Powers the
+    heartbeat's daily vault-log rollup (voice/heartbeat.py), same shape as
+    month_summary() but scoped to one day."""
+    now = when or datetime.now(KL)
+    month_file = _month_file(now)
+    if not month_file.exists():
+        return ""
+    day_prefix = now.strftime("%m-%d")
+    rows = [r for r in _read_rows(month_file) if r["ts"].startswith(day_prefix)]
+    if not rows:
+        return ""
+    expense_rows = [r for r in rows if r["kind"] == "expense"]
+    income_rows = [r for r in rows if r["kind"] == "income"]
+    total = sum(r["amount"] for r in expense_rows)
+    lines = [f"{CURRENCY}{total:.2f} spent today"]
+    if income_rows:
+        lines.append(f"  income: {CURRENCY}{sum(r['amount'] for r in income_rows):.2f}")
+    by_cat = defaultdict(float)
+    for r in expense_rows:
+        by_cat[r["category"]] += r["amount"]
+    for cat, amt in sorted(by_cat.items(), key=lambda kv: -kv[1]):
+        lines.append(f"  {cat}: {CURRENCY}{amt:.2f}")
+    return "\n".join(lines)
+
+
 # ---------- File-level helpers ----------
 
 ROW_RE = re.compile(

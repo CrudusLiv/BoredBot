@@ -141,7 +141,7 @@ def distill_with_claude(transcript_text: str) -> str:
     # Path 1: claude -p CLI (preferred — no API key needed)
     try:
         import sys
-        sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts" / "heartbeat"))
+        sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts" / "core"))
         import llm  # type: ignore
         if llm.is_available():
             text = llm.call(transcript_text, system_prompt=DISTILL_PROMPT, model="haiku")

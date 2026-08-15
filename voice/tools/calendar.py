@@ -64,6 +64,22 @@ def create_reminder(title: str, date: str, description: str = "") -> str:
     return f"Created reminder {title!r} on {date}."
 
 
+def complete_reminder(title: str) -> str:
+    """Mark a reminder complete by title (voice/heartbeat.py's repeat-until-
+    done nag stops once this fires). Reports "no reminder found" or "can't
+    complete -- N reminders match" rather than silently picking one."""
+    try:
+        from integrations import gtasks_write  # type: ignore
+        task_id = gtasks_write.complete_reminder(title)
+    except ValueError as exc:
+        return f"Can't mark it done — {exc}"
+    except Exception as exc:
+        return f"Reminders unavailable: {exc}"
+    if task_id is None:
+        return f"No reminder titled {title!r} found."
+    return f"Marked {title!r} done."
+
+
 def upcoming_reminders(days: int = 7) -> str:
     try:
         from integrations import gtasks_write  # type: ignore

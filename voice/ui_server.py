@@ -80,12 +80,20 @@ _clients: list[WebSocket] = []
 _queue: asyncio.Queue | None = None
 _loop: asyncio.AbstractEventLoop | None = None
 _brain = None
+_heartbeat = None
 
 
 def set_brain(brain) -> None:
     """Register the Brain instance so POST /input can call brain.turn()."""
     global _brain
     _brain = brain
+
+
+def set_heartbeat(hb) -> None:
+    """Register the Heartbeat instance so GET /cmd/heartbeat/status can read
+    its live per-task + busy-state snapshot."""
+    global _heartbeat
+    _heartbeat = hb
 
 
 def has_clients() -> bool:
@@ -239,6 +247,17 @@ async def llm_status() -> JSONResponse:
     loop = asyncio.get_event_loop()
     status = await loop.run_in_executor(None, llm.get_status)
     return JSONResponse(status)
+
+
+@app.get("/cmd/heartbeat/status")
+async def heartbeat_status() -> JSONResponse:
+    """Per-task cadence/last-run state plus the current busy/silence gate.
+    Polled on page load (and panel open) so the orb's silence indicator
+    reflects live state instead of only the last busy_state WS push, which
+    is easy to miss across a reload or backend restart."""
+    if _heartbeat is None:
+        return JSONResponse({"busy": False, "busy_proc": None, "tasks": []})
+    return JSONResponse(_heartbeat.status_snapshot())
 
 
 @app.get("/cmd/llm/detect")
@@ -460,6 +479,8 @@ _SETTINGS_ALLOWED = {
     "pc_control_apps",
     "ptt_key", "screen_read_capture_hotkey", "screen_read_ask_hotkey",
     "screen_read_copy_hotkey", "screen_read_dismiss_hotkey",
+    "audio_duck_enabled", "audio_duck_percent",
+    "speaking_popup_enabled", "speaking_popup_corner",
 }
 
 

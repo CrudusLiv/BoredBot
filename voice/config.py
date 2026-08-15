@@ -80,6 +80,11 @@ DEFAULTS: dict[str, Any] = {
     "city": "",                     # for weather widget; empty = disabled
     "ui_render_mode": "orb",        # orb | avatar
     "ui_avatar_vrm_path": "",       # filename under voice/static/avatar/models/; empty = placeholder.vrm
+    # Speaking ducking + popup
+    "audio_duck_enabled": False,    # opt-in; lowers other apps' Windows audio sessions while she speaks (needs pycaw)
+    "audio_duck_percent": 25,       # other sessions' volume is scaled to this % of their current level
+    "speaking_popup_enabled": True,  # only relevant when ui_enabled is on -- shows a mini orb popup while she speaks and the main orb window is closed
+    "speaking_popup_corner": "top-right",  # top-left | top-right | bottom-left | bottom-right
     # Safety
     "requires_confirmation": ["create_note", "append_note", "forget_fact", "create_calendar_event"],
     "confirm_timeout_seconds": 30,
@@ -105,6 +110,11 @@ DEFAULTS: dict[str, Any] = {
     "wrap_time": "21:00",
     "nudge_enabled": True,
     "nudge_minutes": 15,
+    # How often the nudge check itself runs -- must stay comfortably below
+    # nudge_minutes, or an event's heads-up window can close between polls
+    # and never get caught. If you tighten nudge_minutes a lot, tighten
+    # this too.
+    "nudge_check_interval_minutes": 5,
     "gcal_sync_enabled": True,
     "gcal_sync_interval_minutes": 5,
     "github_digest_enabled": True,
@@ -115,6 +125,13 @@ DEFAULTS: dict[str, Any] = {
     "build_watch_enabled": True,
     "build_watch_time": "07:30",
     "build_watch_repo": "",
+    # Daily vault-log rollup (voice/heartbeat.py _check_vault_daily_rollup):
+    # once a day, past vault_rollup_time, append voice conversation
+    # highlights + the day's heartbeat notices + a finance summary to
+    # Dynamous/Memory/daily/YYYY-MM-DD.md -- the only durable record of
+    # those three, since none of them otherwise reach the vault.
+    "vault_rollup_enabled": True,
+    "vault_rollup_time": "23:30",
     # GCal → DEADLINES.md import (reverse of the vault→GCal push)
     "deadline_import_enabled": True,
     "deadline_import_keywords": [
@@ -131,6 +148,11 @@ DEFAULTS: dict[str, Any] = {
     # interval-based raw-count announcement)
     "urgent_email_enabled": True,
     "urgent_email_lookback_days": 1,
+    # Reminder nags: repeat a spoken reminder every reminder_nag_interval_minutes
+    # for every due-or-overdue Google Tasks reminder until it's marked done
+    # (voice: "mark <title> done", or complete_reminder_tool).
+    "reminder_nag_enabled": True,
+    "reminder_nag_interval_minutes": 120,
     # Clap detector
     "clap_enabled": False,
     "clap_threshold": 0.7,

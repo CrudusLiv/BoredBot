@@ -32,6 +32,9 @@ import sys as _sys  # noqa: E402
 
 _sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
 from integrations import github_int  # noqa: E402  # type: ignore
+from vault import daily as vault_daily  # noqa: E402  # type: ignore
+from finance import tracker as finance_tracker  # noqa: E402  # type: ignore
+from core import llm as core_llm  # noqa: E402  # type: ignore
 
 
 def _notices_path() -> Path:
@@ -203,6 +206,45 @@ def _fetch_reminders(days: int = 2) -> list[dict]:
         return []
 
 
+def _fetch_due_reminders() -> list[dict]:
+    """Fetch uncompleted Google Tasks reminders already at or past their
+    due date (no lower bound, unlike _fetch_reminders' rolling window) --
+    the set _check_reminder_nags repeats a voice nag for. [] on any error."""
+    try:
+        import sys
+        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+        from integrations import gtasks_write  # type: ignore
+        return gtasks_write.due_reminders() or []
+    except Exception:
+        return []
+
+
+# Mirrors .claude/hooks/_lib.py's DISTILL_PROMPT (same headers, so the
+# vault daily log reads consistently whether an entry came from a coding
+# session or a voice conversation) but framed for brain.history instead of
+# a Claude Code transcript.
+_VOICE_DISTILL_PROMPT = """You are reviewing a day's voice conversation between the user and their
+assistant Vesper before it's dropped from memory. Extract only durable items worth remembering
+tomorrow. Be ruthless — most chatter is not durable.
+
+Use these exact headers, omit any header with no items:
+
+### Decisions
+- one line each, with rationale if given
+
+### Lessons
+- what worked, what failed, what to do differently next time
+
+### Facts
+- non-obvious things discovered about the user's life, work, or projects
+
+### Open todos
+- things the user asked for or implied but that were not finished
+
+If nothing durable happened in this conversation, output exactly: `_(no durable items)_`
+No preamble, no commentary, no closing remarks."""
+
+
 class Heartbeat:
     """Background daemon thread. Runs _SCHEDULE's event-triggered checks
     and schedules proactive spoken briefings when speak_queue is provided."""
@@ -215,7 +257,10 @@ class Heartbeat:
         ("job_alerts", "_check_job_alerts", 30, None),
         ("morning_briefing", "_morning_briefing", 30, None),
         ("evening_wrap", "_evening_wrap", 30, None),
-        ("nudges", "_check_nudges", 30, None),
+        # Interval must stay well below nudge_minutes (default 15) or the
+        # heads-up window can close between checks and get missed entirely
+        # -- see nudge_check_interval_minutes in voice/config.py.
+        ("nudges", "_check_nudges", 5, "nudge_check_interval_minutes"),
         ("gcal_sync", "_check_calendar_sync", 5, "gcal_sync_interval_minutes"),
         ("github_digest", "_check_github_digest", 5, "github_digest_interval_minutes"),
         ("urgent_email", "_check_urgent_email", 30, None),
@@ -223,7 +268,45 @@ class Heartbeat:
         ("deadline_thresholds", "_check_deadline_thresholds", 30, None),
         ("git_todo_summary", "_check_git_todo_summary", 30, None),
         ("build_watch", "_check_build_watch", 30, None),
+        ("vault_daily_rollup", "_check_vault_daily_rollup", 30, None),
+        ("reminder_nags", "_check_reminder_nags", 15, None),
     ]
+
+    # Each task's own opt-out flag, for the status panel's enabled/disabled
+    # column. morning_briefing/evening_wrap share briefing_enabled since
+    # neither has an independent toggle.
+    _ENABLED_KEYS: dict[str, str] = {
+        "job_alerts": "job_alerts_enabled",
+        "morning_briefing": "briefing_enabled",
+        "evening_wrap": "briefing_enabled",
+        "nudges": "nudge_enabled",
+        "gcal_sync": "gcal_sync_enabled",
+        "github_digest": "github_digest_enabled",
+        "urgent_email": "urgent_email_enabled",
+        "deadline_import": "deadline_import_enabled",
+        "deadline_thresholds": "deadline_threshold_enabled",
+        "git_todo_summary": "git_todo_summary_enabled",
+        "build_watch": "build_watch_enabled",
+        "vault_daily_rollup": "vault_rollup_enabled",
+        "reminder_nags": "reminder_nag_enabled",
+    }
+
+    # Tasks that actually fire once/day at a configured time-of-day, rather
+    # than repeating every _SCHEDULE interval -- that interval is merely how
+    # often the cheap "is it time yet" gate is checked (default 30m), not a
+    # real repeat cadence. Maps name -> (time_config_key, default_time,
+    # done_date_attr) so status_snapshot() can report the real next
+    # occurrence instead of the next gate-check. Every other task in
+    # _SCHEDULE (job_alerts, gcal_sync, github_digest, urgent_email,
+    # deadline_import, deadline_thresholds, nudges, reminder_nags) is a
+    # genuine repeating check, so its interval IS the meaningful cadence.
+    _DAILY_TASKS: dict[str, tuple[str, str, str]] = {
+        "morning_briefing": ("briefing_time", "09:00", "_briefing_done_date"),
+        "evening_wrap": ("wrap_time", "21:00", "_wrap_done_date"),
+        "git_todo_summary": ("git_todo_summary_time", "20:00", "_git_todo_done_date"),
+        "build_watch": ("build_watch_time", "07:30", "_build_watch_done_date"),
+        "vault_daily_rollup": ("vault_rollup_time", "23:30", "_vault_rollup_done_date"),
+    }
 
     def __init__(
         self,
@@ -232,6 +315,7 @@ class Heartbeat:
         proactive_tts: bool = True,
         context_poll_seconds: int = 60,
         idle_fn=None,
+        brain=None,
     ) -> None:
         from voice import idle as _idle
         self._context_poll_seconds = max(1, int(context_poll_seconds))
@@ -241,6 +325,10 @@ class Heartbeat:
         self._thread: threading.Thread | None = None
         self._speak_queue = speak_queue
         self._proactive_tts = proactive_tts
+        # Optional Brain reference so _check_vault_daily_rollup can distill
+        # brain.history -- None in tests / callers that don't wire it up,
+        # in which case the voice-highlights section is just skipped.
+        self._brain = brain
 
         # Idle-return state machine. _away_since is in-memory only (a restart
         # while away just re-detects on the next poll); the fired timestamp
@@ -260,6 +348,11 @@ class Heartbeat:
         state = self._load_state()
         self._briefing_done_date: date | None = _parse_date(state.get("briefing_date"))
         self._wrap_done_date:     date | None = _parse_date(state.get("wrap_date"))
+        self._vault_rollup_done_date: date | None = _parse_date(state.get("vault_rollup_date"))
+
+        # Per-reminder last-nagged timestamp (task_id -> ISO datetime), so a
+        # restart doesn't immediately re-nag every open reminder at once.
+        self._reminder_nag_last: dict[str, str] = dict(state.get("reminder_nag_last", {}))
         self._last_idle_return_fired: datetime | None = _parse_dt(state.get("idle_return_fired"))
 
         # Nudge deduplication (reset each day)
@@ -290,6 +383,8 @@ class Heartbeat:
         state = {
             "briefing_date": str(self._briefing_done_date) if self._briefing_done_date else None,
             "wrap_date": str(self._wrap_done_date) if self._wrap_done_date else None,
+            "vault_rollup_date": str(self._vault_rollup_done_date) if self._vault_rollup_done_date else None,
+            "reminder_nag_last": self._reminder_nag_last,
             "nudged": sorted(self._nudged_events),
             "nudged_date": str(self._nudge_reset_date) if self._nudge_reset_date else None,
             "idle_return_fired": self._last_idle_return_fired.isoformat() if self._last_idle_return_fired else None,
@@ -693,6 +788,148 @@ class Heartbeat:
 
         self._save_state()
 
+    def _check_vault_daily_rollup(self) -> None:
+        """Once-daily append to Dynamous/Memory/daily/YYYY-MM-DD.md, rolling
+        up the three things that otherwise never reach the vault: voice
+        conversation highlights (brain.history, distilled the same way
+        .claude/hooks/_lib.py distills a coding-session transcript), the
+        day's heartbeat notices (voice_notices.jsonl ages out of the
+        runtime data dir), and a finance summary. Runs late by default
+        (vault_rollup_time) so it has as much of the day as possible to
+        summarize; same once-per-day dedup pattern as _evening_wrap."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("vault_rollup_enabled", True):
+            return
+
+        now = datetime.now(cfg.get_timezone())
+        today = now.date()
+        if self._vault_rollup_done_date == today:
+            return
+        rh, rm = (int(x) for x in conf.get("vault_rollup_time", "23:30").split(":"))
+        if now.hour < rh or (now.hour == rh and now.minute < rm):
+            return
+
+        self._vault_rollup_done_date = today
+        self._save_state()
+
+        sections: list[tuple[str, str]] = []
+        voice_block = self._distill_voice_history()
+        if voice_block:
+            sections.append(("Voice conversation", voice_block))
+        digest_block = self._heartbeat_digest_text(today)
+        if digest_block:
+            sections.append(("Heartbeat digest", digest_block))
+        finance_block = self._finance_rollup_text(now)
+        if finance_block:
+            sections.append(("Finance", finance_block))
+
+        for label, content in sections:
+            try:
+                vault_daily.append_block(label, content)
+            except OSError as _e:
+                print(f"[heartbeat] vault rollup write failed ({label}): {_e}", flush=True)
+
+    def _distill_voice_history(self) -> str:
+        """Durable-items distillation of today's voice conversation, same
+        shape as the coding-session hooks. "" if there's no brain wired up,
+        no conversation happened, or nothing durable came of it."""
+        if self._brain is None:
+            return ""
+        history = list(getattr(self._brain, "history", []) or [])
+        if not history:
+            return ""
+        transcript = "\n".join(
+            f"{str(turn.get('role', '')).upper()}: {turn.get('content', '')}"
+            for turn in history if turn.get("content")
+        )
+        if not transcript.strip():
+            return ""
+        try:
+            if not core_llm.is_available():
+                return ""
+            text = (core_llm.call(transcript, system_prompt=_VOICE_DISTILL_PROMPT, model="haiku") or "").strip()
+        except Exception as _e:
+            print(f"[heartbeat] voice distillation error: {_e}", flush=True)
+            return ""
+        if not text or text.startswith("_(no durable items)_") or text.startswith("_(distillation"):
+            return ""
+        return text
+
+    def _heartbeat_digest_text(self, today: date) -> str:
+        """Bullet list of today's notices from voice_notices.jsonl -- the
+        runtime log the orb UI reads, which gets trimmed over time and was
+        never otherwise kept anywhere durable."""
+        today_str = today.isoformat()
+        lines: list[str] = []
+        try:
+            for line in _notices_path().read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts = str(entry.get("ts", ""))
+                if not ts.startswith(today_str):
+                    continue
+                lines.append(f"- [{ts[11:16]}] {entry.get('text', '')}")
+        except OSError:
+            return ""
+        return "\n".join(lines)
+
+    def _finance_rollup_text(self, now: datetime) -> str:
+        """Today's finance summary via finance/tracker.py's own formatting
+        logic (day_summary), so the row format stays single-sourced there."""
+        try:
+            return finance_tracker.day_summary(now)
+        except Exception as _e:
+            print(f"[heartbeat] finance rollup error: {_e}", flush=True)
+            return ""
+
+    def _check_reminder_nags(self) -> None:
+        """Repeat a spoken reminder every reminder_nag_interval_minutes
+        (default 2h) for each due-or-overdue Google Tasks reminder, until
+        it's marked done -- voice: "mark <title> done" (complete_reminder_
+        tool), or complete_reminder_tool directly. Per-reminder last-nagged
+        timestamps persist across restarts (heartbeat_state.json) so a
+        restart never re-nags every open reminder at once; entries for
+        reminders that are no longer due/open (completed, or newly not
+        overdue) are pruned each pass so the state doesn't grow unbounded."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("reminder_nag_enabled", True):
+            return
+        reminders = _fetch_due_reminders()
+
+        interval_s = float(conf.get("reminder_nag_interval_minutes", 120)) * 60
+        now_wall = datetime.now(timezone.utc)
+        active_ids = set()
+        changed = False
+
+        for r in reminders:
+            tid = r.get("id")
+            if not tid:
+                continue
+            active_ids.add(tid)
+            last_dt = _parse_dt(self._reminder_nag_last.get(tid))
+            if last_dt is not None and (now_wall - last_dt).total_seconds() < interval_s:
+                continue
+            title = r.get("title") or "(reminder)"
+            text = f'Reminder still open: {title}. Say "mark it done" once it\'s handled.'
+            self._speak(text)
+            _post(text)
+            self._reminder_nag_last[tid] = now_wall.isoformat()
+            changed = True
+
+        pruned = {tid: ts for tid, ts in self._reminder_nag_last.items() if tid in active_ids}
+        if pruned != self._reminder_nag_last:
+            self._reminder_nag_last = pruned
+            changed = True
+
+        if changed:
+            self._save_state()
+
     def _check_job_alerts(self) -> None:
         """Scan Gmail for job-alert digests and accumulate postings into the
         jobs store. Silent by design — no notice fires; the Jobs panel in the
@@ -729,6 +966,75 @@ class Heartbeat:
             _post(("Deadlines from calendar: " + "; ".join(added))[:160])
         if removed:
             _post(("Deadlines cleared (removed from calendar): " + "; ".join(removed))[:160])
+
+    def status_snapshot(self) -> dict:
+        """Point-in-time state for the orb's status panel: the busy/silence
+        gate (also used to correct a stale UI on page load/reconnect, since
+        the WS only pushes busy_state on transition) plus per-task cadence
+        and last-run info.
+
+        _DAILY_TASKS tasks report their real next occurrence at a
+        configured time-of-day (today's target time if not yet done and
+        not yet passed; "now" -- imminent, fires on the next poll -- if
+        passed and not done today; tomorrow's target time if already done
+        today). Every other task reports the next _SCHEDULE gate-check,
+        which for those is when the actual repeating work happens, so it's
+        already the meaningful number. Safe to call from any thread."""
+        from voice import config as cfg
+        conf = cfg.load()
+        now_mono = time.monotonic()
+        now_local = datetime.now(cfg.get_timezone())
+        now_utc = datetime.now(timezone.utc)
+        tasks = []
+        for name, _method, default_min, cfg_key in self._SCHEDULE:
+            interval_min = int(conf.get(cfg_key, default_min) if cfg_key else default_min)
+            enabled_key = self._ENABLED_KEYS.get(name)
+            enabled = bool(conf.get(enabled_key, True)) if enabled_key else True
+
+            if name in self._DAILY_TASKS:
+                time_key, default_time, done_attr = self._DAILY_TASKS[name]
+                hh, mm = (int(x) for x in str(conf.get(time_key, default_time)).split(":"))
+                done_date = getattr(self, done_attr, None)
+                target_today = now_local.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                last_run_iso = (
+                    datetime.combine(done_date, target_today.timetz()).isoformat()
+                    if done_date is not None else None
+                )
+                if done_date == now_local.date():
+                    next_occurrence = target_today + timedelta(days=1)
+                else:
+                    next_occurrence = target_today if now_local < target_today else now_local
+                tasks.append({
+                    "name": name,
+                    "enabled": enabled,
+                    "schedule_kind": "daily",
+                    "cadence_label": f"daily at {hh:02d}:{mm:02d}",
+                    "last_run": last_run_iso,
+                    "due_in_seconds": max(0, int((next_occurrence - now_local).total_seconds())),
+                })
+                continue
+
+            interval_s = interval_min * 60
+            last = self._last_run.get(name)
+            last_run_iso = None
+            due_in_s = 0
+            if last is not None:
+                age_s = now_mono - last
+                last_run_iso = (now_utc - timedelta(seconds=age_s)).isoformat()
+                due_in_s = max(0, int(interval_s - age_s))
+            tasks.append({
+                "name": name,
+                "enabled": enabled,
+                "schedule_kind": "interval",
+                "cadence_label": f"every {interval_min}m",
+                "last_run": last_run_iso,
+                "due_in_seconds": due_in_s,
+            })
+        return {
+            "busy": self._busy,
+            "busy_proc": self._busy_proc,
+            "tasks": tasks,
+        }
 
     def _run_scheduled(self) -> None:
         """Run each _SCHEDULE task independently once its own interval has

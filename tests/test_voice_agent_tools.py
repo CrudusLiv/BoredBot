@@ -31,6 +31,16 @@ def test_upcoming_reminders_delegates(monkeypatch):
     assert agent_tools.upcoming_reminders_tool(days=14) == "14 days"
 
 
+def test_complete_reminder_not_gated_by_default(monkeypatch):
+    called = []
+    monkeypatch.setattr(agent_tools, "confirm_with_reason", lambda *a: called.append(1))
+    monkeypatch.setattr(agent_tools, "requires_confirmation", lambda name: False)
+    monkeypatch.setattr(agent_tools, "complete_reminder", lambda title: f"Marked {title!r} done.")
+    result = agent_tools.complete_reminder_tool(title="Reorganize emails")
+    assert result == "Marked 'Reorganize emails' done."
+    assert called == []
+
+
 @pytest.mark.parametrize("tool_fn_name,wrapper_name,arg_name,arg_value", [
     ("append_note", "append_note_tool", "path", "x.md"),
     ("create_note", "create_note_tool", "path", "y.md"),
@@ -39,6 +49,7 @@ def test_upcoming_reminders_delegates(monkeypatch):
     ("create_calendar_event", "create_calendar_event_tool", "title", "Dentist"),
     ("delete_calendar_event", "delete_calendar_event_tool", "title", "Dentist"),
     ("create_reminder", "create_reminder_tool", "title", "Reorganize emails"),
+    ("complete_reminder", "complete_reminder_tool", "title", "Reorganize emails"),
 ])
 def test_confirmation_gated_tools_block_on_confirm(
     monkeypatch, tool_fn_name, wrapper_name, arg_name, arg_value,
@@ -185,6 +196,7 @@ def test_vesper_tools_registers_every_sync_tool():
         "remember_fact_tool", "forget_fact_tool", "complete_deadline_tool",
         "triage_inbox_tool", "filter_subscriptions_tool", "create_calendar_event_tool",
         "delete_calendar_event_tool", "create_reminder_tool", "upcoming_reminders_tool",
+        "complete_reminder_tool",
         "media_control_tool", "set_volume_tool", "launch_app_tool",
         "list_windows_tool", "focus_window_tool",
         "log_expense_tool", "log_income_tool",

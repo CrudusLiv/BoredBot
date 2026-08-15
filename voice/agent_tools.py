@@ -23,7 +23,7 @@ from voice.tools.workspace import write_draft, write_scratch
 from voice.tools.finance import log_expense, log_income
 from voice.tools.calendar import (
     upcoming_events, create_calendar_event, delete_calendar_event,
-    create_reminder, upcoming_reminders,
+    create_reminder, upcoming_reminders, complete_reminder,
 )
 from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
 from voice.memory import remember, forget
@@ -173,6 +173,19 @@ def create_reminder_tool(title: str, date: str, description: str = "") -> str:
     return create_reminder(title=title, date=date, description=description)
 
 
+def complete_reminder_tool(title: str) -> str:
+    """Mark a reminder done by title. Stops the heartbeat's every-2-hour
+    voice nag for that reminder (see voice/heartbeat.py
+    _check_reminder_nags). Not confirmation-gated by default -- it's meant
+    to be a fast, frictionless way to silence a repeating nag; add
+    "complete_reminder" to requires_confirmation in settings if you want
+    one anyway."""
+    denial = _confirm_gate("complete_reminder", {"title": title})
+    if denial is not None:
+        return denial
+    return complete_reminder(title=title)
+
+
 def media_control_tool(action: str) -> str:
     """Control media playback/volume via simulated keys. Args: action(str) —
     one of play_pause, next, prev, volume_up, volume_down, mute."""
@@ -312,6 +325,11 @@ _agent_tools = [
             "description": {"type": "string"},
         }, "required": ["title", "date"]},
         create_reminder_tool,
+    ),
+    _sdk_tool(
+        "complete_reminder_tool", complete_reminder_tool.__doc__ or "",
+        {"title": str},
+        complete_reminder_tool,
     ),
     _sdk_tool(
         "media_control_tool", media_control_tool.__doc__ or "",
