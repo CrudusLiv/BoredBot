@@ -100,13 +100,21 @@ def due_reminders(tasklist: str = "@default") -> list[dict]:
     unlike list_reminders()'s rolling upcoming-days window, this has no
     lower bound, so overdue reminders (however old) are always included.
     Backs the heartbeat's repeat-until-done voice nag (see
-    voice/heartbeat.py _check_reminder_nags). Sorted by due date."""
+    voice/heartbeat.py _check_reminder_nags). Sorted by due date.
+
+    dueMax is bumped to the start of tomorrow (UTC) rather than the exact
+    instant of the call. The Tasks API's dueMax filter compares by whole
+    calendar day, so a same-day reminder (always stored as T00:00:00.000Z,
+    see create_reminder above) is excluded for the entire day it's due --
+    dueMax has to reach into the next UTC day before the API includes it.
+    Mirrors list_reminders()'s dueMin-flooring fix for the same reason."""
     service = _get_service()
     now = datetime.now(timezone.utc)
+    tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     resp = service.tasks().list(
         tasklist=tasklist,
         showCompleted=False,
-        dueMax=now.isoformat(),
+        dueMax=tomorrow.isoformat(),
     ).execute()
     out = [
         {

@@ -148,6 +148,31 @@ def test_due_reminders_has_no_lower_bound(monkeypatch):
     assert kwargs["showCompleted"] is False
 
 
+def test_due_reminders_dueMax_reaches_past_today(monkeypatch):
+    """The Tasks API's dueMax filter compares by whole calendar day: a
+    reminder due exactly today (always stored as T00:00:00.000Z) is only
+    included once dueMax's date is tomorrow or later. dueMax must never be
+    left at the exact instant of the call, or a same-day due reminder is
+    silently dropped for the entire day it's due -- see due_reminders()'s
+    docstring."""
+    from datetime import datetime, timezone
+
+    m = _import_module()
+    service = _stub_service_for_list([])
+    fixed_now = datetime(2026, 8, 15, 8, 47, 0, tzinfo=timezone.utc)
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    monkeypatch.setattr(m, "datetime", _FixedDatetime)
+    m.due_reminders()
+    _, kwargs = service.tasks.return_value.list.call_args
+    assert kwargs["dueMax"] >= "2026-08-16T00:00:00"
+
+
 def test_complete_reminder_marks_matching_task_done(monkeypatch):
     m = _import_module()
     service = _stub_service_for_list([
