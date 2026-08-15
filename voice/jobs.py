@@ -296,7 +296,10 @@ _DRAFT_SYSTEM = (
     "candidate's resume note — never invent experience, employers, dates, or "
     "qualifications. Output only the email: a Subject: line, a greeting, 2-3 "
     "short paragraphs matching the resume to the posting, and a sign-off. "
-    "No commentary, no placeholders."
+    "No commentary, no placeholders. Write like a person, not a language "
+    "model: no em-dashes, no stock filler phrases (\"I hope this finds you "
+    "well\", \"I'm excited to\", \"furthermore\"), no rhetorical X-Y-and-Z "
+    "triplets."
 )
 
 
