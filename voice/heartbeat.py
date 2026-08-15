@@ -350,9 +350,10 @@ class Heartbeat:
         self._wrap_done_date:     date | None = _parse_date(state.get("wrap_date"))
         self._vault_rollup_done_date: date | None = _parse_date(state.get("vault_rollup_date"))
 
-        # Per-reminder last-nagged timestamp (task_id -> ISO datetime), so a
-        # restart doesn't immediately re-nag every open reminder at once.
-        self._reminder_nag_last: dict[str, str] = dict(state.get("reminder_nag_last", {}))
+        # Last fixed nag slot fired (ISO datetime, local tz), so a restart
+        # doesn't immediately re-fire a slot already delivered. See
+        # _check_reminder_nags for the fixed-grid schedule this tracks.
+        self._reminder_nag_slot: datetime | None = _parse_dt(state.get("reminder_nag_slot"))
         self._last_idle_return_fired: datetime | None = _parse_dt(state.get("idle_return_fired"))
 
         # Nudge deduplication (reset each day)
@@ -384,7 +385,7 @@ class Heartbeat:
             "briefing_date": str(self._briefing_done_date) if self._briefing_done_date else None,
             "wrap_date": str(self._wrap_done_date) if self._wrap_done_date else None,
             "vault_rollup_date": str(self._vault_rollup_done_date) if self._vault_rollup_done_date else None,
-            "reminder_nag_last": self._reminder_nag_last,
+            "reminder_nag_slot": self._reminder_nag_slot.isoformat() if self._reminder_nag_slot else None,
             "nudged": sorted(self._nudged_events),
             "nudged_date": str(self._nudge_reset_date) if self._nudge_reset_date else None,
             "idle_return_fired": self._last_idle_return_fired.isoformat() if self._last_idle_return_fired else None,
@@ -888,47 +889,45 @@ class Heartbeat:
             return ""
 
     def _check_reminder_nags(self) -> None:
-        """Repeat a spoken reminder every reminder_nag_interval_minutes
-        (default 2h) for each due-or-overdue Google Tasks reminder, until
-        it's marked done -- voice: "mark <title> done" (complete_reminder_
-        tool), or complete_reminder_tool directly. Per-reminder last-nagged
-        timestamps persist across restarts (heartbeat_state.json) so a
-        restart never re-nags every open reminder at once; entries for
-        reminders that are no longer due/open (completed, or newly not
-        overdue) are pruned each pass so the state doesn't grow unbounded."""
+        """Speak every due-or-overdue Google Tasks reminder together on a
+        fixed clock grid anchored at briefing_time (default 09:00,
+        matching the morning briefing's start-of-day) and repeating every
+        reminder_nag_interval_minutes (default 2h) -- e.g. 9, 11, 1, 3...
+        local time -- rather than each reminder tracking its own rolling
+        timer from whenever it first became due. Repeats until marked done
+        -- voice: "mark <title> done" (complete_reminder_tool), or
+        complete_reminder_tool directly. The last fired slot persists
+        across restarts (heartbeat_state.json) so a restart never re-fires
+        a slot already delivered."""
         from voice import config as cfg
         conf = cfg.load()
         if not conf.get("reminder_nag_enabled", True):
             return
         reminders = _fetch_due_reminders()
+        if not reminders:
+            return
 
-        interval_s = float(conf.get("reminder_nag_interval_minutes", 120)) * 60
-        now_wall = datetime.now(timezone.utc)
-        active_ids = set()
-        changed = False
+        now_local = datetime.now(cfg.get_timezone())
+        bh, bm = (int(x) for x in conf.get("briefing_time", "09:00").split(":"))
+        anchor = now_local.replace(hour=bh, minute=bm, second=0, microsecond=0)
+        interval_min = float(conf.get("reminder_nag_interval_minutes", 120))
+
+        # Floor-divide to the most recent grid slot at-or-before now, so the
+        # schedule holds whether now is before or after today's anchor time.
+        slots_elapsed = ((now_local - anchor).total_seconds() / 60) // interval_min
+        slot = anchor + timedelta(minutes=slots_elapsed * interval_min)
+
+        if self._reminder_nag_slot is not None and slot <= self._reminder_nag_slot:
+            return
 
         for r in reminders:
-            tid = r.get("id")
-            if not tid:
-                continue
-            active_ids.add(tid)
-            last_dt = _parse_dt(self._reminder_nag_last.get(tid))
-            if last_dt is not None and (now_wall - last_dt).total_seconds() < interval_s:
-                continue
             title = r.get("title") or "(reminder)"
             text = f'Reminder still open: {title}. Say "mark it done" once it\'s handled.'
             self._speak(text)
             _post(text)
-            self._reminder_nag_last[tid] = now_wall.isoformat()
-            changed = True
 
-        pruned = {tid: ts for tid, ts in self._reminder_nag_last.items() if tid in active_ids}
-        if pruned != self._reminder_nag_last:
-            self._reminder_nag_last = pruned
-            changed = True
-
-        if changed:
-            self._save_state()
+        self._reminder_nag_slot = slot
+        self._save_state()
 
     def _check_job_alerts(self) -> None:
         """Scan Gmail for job-alert digests and accumulate postings into the
