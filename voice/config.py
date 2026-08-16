@@ -144,6 +144,10 @@ DEFAULTS: dict[str, Any] = {
     "job_alerts_enabled": False,           # opt-in: scan Gmail for job-alert digests
     "job_alert_senders": ["linkedin.com", "indeed.com", "glassdoor.com"],
     "job_alert_lookback_days": 3,
+    # Empty = scan the primary Google account (shared with Calendar/Tasks).
+    # A label here scans a separate Google account instead, authorized
+    # independently (see .claude/scripts/integrations/google_auth.py).
+    "job_alert_account": "",
     # Urgent email (event-triggered heartbeat check, replaces the old
     # interval-based raw-count announcement)
     "urgent_email_enabled": True,

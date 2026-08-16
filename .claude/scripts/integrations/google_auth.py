@@ -15,7 +15,14 @@ Setup:
 
 Calendar and Tasks scopes include write access: gcal_write.py can create
 and delete events, gtasks_write.py can create reminders. Gmail stays
-read-only."""
+read-only.
+
+Multiple Google accounts: pass account=<label> to get_credentials() to use
+a second (or third...) inbox -- e.g. a dedicated job-search Gmail separate
+from the primary account. Each label gets its own cached token file
+(.claude/data/google_token_<label>.json), so the primary account's
+Calendar/Tasks/Gmail access is untouched. First call for a new label opens
+its own browser consent -- sign into that account there."""
 from __future__ import annotations
 
 import os
@@ -35,8 +42,16 @@ SCOPES = [
 ]
 
 
-def get_credentials():
-    """Returns google.oauth2.credentials.Credentials, running OAuth on first use."""
+def _token_path(account: str | None) -> Path:
+    if not account:
+        return TOKEN_PATH
+    return TOKEN_PATH.with_name(f"google_token_{account}.json")
+
+
+def get_credentials(account: str | None = None):
+    """Returns google.oauth2.credentials.Credentials, running OAuth on first use.
+    account=None uses the primary token; any other label gets its own
+    cached token file and its own consent flow (see module docstring)."""
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
@@ -65,14 +80,15 @@ def get_credentials():
         }
     }
 
+    token_path = _token_path(account)
     creds = None
-    if TOKEN_PATH.exists():
+    if token_path.exists():
         # Deliberately NOT passing scopes=SCOPES here: Credentials.
         # from_authorized_user_info only reads the file's own "scopes" field
         # when the scopes argument is None -- pass SCOPES explicitly and it
         # echoes SCOPES back as creds.scopes regardless of what was actually
         # granted, making the mismatch check below always pass trivially.
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
+        creds = Credentials.from_authorized_user_file(str(token_path))
         if creds and not set(SCOPES).issubset(set(creds.scopes or [])):
             creds = None  # cached token predates a scope we now need — re-auth
     if not creds or not creds.valid:
@@ -81,6 +97,6 @@ def get_credentials():
         else:
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
             creds = flow.run_local_server(port=0)
-        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text(creds.to_json(), encoding="utf-8")
     return creds

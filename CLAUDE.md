@@ -119,7 +119,7 @@ Three lifecycle hooks wired in `.claude/settings.json`:
 
 ### Google OAuth (Gmail + GCal)
 
-Place `google_credentials.json` at `.claude/data/google_credentials.json`. The token is cached after the first OAuth flow. Both integrations share the same token.
+Place `google_credentials.json` at `.claude/data/google_credentials.json`. The token is cached after the first OAuth flow. Gmail, Calendar, and Tasks share the primary token by default. `google_auth.get_credentials(account=<label>)` (and `gmail_int.list_recent`/`get_body(account=...)`) can authorize a second Google account under its own cached token (`.claude/data/google_token_<label>.json`) — used for `job_alert_account`, so job-alert scanning can read a separate job-search inbox while Calendar/Tasks/personal Gmail stay on the primary account.
 
 ### Settings Management
 

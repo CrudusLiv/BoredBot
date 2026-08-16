@@ -2665,8 +2665,9 @@ async function _renderActivityAwareness(conf, container) {
 
 // "Job alerts" group on the Cfg tab: enable toggle (job_alerts_enabled, gates
 // voice/heartbeat.py _check_job_alerts), editable sender-domain chip list
-// (job_alert_senders — same chip pattern as silence_when_running), and a
-// lookback-days number field (job_alert_lookback_days).
+// (job_alert_senders — same chip pattern as silence_when_running), a
+// lookback-days number field (job_alert_lookback_days), and an optional
+// Google-account label (job_alert_account) to scan a second Gmail inbox.
 async function _renderJobAlerts(conf, container) {
   let senders = Array.isArray(conf.job_alert_senders) ? conf.job_alert_senders.slice() : [];
 
@@ -2771,6 +2772,24 @@ async function _renderJobAlerts(conf, container) {
   };
   daysInput.addEventListener('change', saveDays);
   daysInput.addEventListener('blur', saveDays);
+
+  const acctWrap = document.createElement('div');
+  acctWrap.style.cssText = 'margin-top:10px;';
+  const acctLbl = document.createElement('div');
+  acctLbl.className = 'settings-field-label';
+  acctLbl.textContent = 'Google account (blank = primary)';
+  const acctInput = document.createElement('input');
+  acctInput.className = 'settings-input';
+  acctInput.type = 'text';
+  acctInput.placeholder = 'e.g. jobs';
+  acctInput.value = conf.job_alert_account || '';
+  const acctHint = document.createElement('div');
+  acctHint.className = 'settings-save-hint';
+  acctWrap.append(acctLbl, acctInput, acctHint);
+  group.appendChild(acctWrap);
+  const saveAcct = () => _saveSetting('job_alert_account', acctInput.value.trim(), acctHint);
+  acctInput.addEventListener('change', saveAcct);
+  acctInput.addEventListener('blur', saveAcct);
 
   renderChips();
   container.appendChild(group);

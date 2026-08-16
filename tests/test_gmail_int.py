@@ -44,7 +44,7 @@ def test_service_returns_none_without_google_client(monkeypatch):
     import importlib
     import integrations.gmail_int as gi
     importlib.reload(gi)
-    monkeypatch.setattr(gi, "get_credentials", lambda: MagicMock())
+    monkeypatch.setattr(gi, "get_credentials", lambda account=None: MagicMock())
     with patch.dict("sys.modules", {"googleapiclient.discovery": None}):
         result = gi._service()
     assert result is None

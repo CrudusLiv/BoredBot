@@ -275,13 +275,14 @@ def scan_alerts(data_dir: Path, conf: dict) -> int:
     from integrations import gmail_int  # type: ignore
     senders = conf.get("job_alert_senders", [])
     days = int(conf.get("job_alert_lookback_days", 3))
+    account = conf.get("job_alert_account") or None
     added = 0
-    for msg in gmail_int.list_recent(days=days, max_results=50):
+    for msg in gmail_int.list_recent(days=days, max_results=50, account=account):
         source = match_sender(msg.get("from", ""), senders)
         if not source:
             continue
         try:
-            body = gmail_int.get_body(msg["id"])
+            body = gmail_int.get_body(msg["id"], account=account)
             added += add_postings(data_dir, parse_digest(source, body))
         except Exception as exc:
             print(f"[jobs] digest parse failed for {msg.get('id')}: {exc}", flush=True)

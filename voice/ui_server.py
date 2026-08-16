@@ -476,6 +476,7 @@ _SETTINGS_ALLOWED = {
     "activity_awareness_enabled", "silence_when_running",
     "downloads_triage_enabled",
     "job_alerts_enabled", "job_alert_senders", "job_alert_lookback_days",
+    "job_alert_account",
     "pc_control_apps",
     "ptt_key", "screen_read_capture_hotkey", "screen_read_ask_hotkey",
     "screen_read_copy_hotkey", "screen_read_dismiss_hotkey",

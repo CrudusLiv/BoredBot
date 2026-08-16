@@ -314,11 +314,11 @@ class _FakeGmail:
         self._fail = set(fail_body_ids)
         self.list_calls = []
 
-    def list_recent(self, days=7, max_results=30):
-        self.list_calls.append({"days": days, "max_results": max_results})
+    def list_recent(self, days=7, max_results=30, account=None):
+        self.list_calls.append({"days": days, "max_results": max_results, "account": account})
         return self._msgs
 
-    def get_body(self, msg_id):
+    def get_body(self, msg_id, account=None):
         if msg_id in self._fail:
             raise RuntimeError("boom")
         return self._bodies.get(msg_id, "")
@@ -346,7 +346,7 @@ def test_scan_alerts_adds_from_matching_sender(tmp_path, monkeypatch):
     _patch_gmail(monkeypatch, fake)
     added = jobs.scan_alerts(tmp_path, JOBS_CONF)
     assert added == 2
-    assert fake.list_calls == [{"days": 3, "max_results": 50}]
+    assert fake.list_calls == [{"days": 3, "max_results": 50, "account": None}]
     assert len(jobs.load_jobs(tmp_path)) == 2
 
 

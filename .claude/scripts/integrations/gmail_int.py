@@ -1,4 +1,6 @@
-"""Gmail integration -- read-only. Shares OAuth token with Google Calendar."""
+"""Gmail integration -- read-only. Shares OAuth token with Google Calendar
+by default; pass account=<label> to read a different Google account (its
+own cached token, see google_auth.py docstring)."""
 from __future__ import annotations
 
 import argparse
@@ -12,8 +14,8 @@ from google_auth import get_credentials  # noqa: E402
 from _html_text import html_to_text as _html_to_text  # noqa: E402
 
 
-def _service():
-    creds = get_credentials()
+def _service(account: str | None = None):
+    creds = get_credentials(account=account)
     if not creds:
         return None
     try:
@@ -24,8 +26,8 @@ def _service():
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
-def list_recent(days: int = 7, max_results: int = 30) -> list[dict]:
-    svc = _service()
+def list_recent(days: int = 7, max_results: int = 30, account: str | None = None) -> list[dict]:
+    svc = _service(account)
     if not svc:
         return []
     try:
@@ -76,11 +78,11 @@ def _decode_part(part: dict) -> str:
         return ""
 
 
-def get_body(msg_id: str) -> str:
+def get_body(msg_id: str, account: str | None = None) -> str:
     """Fetch a message's full body as readable text. text/plain parts are
     preferred; text/html parts are converted with hrefs preserved inline.
     Returns "" on any failure."""
-    svc = _service()
+    svc = _service(account)
     if not svc:
         return ""
     try:
@@ -108,17 +110,40 @@ def get_body(msg_id: str) -> str:
     return ""
 
 
+def whoami(account: str | None = None) -> str:
+    """Return the email address a token (primary or account=<label>) is
+    actually authorized against. "" if the service is unavailable."""
+    svc = _service(account)
+    if not svc:
+        return ""
+    try:
+        return svc.users().getProfile(userId="me").execute().get("emailAddress", "")
+    except Exception as exc:
+        print(f"gmail_int.whoami: getProfile failed: {exc}", file=sys.stderr)
+        return ""
+
+
 def handle_query(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="query.py gmail")
     sub = parser.add_subparsers(dest="subcommand", required=True)
     p = sub.add_parser("recent")
     p.add_argument("--days", type=int, default=7)
     p.add_argument("--max", type=int, default=30)
+    p.add_argument("--account", default=None,
+                    help="Google account label (see google_auth.py) -- omit for the primary account")
     p.add_argument("--json", action="store_true")
+    w = sub.add_parser("whoami", help="print the email address a token is authorized against")
+    w.add_argument("--account", default=None,
+                    help="Google account label (see google_auth.py) -- omit for the primary account")
     args = parser.parse_args(argv)
-    json_out = args.json
 
-    rows = list_recent(args.days, args.max)
+    if args.subcommand == "whoami":
+        addr = whoami(account=args.account)
+        print(addr or "(could not determine — token missing or invalid)")
+        return 0
+
+    json_out = args.json
+    rows = list_recent(args.days, args.max, account=args.account)
     if json_out:
         print(json.dumps(rows, indent=2, ensure_ascii=False, default=str))
     else:
