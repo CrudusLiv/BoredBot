@@ -931,8 +931,9 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
 
 /* empty/error states inside a card body sit near the top — the card's own
    border already frames them, so the standalone 30px offset is too much */
-#side-panel .mod-card-body > .notices-empty,
-#side-panel .mod-card-body > .pane-empty { margin-top: 4px; }
+#side-panel .mod-card-body .notices-empty,
+#side-panel .mod-card-body .chat-empty,
+#side-panel .mod-card-body .pane-empty { margin-top: 4px; }
 
 /* Config's accordion heads take the same anchor tick, so all panes match */
 #side-panel .acc-name { border-left: 2px solid var(--core); padding-left: 8px; }
@@ -1276,7 +1277,7 @@ body.mini > *:not(canvas) { display: none !important; }
         <div class="panel-row-label">Ledger</div>
       </div>
       <div class="mod-card-body">
-        <div id="finance-output" class="panel-output"></div>
+        <div id="finance-output" class="panel-output"><div class="pane-empty">Nothing pulled yet. Hit Summary if you want the damage.</div></div>
       </div>
     </div>
   </div>
@@ -3681,7 +3682,7 @@ function _workspaceSelectRow(listEl, row) {
 
 async function loadWorkspace() {
   const content = document.getElementById('workspace-content');
-  if (content) content.textContent = '';
+  if (content) content.innerHTML = paneEmpty('Nothing open. Pick one from the left.');
   await loadWorkspaceDir('drafts', '');
   await loadWorkspaceDir('scratch', '');
 }
@@ -3733,7 +3734,9 @@ async function loadWorkspaceDir(kind, dir) {
         try {
           const cr = await vfetch(cfg.contentUrl + '?' + cfg.contentParam + '=' + encodeURIComponent(relPath));
           const cd = await cr.json();
-          content.textContent = cd.content ?? '';
+          const body = cd.content ?? '';
+          if (body) content.textContent = body;
+          else content.innerHTML = paneEmpty('That one\'s empty. Bold choice.');
         } catch (e) { content.innerHTML = paneErr(e.message); }
       });
       listEl.appendChild(row);
