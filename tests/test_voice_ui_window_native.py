@@ -159,6 +159,8 @@ def test_mini_position_corners():
         assert ui_window._mini_position(200, 200, "top-right") == (1000 - 200 - 24, 24)
         assert ui_window._mini_position(200, 200, "bottom-left") == (24, 800 - 200 - 24)
         assert ui_window._mini_position(200, 200, "bottom-right") == (1000 - 200 - 24, 800 - 200 - 24)
+        assert ui_window._mini_position(200, 200, "middle-right") == (1000 - 200 - 24, (800 - 200) // 2)
+        assert ui_window._mini_position(200, 200, "middle-left") == (24, (800 - 200) // 2)
     finally:
         del _sys.modules["win32con"]
         del _sys.modules["win32api"]

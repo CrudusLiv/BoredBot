@@ -83,8 +83,8 @@ DEFAULTS: dict[str, Any] = {
     # Speaking ducking + popup
     "audio_duck_enabled": False,    # opt-in; lowers other apps' Windows audio sessions while she speaks (needs pycaw)
     "audio_duck_percent": 25,       # other sessions' volume is scaled to this % of their current level
-    "speaking_popup_enabled": True,  # only relevant when ui_enabled is on -- shows a mini orb popup while she speaks and the main orb window is closed
-    "speaking_popup_corner": "top-right",  # top-left | top-right | bottom-left | bottom-right
+    "speaking_popup_enabled": True,  # only relevant when ui_enabled is on -- shows a mini waveform-capsule popup while she speaks and the main orb window is closed
+    "speaking_popup_corner": "middle-right",  # top-left | top-right | middle-left | middle-right | bottom-left | bottom-right
     # Safety
     "requires_confirmation": ["create_note", "append_note", "forget_fact", "create_calendar_event"],
     "confirm_timeout_seconds": 30,

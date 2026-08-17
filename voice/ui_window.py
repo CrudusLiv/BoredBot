@@ -38,7 +38,12 @@ _main_visible = True  # the main window is shown by default once created
 _mini_window = None
 _mini_available = False
 
-_MINI_SIZE = 200
+# The mini window shows a shrunk orb (voice/static/orb.html's body.mini CSS
+# hides all HUD chrome and keeps just the orb canvases), so it's square. The
+# window is kept opaque near-black -- transparent WebView2 windows clip/offset
+# their content inside the WinForms host, so we don't use them.
+_MINI_WIDTH = 190
+_MINI_HEIGHT = 190
 _MINI_MARGIN = 24
 
 
@@ -139,7 +144,10 @@ def _mini_position(width: int, height: int, corner: str) -> tuple[int, int]:
     sw = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
     sh = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
     x = sw - width - _MINI_MARGIN if "right" in corner else _MINI_MARGIN
-    y = sh - height - _MINI_MARGIN if "bottom" in corner else _MINI_MARGIN
+    if "middle" in corner:
+        y = (sh - height) // 2
+    else:
+        y = sh - height - _MINI_MARGIN if "bottom" in corner else _MINI_MARGIN
     return x, y
 
 
@@ -147,12 +155,12 @@ def _create_mini_window(webview_mod, port: int, token: str):
     """Create the small always-on-top speaking-popup window, hidden until
     voice/tts.py calls show_mini()."""
     from voice import config as cfg
-    corner = cfg.load().get("speaking_popup_corner", "top-right")
-    x, y = _mini_position(_MINI_SIZE, _MINI_SIZE, corner)
+    corner = cfg.load().get("speaking_popup_corner", "middle-right")
+    x, y = _mini_position(_MINI_WIDTH, _MINI_HEIGHT, corner)
     url = f"http://127.0.0.1:{port}/?mini=1&t={token}"
     return webview_mod.create_window(
         "Vesper — speaking", url,
-        width=_MINI_SIZE, height=_MINI_SIZE, x=x, y=y,
+        width=_MINI_WIDTH, height=_MINI_HEIGHT, x=x, y=y,
         frameless=True, on_top=True, hidden=True, easy_drag=False,
-        resizable=False,
+        resizable=False, background_color="#0a0a10",
     )
