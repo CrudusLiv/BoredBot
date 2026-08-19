@@ -74,6 +74,9 @@ The DB lives at `.claude/data/memory.db` (gitignored). Embeddings use `fast-all-
 | `voice/static/orb.html` | Three.js orb UI |
 | `voice/heartbeat.py` | Daemon thread — calendar, email, deadlines checks |
 | `voice/tray.py` | System tray icon + toast notifications |
+| `voice/keys.py` | Hotkey spec grammar — modifier combos, numpad; shared by the PTT poll and the browser UI |
+| `voice/boot_checks.py` | Per-subsystem readiness probes behind `GET /cmd/boot-checks` |
+| `voice/static/face/` | PNG particle render mode (`ui_render_mode: face`) |
 
 ### Memory layer (`Dynamous/Memory/`)
 
@@ -124,6 +127,11 @@ Place `google_credentials.json` at `.claude/data/google_credentials.json`. The t
 ### Settings Management
 
 User settings (quiet hours, feature toggles, heartbeat interval, activity awareness) live in `voice/config.json`, merged over `DEFAULTS` in `voice/config.py` by `config.load()` (an installed `%APPDATA%\Vesper\config.json` wins over the repo copy). Every proactive capability has an independent `*_enabled` flag each heartbeat task checks at the top. Activity awareness adds `activity_awareness_enabled` (opt-in) + `silence_when_running` (list of exe names). There is no `tray_settings.json`.
+
+`ui_render_mode` is `orb` or `face`. The VRM avatar mode was removed — it only
+ever had a placeholder model. The face asset is produced offline by
+`scripts/prep_face_asset.py` (needs `pip install "rembg[cpu]"`); the runtime
+only loads the PNG.
 
 ## Vault write rules
 

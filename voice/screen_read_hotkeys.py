@@ -12,12 +12,11 @@ import time
 from typing import Callable, Iterator
 
 from voice import config as cfg
-from voice.audio import _vk_code
 
 
 def _is_down(key: str) -> bool:
-    import win32api
-    return bool(win32api.GetAsyncKeyState(_vk_code(key)) & 0x8000)
+    from voice import keys
+    return keys.is_down(key)
 
 
 def _copy_to_clipboard(text: str) -> None:

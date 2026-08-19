@@ -16,6 +16,7 @@ Endpoints:
   GET  /cmd/finance     → month_summary() JSON
   POST /cmd/finance     → tracker.log(entry) JSON
   GET  /cmd/capabilities → {vault, scripts} availability flags for the UI
+  GET  /cmd/boot-checks → [{id,label,detail,status,error}] subsystem readiness
   GET  /cmd/llm/status  → active LLM backend/model/availability JSON
   GET  /cmd/llm/detect  → force LLM backend re-detection JSON
   GET  /cmd/calendar    → upcoming events JSON
@@ -117,16 +118,27 @@ app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 
 @app.get("/")
 async def index() -> HTMLResponse:
-    from pathlib import Path as _Path
     from voice import config as cfg
     conf = cfg.load()
     mode = conf.get("ui_render_mode", "orb")
-    if mode not in ("orb", "avatar"):
+    if mode not in ("orb", "face"):
         mode = "orb"
-    vrm_name = _Path(conf.get("ui_avatar_vrm_path", "").strip() or "placeholder.vrm").name
+    face_name = cfg.get_face_png_name(conf)
+    if mode == "face" and not (_STATIC / "face" / face_name).exists():
+        mode = "orb"  # missing art degrades to the orb; see /cmd/boot-checks
     html = (_STATIC / "orb.html").read_text(encoding="utf-8")
     html = html.replace("__VESPER_RENDER_MODE__", mode)
-    html = html.replace("__VESPER_AVATAR_VRM_URL__", f"/static/avatar/models/{vrm_name}")
+    html = html.replace("__VESPER_FACE_URL__", f"/static/face/{face_name}")
+    html = html.replace("__VESPER_FACE_MODE__", conf.get("ui_face_mode", "points"))
+    html = html.replace("__VESPER_FACE_POINTS__", str(int(conf.get("ui_face_point_count", 40000))))
+    import json as _json
+    hotkeys = _json.dumps({
+        "dock":       conf.get("ui_dock_hotkey", "right"),
+        "undock":     conf.get("ui_undock_hotkey", "left"),
+        "confirmYes": conf.get("ui_confirm_yes_hotkey", "y"),
+        "confirmNo":  conf.get("ui_confirm_no_hotkey", "n"),
+    })
+    html = html.replace("__VESPER_HOTKEYS__", hotkeys)
     # Embed the session token server-side so the page works whether it was
     # opened via the tray's app-window launch (?t=... in the URL) or by
     # navigating to this URL directly, e.g. http://localhost:7070 as the
@@ -180,6 +192,16 @@ async def capabilities() -> JSONResponse:
         "vault": cfg.get_vault_dir() is not None,
         "scripts": (_ROOT / ".claude" / "scripts").exists(),
     })
+
+
+@app.get("/cmd/boot-checks")
+async def boot_checks_all() -> JSONResponse:
+    """Subsystem readiness for the UI's boot checklist. Read-only, so no
+    token: it reports presence and configuration, never secrets."""
+    import asyncio
+    from voice import boot_checks as _bc
+    checks = await asyncio.to_thread(_bc.run_all)
+    return JSONResponse({"checks": checks})
 
 
 # ── Finance panel ────────────────────────────────────────────────────────────
@@ -482,6 +504,9 @@ _SETTINGS_ALLOWED = {
     "screen_read_copy_hotkey", "screen_read_dismiss_hotkey",
     "audio_duck_enabled", "audio_duck_percent",
     "speaking_popup_enabled", "speaking_popup_corner",
+    "ui_dock_hotkey", "ui_undock_hotkey",
+    "ui_confirm_yes_hotkey", "ui_confirm_no_hotkey",
+    "ui_render_mode", "ui_face_mode", "ui_face_point_count", "ui_face_png_path",
 }
 
 

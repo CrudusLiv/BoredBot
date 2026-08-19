@@ -531,6 +531,36 @@ body.paused #conn-status { display:none; }
   font-size:var(--fs-2xs); letter-spacing:var(--track-label); font-family:var(--font-mono); }
 #conn-status.online { color: var(--conn-online); }
 #conn-status.offline { color: var(--conn-offline); }
+#boot-checklist {
+  position: fixed; top: 56px; left: 22px; z-index: 40;
+  font-family: var(--font-mono); font-size: var(--fs-2xs);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+  pointer-events: none; transition: opacity 620ms var(--ease-soft);
+}
+#boot-checklist[data-dissolving="1"] { opacity: 0; }
+.boot-row {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 6px; opacity: 0;
+  animation: bootIn 360ms var(--ease-soft) forwards;
+}
+@keyframes bootIn {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+.boot-mark  { width: 10px; color: var(--core); }
+.boot-label { color: var(--text); min-width: 92px; }
+.boot-detail{ color: var(--text-dim); }
+.boot-row[data-status="ok"]   .boot-mark  { color: var(--accent); }
+.boot-row[data-status="fail"] .boot-mark  { color: var(--danger); }
+.boot-row[data-status="fail"] .boot-label { color: var(--danger); }
+.boot-row[data-status="skip"] .boot-mark  { color: var(--text-faint); }
+.boot-error {
+  color: var(--danger); margin: 2px 0 8px 18px;
+  text-transform: none; letter-spacing: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-row { animation: none; opacity: 1; }
+}
 #tool-ticker { position:absolute; right:18px; bottom:56px; z-index:30; color:var(--text-dim);
   font-size:var(--fs-2xs); letter-spacing:var(--track-label); font-family:var(--font-mono);
   opacity:0; transition:opacity var(--dur-soft) var(--ease-soft); max-width:40vw; overflow:hidden;
@@ -1162,6 +1192,7 @@ body.mini > *:not(canvas) { display: none !important; }
 
 <!-- Connection indicator + backend (top-left) -->
 <div id="conn-status">○ OFFLINE</div>
+<div id="boot-checklist" hidden></div>
 <div id="backend-readout"></div>
 
 <!-- Left rail : systems -->
@@ -1422,7 +1453,7 @@ body.mini > *:not(canvas) { display: none !important; }
   }
 }
 </script>
-<script type="module" src="/static/avatar/scene.js"></script>
+<script type="module" src="/static/face/scene.js"></script>
 <script>
 // ── Session token (security gate) ───────────────────────────────────────────
 // Embedded server-side into this page's HTML on every load (see index() in
@@ -1439,7 +1470,10 @@ function vfetch(url, opts) {
   return fetch(url, Object.assign({}, opts, { headers }));
 }
 const VESPER_RENDER_MODE = "__VESPER_RENDER_MODE__";
-const VESPER_AVATAR_VRM_URL = "__VESPER_AVATAR_VRM_URL__";
+const VESPER_FACE_URL = "__VESPER_FACE_URL__";
+const VESPER_FACE_MODE = "__VESPER_FACE_MODE__";
+const VESPER_FACE_POINTS = __VESPER_FACE_POINTS__;
+const VESPER_HOTKEYS = __VESPER_HOTKEYS__;
 // Speaking-popup mini window (voice/ui_window.py) opens this same page with
 // ?mini=1 -- the body.mini CSS rule above does the rest, no separate markup.
 if (new URLSearchParams(location.search).get('mini') === '1') {
@@ -1554,8 +1588,8 @@ let dockToggle = null;
 
   document.addEventListener('keydown', e => {
     if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-    if (e.key === 'ArrowRight' && !isDocked()) { dock(); cool(); }
-    else if (e.key === 'ArrowLeft' && isDocked()) { undock(); cool(); }
+    if (matchesHotkey(e, VESPER_HOTKEYS.dock) && !isDocked()) { dock(); cool(); }
+    else if (matchesHotkey(e, VESPER_HOTKEYS.undock) && isDocked()) { undock(); cool(); }
   });
   document.addEventListener('wheel', e => {
     if (cooldown) return;
@@ -2272,6 +2306,67 @@ updateNoticeBadge();
 setInterval(updateNoticeBadge, 60000);
 
 
+// ── Boot checklist ───────────────────────────────────────────────────────────
+// One row per subsystem probe. Rows are staggered on arrival, so the
+// animation is cosmetic but every mark reflects a resolved probe. Failures
+// stay expanded with their error and never block boot.
+const BOOT_MARKS = { ok: '✓', fail: '✕', skip: '–' };
+
+async function runBootChecklist() {
+  const el = document.getElementById('boot-checklist');
+  let checks;
+  try {
+    const resp = await fetch('/cmd/boot-checks');
+    checks = (await resp.json()).checks || [];
+  } catch (err) {
+    return; // endpoint unreachable; the orb still works
+  }
+  if (!checks.length) return;
+
+  el.hidden = false;
+  el.innerHTML = '';
+  const anyFailed = checks.some(c => c.status === 'fail');
+
+  checks.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'boot-row';
+    row.dataset.status = c.status;
+    row.style.animationDelay = (i * 180) + 'ms';
+
+    const mark = document.createElement('span');
+    mark.className = 'boot-mark';
+    mark.textContent = BOOT_MARKS[c.status] || '–';
+
+    const label = document.createElement('span');
+    label.className = 'boot-label';
+    label.textContent = c.label;
+
+    const detail = document.createElement('span');
+    detail.className = 'boot-detail';
+    detail.textContent = c.detail;
+
+    row.append(mark, label, detail);
+    el.appendChild(row);
+
+    if (c.status === 'fail' && c.error) {
+      const err = document.createElement('div');
+      err.className = 'boot-error';
+      err.textContent = c.error;
+      el.appendChild(err);
+    }
+  });
+
+  // Hold on screen long enough to actually read; failures linger longer still.
+  const settle = checks.length * 180 + (anyFailed ? 6000 : 3200);
+  setTimeout(() => {
+    el.dataset.dissolving = '1';
+    setTimeout(() => { el.hidden = true; el.dataset.dissolving = '0'; }, 620);
+  }, settle);
+}
+
+runBootChecklist();
+
+
 // ── WebSocket ──────────────────────────────────────────────────────────────
 (function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws?t=${encodeURIComponent(VESPER_TOKEN)}`);
@@ -2376,8 +2471,8 @@ document.getElementById('confirm-deny').onclick = () => voteConfirm(false);
 document.addEventListener('keydown', (e) => {
   if (confirmCard.hidden) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-  if (e.key === 'y' || e.key === 'Y') voteConfirm(true);
-  if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') voteConfirm(false);
+  if (matchesHotkey(e, VESPER_HOTKEYS.confirmYes)) voteConfirm(true);
+  if (matchesHotkey(e, VESPER_HOTKEYS.confirmNo) || e.code === 'Escape') voteConfirm(false);
 });
 
 const pauseBtn = document.getElementById('pause-toggle');
@@ -3249,10 +3344,8 @@ async function _renderPcControl(conf, container) {
 
 
 // Maps a browser KeyboardEvent.code to the exact key-name string
-// voice/audio.py::_NAMED_VK understands. Keys not listed here (numpad,
-// media keys, CapsLock, etc.) are rejected by the recorder in
-// _renderKeybinds — accepting them would resolve to the wrong VK code
-// server-side via _vk_code()'s ASCII fallback.
+// voice/keys.py::NAMED_VK understands. Modifier-only presses are held as
+// prefixes by the recorder rather than recorded as the main key.
 const CODE_TO_KEYNAME = {
   Backspace: 'backspace', Tab: 'tab', Enter: 'enter',
   ShiftLeft: 'shift_l', ShiftRight: 'shift_r',
@@ -3270,6 +3363,34 @@ const CODE_TO_KEYNAME = {
 for (let i = 0; i <= 9; i++) CODE_TO_KEYNAME['Digit' + i] = String(i);
 for (let i = 0; i < 26; i++) CODE_TO_KEYNAME['Key' + String.fromCharCode(65 + i)] = String.fromCharCode(97 + i);
 for (let i = 1; i <= 24; i++) CODE_TO_KEYNAME['F' + i] = 'f' + i;
+for (let i = 0; i <= 9; i++) CODE_TO_KEYNAME['Numpad' + i] = 'numpad' + i;
+CODE_TO_KEYNAME.NumpadMultiply = 'numpad_multiply';
+CODE_TO_KEYNAME.NumpadAdd      = 'numpad_add';
+CODE_TO_KEYNAME.NumpadSubtract = 'numpad_subtract';
+CODE_TO_KEYNAME.NumpadDecimal  = 'numpad_decimal';
+CODE_TO_KEYNAME.NumpadDivide   = 'numpad_divide';
+CODE_TO_KEYNAME.NumLock        = 'numlock';
+
+// Mirrors voice/keys.py::is_down, including its exactness rule: a binding
+// matches only when modifiers it does NOT name are up, so binding both 'f'
+// and 'shift+f' doesn't fire both on shift+f.
+const MODIFIER_CODES = new Set([
+  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
+  'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight',
+]);
+
+function matchesHotkey(e, spec) {
+  if (!spec) return false;
+  const parts = spec.toLowerCase().split('+').map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return false;
+  const main = parts.pop();
+  const mods = new Set(parts);
+  if (CODE_TO_KEYNAME[e.code] !== main) return false;
+  return e.ctrlKey  === mods.has('ctrl')
+      && e.shiftKey === mods.has('shift')
+      && e.altKey   === mods.has('alt')
+      && e.metaKey  === mods.has('win');
+}
 
 // The 5 rebindable keys in the app. unbindable: true means an "unbind"
 // button is offered (saves ""); ptt_key omits it because _vk_code("")
@@ -3280,6 +3401,10 @@ const KEYBINDS = [
   { key: 'screen_read_ask_hotkey',      label: 'Screen-read: ask',                unbindable: true  },
   { key: 'screen_read_copy_hotkey',     label: 'Screen-read: copy last answer',   unbindable: true  },
   { key: 'screen_read_dismiss_hotkey',  label: 'Screen-read: dismiss overlay',    unbindable: true  },
+  { key: 'ui_dock_hotkey',              label: 'Dock orb',                        unbindable: true  },
+  { key: 'ui_undock_hotkey',            label: 'Undock orb',                      unbindable: true  },
+  { key: 'ui_confirm_yes_hotkey',       label: 'Confirm: yes',                    unbindable: true  },
+  { key: 'ui_confirm_no_hotkey',        label: 'Confirm: no',                     unbindable: true  },
 ];
 
 // "Keybinds" group on the Cfg tab: press-to-record rebinding for the 5 keys
@@ -3374,11 +3499,23 @@ async function _renderKeybinds(conf, container) {
         e.preventDefault();
         e.stopPropagation();
         if (e.code === 'Escape') { cleanup(); return; }
-        const name = CODE_TO_KEYNAME[e.code];
-        if (!name) {
+        // A modifier on its own isn't a binding yet -- keep waiting for the
+        // main key so "shift+f" can be pressed as one chord.
+        if (MODIFIER_CODES.has(e.code)) {
+          warn.textContent = '';
+          return;
+        }
+        const base = CODE_TO_KEYNAME[e.code];
+        if (!base) {
           warn.textContent = 'unsupported key, try another';
           return; // stay in recording mode
         }
+        const prefix = [];
+        if (e.ctrlKey)  prefix.push('ctrl');
+        if (e.shiftKey) prefix.push('shift');
+        if (e.altKey)   prefix.push('alt');
+        if (e.metaKey)  prefix.push('win');
+        const name = prefix.concat(base).join('+');
         cleanup();
         values[key] = name;
         badge.textContent = name.toUpperCase();
@@ -3599,6 +3736,33 @@ async function loadSettingsPanel() {
       key: 'speaking_popup_corner', label: 'Popup position', type: 'select',
       opts: ['top-left', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-right'],
     });
+  });
+
+  section({ title: 'Display', defaultOpen: false }, async (body) => {
+    const note = document.createElement('div');
+    note.className = 'settings-save-hint';
+    note.style.cssText = 'margin-bottom:10px;';
+    note.textContent = 'Render mode takes effect on next reload -- tray icon → Reload UI.';
+    body.appendChild(note);
+
+    let modeCtrl = null;
+    const dependentWraps = [];
+    [
+      { key: 'ui_render_mode', label: 'Render mode', type: 'select', opts: ['orb', 'face'] },
+      { key: 'ui_face_mode', label: 'Face style', type: 'select', opts: ['points', 'overlay'], showIf: 'face' },
+      { key: 'ui_face_point_count', label: 'Face point count', type: 'number', showIf: 'face' },
+      { key: 'ui_face_png_path', label: 'Face PNG filename (blank = vesper.png)', type: 'text', showIf: 'face' },
+    ].forEach(f => {
+      const { ctrl, wrap } = _appendField(body, conf, f);
+      if (f.key === 'ui_render_mode') modeCtrl = ctrl;
+      if (f.showIf) dependentWraps.push({ wrap, showIf: f.showIf });
+    });
+    function applyVisibility() {
+      const mode = modeCtrl ? modeCtrl.value : '';
+      dependentWraps.forEach(({ wrap, showIf }) => { wrap.style.display = mode === showIf ? '' : 'none'; });
+    }
+    if (modeCtrl) modeCtrl.addEventListener('change', applyVisibility);
+    applyVisibility();
   });
 
   section({ title: 'LLM backend', defaultOpen: false }, async (body) => {

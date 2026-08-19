@@ -197,3 +197,34 @@ def test_start_creates_mini_window_on_success(monkeypatch):
 
     assert ui_window._mini_available is True
     assert ui_window._mini_window is fake_mini
+
+
+# ── Reload ───────────────────────────────────────────────────────────────────
+
+def test_reload_noop_when_no_window():
+    ui_window.reload()  # must not raise
+
+
+def test_reload_calls_evaluate_js_on_main_window():
+    calls = []
+    ui_window._window = SimpleNamespace(evaluate_js=lambda js: calls.append(js))
+    ui_window.reload()
+    assert calls == ["location.reload()"]
+
+
+def test_reload_also_reloads_mini_window_if_created():
+    main_calls = []
+    mini_calls = []
+    ui_window._window = SimpleNamespace(evaluate_js=lambda js: main_calls.append(js))
+    ui_window._mini_window = SimpleNamespace(evaluate_js=lambda js: mini_calls.append(js))
+    ui_window.reload()
+    assert main_calls == ["location.reload()"]
+    assert mini_calls == ["location.reload()"]
+
+
+def test_reload_swallows_evaluate_js_errors():
+    def _raise(js):
+        raise RuntimeError("window destroyed")
+
+    ui_window._window = SimpleNamespace(evaluate_js=_raise)
+    ui_window.reload()  # must not raise

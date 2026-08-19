@@ -78,8 +78,16 @@ DEFAULTS: dict[str, Any] = {
     "ui_port": 7070,
     "ui_host": "127.0.0.1",         # bind address for the FastAPI/uvicorn server; set "0.0.0.0" to reach it from other devices (e.g. over Tailscale)
     "city": "",                     # for weather widget; empty = disabled
-    "ui_render_mode": "orb",        # orb | avatar
-    "ui_avatar_vrm_path": "",       # filename under voice/static/avatar/models/; empty = placeholder.vrm
+    "ui_render_mode": "orb",        # orb | face
+    "ui_face_png_path": "",         # filename under voice/static/face/; empty = vesper.png
+    "ui_face_mode": "points",       # points (cloud) | overlay (art + silhouette aura)
+    "ui_face_point_count": 40000,   # points sampled from the PNG in `points` mode
+    # In-page hotkeys (browser keydown, not the global GetAsyncKeyState poll).
+    # Same spec grammar as ptt_key -- see voice/keys.py.
+    "ui_dock_hotkey": "right",
+    "ui_undock_hotkey": "left",
+    "ui_confirm_yes_hotkey": "y",
+    "ui_confirm_no_hotkey": "n",
     # Speaking ducking + popup
     "audio_duck_enabled": False,    # opt-in; lowers other apps' Windows audio sessions while she speaks (needs pycaw)
     "audio_duck_percent": 25,       # other sessions' volume is scaled to this % of their current level
@@ -191,6 +199,13 @@ def get_timezone() -> timezone:
 def get_user_name() -> str:
     """Return the configured display name."""
     return load().get("user_name", "User")
+
+
+def get_face_png_name(conf: dict[str, Any] | None = None) -> str:
+    """Filename (no directory) of the configured face-render PNG under static/face/."""
+    if conf is None:
+        conf = load()
+    return Path(conf.get("ui_face_png_path", "").strip() or "vesper.png").name
 
 
 def get_vault_dir() -> Path | None:

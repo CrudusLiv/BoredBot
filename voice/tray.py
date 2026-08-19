@@ -162,6 +162,15 @@ def start(port: int = 7070, on_quit: Callable | None = None) -> None:
         killswitch.toggle()
         icon.update_menu()
 
+    def _reload_ui(icon, item):
+        # In-place reload of the served page -- for settings baked into the
+        # HTML at request time (e.g. ui_render_mode) that don't apply live.
+        try:
+            from voice import ui_window
+            ui_window.reload()
+        except Exception:
+            pass
+
     def _is_paused(item) -> bool:
         from voice import killswitch
         return killswitch.is_paused()
@@ -171,6 +180,7 @@ def start(port: int = 7070, on_quit: Callable | None = None) -> None:
         # A paused Vesper is fully deaf, so she cannot hear "resume duties" —
         # this item and the orb's pause button are the only ways back.
         pystray.MenuItem("Paused (deaf & mute)", _toggle_pause, checked=_is_paused),
+        pystray.MenuItem("Reload UI", _reload_ui),
         pystray.MenuItem("Restart Vesper", _restart),
         pystray.MenuItem("Stop until next logon", _stop_until_logon),
     )

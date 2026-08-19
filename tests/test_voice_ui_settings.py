@@ -106,3 +106,16 @@ def test_patch_speaking_field_round_trips(client, key, value):
     assert r.status_code == 200, r.text
     got = client.get("/cmd/settings").json()
     assert got[key] == value
+
+
+@pytest.mark.parametrize("key,value", [
+    ("ui_render_mode", "face"),
+    ("ui_face_mode", "overlay"),
+    ("ui_face_point_count", 20000),
+    ("ui_face_png_path", "alt.png"),
+])
+def test_patch_display_field_round_trips(client, key, value):
+    r = client.post("/cmd/settings", headers=_hdr(), json={"key": key, "value": value})
+    assert r.status_code == 200, r.text
+    got = client.get("/cmd/settings").json()
+    assert got[key] == value

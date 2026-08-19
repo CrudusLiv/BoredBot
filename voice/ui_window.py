@@ -112,6 +112,20 @@ def hide_mini() -> None:
         pass
 
 
+def reload() -> None:
+    """Reload the served page in place -- for settings baked into the HTML
+    at request time (e.g. ui_render_mode) that a live WS push can't apply.
+    Uses the page's own JS rather than window.load_url() so it doesn't need
+    to reconstruct the URL/token. Safe no-op for any window never created."""
+    for win in (_window, _mini_window):
+        if win is None:
+            continue
+        try:
+            win.evaluate_js("location.reload()")
+        except Exception:
+            logger.exception("[ui_window] reload failed")
+
+
 def _on_closing(window) -> bool:
     """Wired to window.events.closing: hide instead of destroy, and cancel
     the actual close (pywebview treats a False return as 'don't close')."""
