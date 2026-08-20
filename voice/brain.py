@@ -214,7 +214,7 @@ class Brain:
             system_prompt=self._system,
             model=self._model,
             mcp_servers={"vesper": vesper_tools},
-            allowed_tools=["mcp__vesper__*"],
+            allowed_tools=["mcp__vesper__*", "WebSearch"],
             strict_mcp_config=True,
             setting_sources=["user"],
             include_partial_messages=True,

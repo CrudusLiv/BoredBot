@@ -355,13 +355,28 @@ async def calendar_events() -> JSONResponse:
 @app.get("/cmd/reminders")
 async def reminders_list() -> JSONResponse:
     def _run():
+        import sys
+        sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+        from integrations import gtasks_write  # type: ignore
         try:
-            import sys
-            sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-            from integrations import gtasks_write  # type: ignore
-            return {"reminders": gtasks_write.list_reminders(days=7)}
+            upcoming = gtasks_write.list_reminders(days=7)
         except Exception as exc:
             return {"error": str(exc), "reminders": []}
+        # list_reminders' dueMin floors at start-of-today, so anything
+        # already overdue silently drops out of that window -- merge in
+        # due_reminders() (no lower bound) so overdue items stay visible
+        # here too, not just in the voice nag / notices feed. Best-effort:
+        # if this second call fails, still show what list_reminders found.
+        try:
+            overdue = gtasks_write.due_reminders()
+        except Exception:
+            overdue = []
+        seen = {r["id"] for r in overdue}
+        combined = sorted(
+            overdue + [r for r in upcoming if r["id"] not in seen],
+            key=lambda r: r.get("due") or "",
+        )
+        return {"reminders": combined}
 
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, _run)
