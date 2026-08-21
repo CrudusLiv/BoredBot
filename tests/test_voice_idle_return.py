@@ -148,6 +148,41 @@ def test_context_poll_seconds_clamped(env):
     assert hb._context_poll_seconds == 1
 
 
+# --- sleep/wake wall-clock gap (idle signal freezes across suspend) ---
+
+def test_large_poll_gap_sets_away_since_even_with_fresh_idle(env):
+    """A poll-to-poll wall-clock gap >= threshold (system was asleep) must
+    register as away even though the tick-based idle signal reads ~0 right
+    after wake -- this is the scenario the GetTickCount freeze misses."""
+    hb = make_hb([2.0])
+    before = datetime.now(cfg.get_timezone())
+    hb._check_idle_return(poll_gap_s=1300.0)  # asleep for ~21.7 min
+    after = datetime.now(cfg.get_timezone())
+    assert len(env) == 1
+    assert env[0].startswith("Welcome back — you were away for ")
+    assert hb._away_since is None
+    # away_duration reflects the sleep gap, not the near-zero idle signal
+    assert before - timedelta(seconds=1301) <= hb._last_idle_return_fired <= after
+
+
+def test_small_poll_gap_does_not_trigger_away(env):
+    hb = make_hb([2.0])
+    hb._check_idle_return(poll_gap_s=45.0)  # normal poll cadence
+    assert hb._away_since is None
+    assert env == []
+
+
+def test_poll_gap_keeps_earlier_idle_based_away_since(env):
+    """If idle-based tracking already back-dated away_since further than the
+    gap start, keep the more accurate (earlier) timestamp instead of
+    overwriting it with the later gap-derived one."""
+    hb = make_hb([1300.0, 1400.0])
+    hb._check_idle_return(poll_gap_s=0.0)  # sets away_since via idle path
+    earlier = hb._away_since
+    hb._check_idle_return(poll_gap_s=1300.0)  # gap starts later than `earlier`
+    assert hb._away_since == earlier
+
+
 def test_speak_pushed_on_return(env):
     import queue
     q: "queue.Queue[str]" = queue.Queue()

@@ -2,7 +2,24 @@
 """Boot-check probes: shape, per-probe error isolation, no hard failures."""
 from __future__ import annotations
 
+import pytest
+
 from voice import boot_checks
+
+
+@pytest.fixture(autouse=True)
+def _no_live_llm_probe(monkeypatch):
+    """_llm() calls voice.llm.get_status(), which auto-detects the backend by
+    opening a live socket to localhost (Ollama/LM Studio). In sandboxed or
+    firewalled environments that connect can hang well past its own declared
+    timeout, taking the whole test run down with it -- stub it so boot-check
+    tests never touch the network."""
+    from voice import llm
+
+    monkeypatch.setattr(
+        llm, "get_status",
+        lambda: {"backend": "claude_cli", "model": "sonnet", "available": True},
+    )
 
 
 def test_run_all_returns_one_row_per_probe():

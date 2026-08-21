@@ -335,6 +335,12 @@ class Heartbeat:
         # persists so a restart doesn't immediately re-fire the notice.
         self._away_since: datetime | None = None
 
+        # Wall-clock timestamp of the last _poll_once() call, tracked
+        # unconditionally (even during quiet hours) so a poll-to-poll gap
+        # reflects only "the process wasn't running", never quiet-hours
+        # gating. See _check_idle_return for why this matters.
+        self._last_poll_wallclock: datetime | None = None
+
         # Activity awareness (process-based silence). In-memory only — a
         # restart just re-baselines on the next poll, same as _away_since.
         self._busy: bool = False
@@ -449,6 +455,10 @@ class Heartbeat:
         Idle-return and the scheduled briefings/checks stay gated to
         non-quiet hours, so Vesper still never speaks, toasts, or nudges at
         night."""
+        now = datetime.now(timezone.utc)
+        last_poll = self._last_poll_wallclock
+        self._last_poll_wallclock = now
+        poll_gap_s = (now - last_poll).total_seconds() if last_poll is not None else 0.0
         try:
             self._check_activity()
         except Exception as _e:
@@ -456,7 +466,7 @@ class Heartbeat:
         if self._is_quiet():
             return
         try:
-            self._check_idle_return()
+            self._check_idle_return(poll_gap_s)
         except Exception as _e:
             print(f"[heartbeat] idle check error: {_e}", flush=True)
         # _run_scheduled() is called every fast poll -- each task in
@@ -464,21 +474,36 @@ class Heartbeat:
         # nothing is due yet (see _run_scheduled's docstring).
         self._run_scheduled()
 
-    def _check_idle_return(self) -> None:
+    def _check_idle_return(self, poll_gap_s: float = 0.0) -> None:
         """Away/return state machine, run every fast poll.
 
         Away: idle >= threshold → record _away_since (back-dated to when
         idleness actually started). Return: fresh input (idle < 5 s) while
         away → fire the notice, gated by a persisted cooldown so restarts
-        and rapid re-idles don't spam."""
+        and rapid re-idles don't spam.
+
+        poll_gap_s is the wall-clock time since the previous _poll_once()
+        call. The tick-based idle signal (voice/idle.py, GetTickCount-based)
+        freezes while Windows is suspended, so it under-reports elapsed time
+        across a sleep/wake cycle -- a machine asleep for hours can read as
+        idle_seconds ~= 0 the moment it wakes. A poll-to-poll gap this large
+        can only mean the process itself wasn't running, which sleep is the
+        only realistic cause of, so it's treated as an away period on its
+        own, independent of idle_seconds."""
         from voice import config as cfg
+        conf = cfg.load()
+        now = datetime.now(cfg.get_timezone())
+        threshold_s = float(conf.get("idle_return_threshold_minutes", 20)) * 60
+
+        if poll_gap_s >= threshold_s:
+            gap_start = now - timedelta(seconds=poll_gap_s)
+            if self._away_since is None or self._away_since > gap_start:
+                self._away_since = gap_start
+
         idle_seconds = self._idle_fn()
         if idle_seconds is None:
             return  # signal unavailable this poll
-        conf = cfg.load()
-        now = datetime.now(cfg.get_timezone())
 
-        threshold_s = float(conf.get("idle_return_threshold_minutes", 20)) * 60
         if idle_seconds >= threshold_s:
             if self._away_since is None:
                 self._away_since = now - timedelta(seconds=idle_seconds)

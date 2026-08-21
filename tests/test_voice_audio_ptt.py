@@ -75,13 +75,24 @@ class _FakeStream:
         return self._data, False
 
 
-def _install_fakes(monkeypatch, down_sequence):
-    """down_sequence: bools consumed in call order; sticks on the last
-    value once exhausted so an unexpectedly extra call doesn't IndexError."""
+def _install_fakes(monkeypatch, down_sequence, key_vk=0x20):
+    """down_sequence: bools consumed in call order, but only for key_vk
+    (default VK_SPACE, matching every caller's key="space"). keys.is_down()
+    queries GetAsyncKeyState once for the main key and once per modifier
+    (its exactness check), so a fake that ignored the vk argument and drew
+    every call from one shared queue let the modifier checks silently steal
+    values meant for the main key -- desyncing the script until it exhausted
+    and froze into a permanent "not down" read, hanging record_ptt's
+    wait-for-press loop forever. Any other vk (i.e. every modifier) always
+    reads "up", since none of these tests script a held modifier. Sticks on
+    the last value once exhausted so an unexpectedly extra call doesn't
+    IndexError."""
     calls = iter(down_sequence)
     last = {"v": down_sequence[-1]}
 
     def get_async_key_state(vk):
+        if vk != key_vk:
+            return 0
         try:
             last["v"] = next(calls)
         except StopIteration:
