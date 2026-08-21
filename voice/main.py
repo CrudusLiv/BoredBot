@@ -300,6 +300,18 @@ def _conversation_loop(
 
 
 def run() -> None:
+    # stdout/stderr default to the OS ANSI codepage (cp1252 on this machine)
+    # whenever they aren't attached to a real console -- e.g. piped through
+    # the Task Scheduler launcher's `| ForEach-Object` logger. Notice/email
+    # text routinely contains emoji or smart punctuation, so an unguarded
+    # print() there crashes the process and, worse, leaves the notice
+    # unread -- guaranteeing the exact same crash on every restart.
+    import sys
+    if sys.stdout is not None:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if sys.stderr is not None:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     # Earliest point that can read a persisted API key: llm.get_status() below
     # checks os.environ directly, before Brain (and its own load_env() call)
     # ever runs. Load the data-dir .env here so wizard-persisted keys survive
