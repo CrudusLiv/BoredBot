@@ -37,6 +37,17 @@ from finance import tracker as finance_tracker  # noqa: E402  # type: ignore
 from core import llm as core_llm  # noqa: E402  # type: ignore
 
 
+def _format_duration(total_minutes: int) -> str:
+    """Render a minute count as spoken hours+minutes past 60 (e.g. '1 hour 5 minutes')."""
+    if total_minutes < 60:
+        return f"{total_minutes} minute{'s' if total_minutes != 1 else ''}"
+    hours, mins = divmod(total_minutes, 60)
+    parts = [f"{hours} hour{'s' if hours != 1 else ''}"]
+    if mins:
+        parts.append(f"{mins} minute{'s' if mins != 1 else ''}")
+    return " ".join(parts)
+
+
 def _notices_path() -> Path:
     from voice import config as cfg
     return cfg.get_data_dir() / "voice_notices.jsonl"
@@ -522,7 +533,7 @@ class Heartbeat:
     def _fire_idle_return(self, conf: dict, away_duration: timedelta) -> None:
         if conf.get("idle_return_enabled", True):
             mins = int(away_duration.total_seconds() // 60)
-            parts = [f"Welcome back — you were away for {mins} minute{'s' if mins != 1 else ''}."]
+            parts = [f"Welcome back — you were away for {_format_duration(mins)}."]
             unread = _count_unread()
             if unread:
                 parts.append(f"{unread} notice{'s' if unread != 1 else ''} waiting.")
@@ -1241,7 +1252,7 @@ class Heartbeat:
                     mins = int(delta)
                     text = (
                         f"Heads up — {event.get('summary', 'an event')} starts in "
-                        f"{mins} minute{'s' if mins != 1 else ''}."
+                        f"{_format_duration(mins)}."
                     )
                     self._speak(text)
                     _post(text, level="URGENT")
