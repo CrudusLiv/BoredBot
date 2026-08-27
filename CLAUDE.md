@@ -9,7 +9,7 @@ Vesper is a personal second brain. Two layers live here:
 1. **Voice app** — the primary interface (`voice/`). Three.js orb UI, push-to-talk audio, faster-whisper STT, Chatterbox Turbo TTS (local, GPU-accelerated, voice-cloning capable; falls back to edge-tts), multi-turn brain via the Claude Agent SDK (`ClaudeSDKClient`, same Max-plan OAuth session `claude -p` always used — no API key needed). The voice app also owns the single proactive heartbeat (`voice/heartbeat.py`, a daemon thread inside the running process — calendar, email, deadlines, GitHub PRs, job alerts, build watch). Run with `py -m voice`.
 2. **Claude Code agent system** — `.claude/scripts/`, `.claude/hooks/`, and `.claude/settings.json` are the running agent layer (memory reflection, vector indexing, integrations).
 
-The Discord bot (`chat/discord_bot.py`) is retired — kept for history, not running. The old Discord-routed heartbeat (`.claude/scripts/heartbeat.py`, its `vesper-heartbeat` scheduled task, and the in-thread chat relay `core/thread_chat.py`) is also retired as of this migration — every capability it had now lives in `voice/heartbeat.py`. `core/dashboard.py` + `integrations/discord_webhook.py` are likewise dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today. `voice/mcp_server.py` (the `claude -p` subprocess MCP server) is retired the same way — kept for history, not imported by anything — superseded by `voice/agent_tools.py`.
+The Discord bot and the old Discord-routed heartbeat (with its scheduled task and in-thread chat relay) are retired — every capability they had now lives in `voice/heartbeat.py`. `.claude/scripts/core/dashboard.py` + `.claude/scripts/integrations/discord_webhook.py` still exist but are dormant: the morning digest that was their last live caller went away with the academic removal, so nothing in the running system posts through them today. `voice/mcp_server.py` (the `claude -p` subprocess MCP server) is likewise kept but unused — superseded by `voice/agent_tools.py`.
 
 The personal vault (notes, schedules, finances) lives locally at `Dynamous/Memory/` — gitignored. Each machine keeps its own vault.
 
@@ -105,7 +105,6 @@ Three lifecycle hooks wired in `.claude/settings.json`:
 | `query.py` | Unified CLI dispatcher — routes subcommands to integration handlers |
 | `integrations/_env.py` | Minimal `.env` loader (no python-dotenv) |
 | `integrations/registry.py` | Declares integrations + readiness checks against env vars / credential files |
-| `integrations/integration_template.py` | Copy this when adding a new integration |
 | `memory/db.py` | SQLite schema: `files`, `chunks`, `chunks_fts` (FTS5), `chunks_vec` (sqlite-vec 384-dim) |
 | `memory/chunker.py` | Heading-split → size-cap chunker (~400 tokens, 50-token overlap) |
 | `memory/embeddings.py` | FastEmbed wrapper |
@@ -114,11 +113,10 @@ Three lifecycle hooks wired in `.claude/settings.json`:
 
 ### Adding an integration
 
-1. Copy `integrations/integration_template.py` → `integrations/<name>_int.py`
-2. Implement `handle_query(argv)`
-3. Add an `Integration(...)` entry to `integrations/registry.py`
-4. Add the key to `DISPATCH` in `query.py`
-5. Add required env vars to `.env`
+1. Add `integrations/<name>_int.py` with a `handle_query(argv)` entry point — model it on an existing `*_int.py` (e.g. `github_int.py`)
+2. Add an `Integration(...)` entry to `integrations/registry.py`
+3. Add the key to `DISPATCH` in `query.py`
+4. Add required env vars to `.env`
 
 ### Google OAuth (Gmail + GCal)
 
@@ -129,9 +127,9 @@ Place `google_credentials.json` at `.claude/data/google_credentials.json`. The t
 User settings (quiet hours, feature toggles, heartbeat interval, activity awareness) live in `voice/config.json`, merged over `DEFAULTS` in `voice/config.py` by `config.load()` (an installed `%APPDATA%\Vesper\config.json` wins over the repo copy). Every proactive capability has an independent `*_enabled` flag each heartbeat task checks at the top. Activity awareness adds `activity_awareness_enabled` (opt-in) + `silence_when_running` (list of exe names). There is no `tray_settings.json`.
 
 `ui_render_mode` is `orb` or `face`. The VRM avatar mode was removed — it only
-ever had a placeholder model. The face asset is produced offline by
-`scripts/prep_face_asset.py` (needs `pip install "rembg[cpu]"`); the runtime
-only loads the PNG.
+ever had a placeholder model. The face asset is a pre-processed PNG (background
+matted offline, committed as `voice/static/face/vesper.png`); the runtime only
+loads the PNG.
 
 ## Vault write rules
 

@@ -1,19 +1,18 @@
 ---
 name: note-search
-description: Hybrid semantic + keyword search over CrudusLiv's vault. Use whenever you need to recall something said before, find similar past drafts for voice-matching, or retrieve lecture content.
+description: Hybrid semantic + keyword search over CrudusLiv's vault. Use whenever you need to recall something said before or find similar past drafts for voice-matching.
 ---
 
 # Note Search
 
-Hybrid vector + keyword search over the entire indexed vault — lectures, projects, research, daily logs, sent drafts, and the four core files.
+Hybrid vector + keyword search over the entire indexed vault — research, daily logs, sent drafts, and the four core files.
 
 ## When to invoke
 
 - "Have I noted anything about X?"
 - "Find a similar past reply" — use `--path-prefix drafts/sent` for voice-matching before drafting a new reply.
-- "What did the lecture on Y say?"
-- Before generating any draft (Gmail / Discord / Outlook), check `drafts/sent/` for tone calibration.
-- When a Gmail or Discord context references something you don't recognise — search before asking the user.
+- Before generating any draft (Gmail / Outlook), check `drafts/sent/` for tone calibration.
+- When a Gmail or Outlook context references something you don't recognise — search before asking the user.
 
 ## How
 
@@ -33,7 +32,7 @@ Each result has: `path`, `heading`, `content` (chunk text), `score` (0-1, higher
 
 ## After searching
 
-- **Cite the path** in your reply: "from `lectures/CS101/2026-06-10_pointers.md`". Helps CrudusLiv verify and jump to the source.
+- **Cite the path** in your reply: "from `research/2026-06-10_pointers.md`". Helps CrudusLiv verify and jump to the source.
 - If `--json`, parse the array and reason over the chunks. If plain text, just read the output.
 - If no results, say so plainly: "Nothing in the vault about X." Don't invent.
 
@@ -45,13 +44,13 @@ If CrudusLiv just edited a vault file and the search isn't surfacing the change,
 py .claude/scripts/memory/memory_index.py
 ```
 
-Phase 9 puts this on a 10-minute Task Scheduler trigger. Until then, run manually after big edits.
+The `.claude/scripts/deploy/install_tasks.ps1` deploy step registers a periodic reindex task; if that isn't installed on this machine, run the command manually after big edits.
 
 ## Tuning
 
 - `--top-k 3` for quick lookups; `--top-k 10` when surveying a topic.
 - `--vec-weight 0.7` (default) is the right balance. Push toward `1.0` for purely semantic queries; toward `0.0` for exact-keyword queries.
-- `--path-prefix` to scope: `drafts/sent`, `lectures/CS101`, `daily`, `research`, etc.
+- `--path-prefix` to scope: `drafts/sent`, `daily`, `research`, etc.
 
 ## Don't
 
