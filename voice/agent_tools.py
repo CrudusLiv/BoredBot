@@ -26,6 +26,7 @@ from voice.tools.calendar import (
     create_reminder, upcoming_reminders, complete_reminder,
 )
 from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
+from voice.tools.filesearch import find_files, search_files
 from voice.memory import remember, forget
 from voice.deadlines import complete_deadline
 from voice.safety import requires_confirmation, confirm_with_reason
@@ -213,6 +214,19 @@ def focus_window_tool(name: str) -> str:
     return focus_window(name=name)
 
 
+def find_files_tool(name_glob: str, limit: int = 50) -> str:
+    """Find files by name across the configured search roots. Read-only.
+    Args: name_glob(str, e.g. "*.pdf", "resume*"), limit(int)."""
+    return find_files(name_glob=name_glob, limit=limit)
+
+
+def search_files_tool(query: str, path_glob: str = "*", limit: int = 50) -> str:
+    """Search file contents for a string across the configured search roots.
+    Read-only. Args: query(str), path_glob(str, restrict by filename),
+    limit(int)."""
+    return search_files(query=query, path_glob=path_glob, limit=limit)
+
+
 # ── SDK registration ────────────────────────────────────────────────────────
 # Wrap each sync function above as an async @tool the SDK can call directly
 # in this process. asyncio.to_thread() keeps blocking work (file I/O, Google
@@ -355,6 +369,21 @@ _agent_tools = [
         "focus_window_tool", focus_window_tool.__doc__ or "",
         {"name": str},
         focus_window_tool,
+    ),
+    _sdk_tool(
+        "find_files_tool", find_files_tool.__doc__ or "",
+        {"type": "object", "properties": {
+            "name_glob": {"type": "string"}, "limit": {"type": "integer"},
+        }, "required": ["name_glob"]},
+        find_files_tool,
+    ),
+    _sdk_tool(
+        "search_files_tool", search_files_tool.__doc__ or "",
+        {"type": "object", "properties": {
+            "query": {"type": "string"}, "path_glob": {"type": "string"},
+            "limit": {"type": "integer"},
+        }, "required": ["query"]},
+        search_files_tool,
     ),
     _sdk_tool(
         "log_expense_tool", log_expense_tool.__doc__ or "",

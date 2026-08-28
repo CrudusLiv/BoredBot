@@ -45,6 +45,7 @@ from voice.tools.vault import read_note, append_note, create_note
 from voice.tools.workspace import write_draft, write_scratch
 from voice.tools.calendar import upcoming_events, create_calendar_event, delete_calendar_event, create_reminder, upcoming_reminders
 from voice.tools.pc_control import media_control, set_volume, launch_app, list_windows, focus_window
+from voice.tools.filesearch import find_files, search_files
 from voice.memory import remember, forget
 
 _register("triage_inbox",
@@ -117,3 +118,11 @@ _register("list_windows",
 _register("focus_window",
     "Bring a window to the foreground by matching part of its title. Args: name(str).",
     focus_window)
+_register("find_files",
+    "Find files by name across the configured search roots. "
+    "Args: name_glob(str, e.g. \"*.pdf\", \"resume*\"), limit(int, default 50).",
+    find_files)
+_register("search_files",
+    "Search file contents for a string across the configured search roots. "
+    "Args: query(str), path_glob(str, default \"*\"), limit(int, default 50).",
+    search_files)

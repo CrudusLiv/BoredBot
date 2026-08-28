@@ -73,6 +73,16 @@ DEFAULTS: dict[str, Any] = {
     # {"spotify": "spotify:", "notepad": "notepad.exe"}. Empty by default —
     # opt-in, the user configures which apps voice can launch.
     "pc_control_apps": {},
+    # File search (voice/tools/filesearch.py) — read-only name/content search.
+    # filesearch_roots: [] uses a default set (~/Desktop, ~/Documents,
+    # ~/Downloads, D:\GitHub, D:\University); a non-empty list replaces it
+    # entirely. filesearch_denylist: filename / path-segment globs that are
+    # never scanned or returned, even under an allowed root.
+    "filesearch_roots": [],
+    "filesearch_denylist": [
+        ".env", ".ssh", "*.key", "*.pem", "*.pfx", "id_rsa",
+        "credentials", "*.sqlite", "AppData",
+    ],
     # UI
     "ui_enabled": False,
     "ui_port": 7070,

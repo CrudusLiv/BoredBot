@@ -174,6 +174,29 @@ def test_list_windows_delegates(monkeypatch):
     assert agent_tools.list_windows_tool() == "Notepad\nVesper"
 
 
+def test_find_files_delegates(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(
+        agent_tools, "find_files",
+        lambda name_glob, limit=50: seen.update(name_glob=name_glob, limit=limit) or "OK",
+    )
+    result = agent_tools.find_files_tool(name_glob="*.pdf", limit=10)
+    assert result == "OK"
+    assert seen == {"name_glob": "*.pdf", "limit": 10}
+
+
+def test_search_files_delegates(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(
+        agent_tools, "search_files",
+        lambda query, path_glob="*", limit=50: seen.update(
+            query=query, path_glob=path_glob, limit=limit) or "OK",
+    )
+    result = agent_tools.search_files_tool(query="TODO", path_glob="*.py")
+    assert result == "OK"
+    assert seen == {"query": "TODO", "path_glob": "*.py", "limit": 50}
+
+
 def test_focus_window_delegates(monkeypatch):
     seen = {}
     monkeypatch.setattr(
@@ -200,5 +223,6 @@ def test_vesper_tools_registers_every_sync_tool():
         "media_control_tool", "set_volume_tool", "launch_app_tool",
         "list_windows_tool", "focus_window_tool",
         "log_expense_tool", "log_income_tool",
+        "find_files_tool", "search_files_tool",
     }
     assert registered_names == expected
