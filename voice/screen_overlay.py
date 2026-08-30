@@ -20,6 +20,46 @@ _MARGIN = 24
 _AUTO_FADE_MS = 30_000
 _POLL_MS = 50
 
+_HEIGHT_CAP_FRAC = 0.70
+_LINE_PX = 20
+_CHARS_PER_LINE = 50
+_CHROME_PX = 32
+
+
+def _wrapped_lines(text: str, width: int = _CHARS_PER_LINE) -> list[str]:
+    """Estimate the display lines `text` occupies once word-wrapped in the
+    label. Explicit newlines always break; long runs split every `width`
+    chars. An approximation -- exact metrics need a live Tk font, and this
+    only has to size a glanceable overlay."""
+    out: list[str] = []
+    for paragraph in text.split("\n"):
+        if paragraph == "":
+            out.append("")
+            continue
+        for i in range(0, len(paragraph), width):
+            out.append(paragraph[i:i + width])
+    return out or [""]
+
+
+def _fit_geometry(text: str, screen_h: int) -> tuple[int, int, str]:
+    """Grow the window upward to fit `text`, capped at `_HEIGHT_CAP_FRAC` of
+    the screen. Returns (height, y, shown): height clamped to
+    [_HEIGHT, cap], y placing the bottom edge at the corner margin, and
+    shown trimmed to the newest lines (prefixed '…') when the full text
+    would overflow the cap."""
+    cap = int(screen_h * _HEIGHT_CAP_FRAC)
+    lines = _wrapped_lines(text)
+    needed = len(lines) * _LINE_PX + _CHROME_PX
+    height = min(max(needed, _HEIGHT), cap)
+    capacity = max((height - _CHROME_PX) // _LINE_PX, 1)
+    if len(lines) > capacity:
+        keep = max(capacity - 1, 1)
+        shown = "…\n" + "\n".join(lines[-keep:])
+    else:
+        shown = text
+    y = screen_h - height - _MARGIN
+    return height, y, shown
+
 
 class _OverlayState:
     """Pure hidden -> batching -> analyzing -> showing -> dismissed state
@@ -97,6 +137,7 @@ class ScreenOverlay:
 
         state = _OverlayState()
         fade_job = {"id": None}
+        x = app.winfo_screenwidth() - _WIDTH - _MARGIN
 
         def _cancel_fade() -> None:
             if fade_job["id"] is not None:
@@ -108,7 +149,9 @@ class ScreenOverlay:
             fade_job["id"] = app.after(_AUTO_FADE_MS, state.dismiss)
 
         def _sync() -> None:
-            label.configure(text=state.text)
+            height, y, shown = _fit_geometry(state.text, app.winfo_screenheight())
+            label.configure(text=shown)
+            app.geometry(f"{_WIDTH}x{height}+{x}+{y}")
             if state.visible:
                 app.deiconify()
             else:
