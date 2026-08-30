@@ -25,13 +25,17 @@ from typing import Optional
 PROJECT_DIR = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path(__file__).resolve().parents[3])
 
 
-def _get_service():
-    """Return an authorised Google Tasks v1 client. Lazy import so tests
-    can monkey-patch this without pulling in google-api-python-client."""
+def _get_service(interactive: bool = True):
+    """Return an authorised Google Tasks v1 client, or None when no
+    credentials are available and interactive=False (a background caller
+    that must not block on a consent prompt). Lazy import so tests can
+    monkey-patch this without pulling in google-api-python-client."""
     sys.path.insert(0, str(PROJECT_DIR / ".claude" / "scripts" / "integrations"))
     from google_auth import get_credentials  # type: ignore
     from googleapiclient.discovery import build  # type: ignore
-    creds = get_credentials()
+    creds = get_credentials(interactive=interactive)
+    if not creds:
+        return None
     return build("tasks", "v1", credentials=creds, cache_discovery=False)
 
 
@@ -60,7 +64,8 @@ def create_reminder(
     return created.get("id")
 
 
-def list_reminders(days: int = 7, tasklist: str = "@default") -> list[dict]:
+def list_reminders(days: int = 7, tasklist: str = "@default",
+                   interactive: bool = True) -> list[dict]:
     """List uncompleted reminders due within the next `days` days on
     `tasklist`, sorted by due date. Returns
     [{"id", "title", "due", "notes"}, ...].
@@ -72,7 +77,9 @@ def list_reminders(days: int = 7, tasklist: str = "@default") -> list[dict]:
     day -- a same-day reminder's due timestamp is technically already in
     the past, and the Tasks API's dueMin filter would silently drop it for
     the rest of the day."""
-    service = _get_service()
+    service = _get_service(interactive=interactive)
+    if service is None:
+        return []
     now = datetime.now(timezone.utc)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     later = start_of_day + timedelta(days=days)
@@ -95,7 +102,7 @@ def list_reminders(days: int = 7, tasklist: str = "@default") -> list[dict]:
     return out
 
 
-def due_reminders(tasklist: str = "@default") -> list[dict]:
+def due_reminders(tasklist: str = "@default", interactive: bool = True) -> list[dict]:
     """List uncompleted reminders already at or past their due date --
     unlike list_reminders()'s rolling upcoming-days window, this has no
     lower bound, so overdue reminders (however old) are always included.
@@ -108,7 +115,9 @@ def due_reminders(tasklist: str = "@default") -> list[dict]:
     see create_reminder above) is excluded for the entire day it's due --
     dueMax has to reach into the next UTC day before the API includes it.
     Mirrors list_reminders()'s dueMin-flooring fix for the same reason."""
-    service = _get_service()
+    service = _get_service(interactive=interactive)
+    if service is None:
+        return []
     now = datetime.now(timezone.utc)
     tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     resp = service.tasks().list(

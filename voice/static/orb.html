@@ -1314,6 +1314,14 @@ body.mini > *:not(canvas) { display: none !important; }
   </div>
 
   <div id="ptab-calendar" class="ptab-content">
+    <div class="mod-card" id="google-reconnect-card" style="display:none">
+      <div class="mod-card-head">
+        <div class="panel-row-label">Google sign-in</div>
+      </div>
+      <div class="mod-card-body">
+        <div id="google-reconnect-list"></div>
+      </div>
+    </div>
     <div class="mod-card">
       <div class="mod-card-head">
         <div class="panel-row-label">Upcoming</div>
@@ -2596,7 +2604,56 @@ vfetch('/cmd/usage').then(r => r.json()).then(d => {
 })();
 
 // ── Calendar ───────────────────────────────────────────────────────────────
+
+// Show a "Reconnect" button per Google account whose cached sign-in has
+// gone dead (test-mode refresh tokens expire ~weekly). The button runs
+// Google's consent flow, which opens a browser window on the machine
+// running Vesper.
+async function refreshGoogleAuth() {
+  const card = document.getElementById('google-reconnect-card');
+  const list = document.getElementById('google-reconnect-list');
+  if (!card || !list) return;
+  let accounts = [];
+  try {
+    const d = await (await vfetch('/cmd/google/status')).json();
+    accounts = d.accounts || [];
+  } catch (_) { card.style.display = 'none'; return; }
+  const broken = accounts.filter(a => a.needs_reconnect);
+  if (!broken.length) { card.style.display = 'none'; list.innerHTML = ''; return; }
+  list.innerHTML = '';
+  broken.forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'cal-event';
+    row.innerHTML = `<span class="cal-event-title">${escHtml(a.account)} — ${escHtml(a.detail || 'expired')}</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'pill-btn';
+    btn.textContent = 'Reconnect ' + a.account;
+    btn.addEventListener('click', () => reconnectGoogle(a.account, btn));
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+  card.style.display = '';
+}
+
+async function reconnectGoogle(account, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'opening browser…';
+  try {
+    const d = await (await vfetch('/cmd/google/reconnect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account }),
+    })).json();
+    if (d.ok) { loadCalendar(); return; }
+    btn.textContent = 'failed — retry';
+  } catch (_) {
+    btn.textContent = 'failed — retry';
+  }
+  btn.disabled = false;
+}
+
 async function loadCalendar() {
+  refreshGoogleAuth();
   const list = document.getElementById('calendar-list');
   if (!list) return;
   list.innerHTML = '<div class="notices-empty">one moment…</div>';

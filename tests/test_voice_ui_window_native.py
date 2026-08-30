@@ -69,7 +69,7 @@ def test_start_marks_available_and_starts_webview_on_success(monkeypatch):
     # since _create_window() no longer passes hidden=True.
     start_calls = []
     fake_window = SimpleNamespace()
-    fake_webview = SimpleNamespace(start=lambda: start_calls.append(True))
+    fake_webview = SimpleNamespace(start=lambda **kw: start_calls.append(kw))
 
     monkeypatch.setattr(
         ui_window, "_create_window", lambda port, token: (fake_window, fake_webview)
@@ -77,7 +77,10 @@ def test_start_marks_available_and_starts_webview_on_success(monkeypatch):
     ui_window.start(7070, "tok")
     assert ui_window.is_available() is True
     assert ui_window._window is fake_window
-    assert start_calls == [True]
+    assert len(start_calls) == 1
+    # persistent WebView2 profile, not the default throwaway one
+    assert start_calls[0]["private_mode"] is False
+    assert start_calls[0]["storage_path"]
 
 
 # ── Mini speaking-popup window ──────────────────────────────────────────────
@@ -172,7 +175,7 @@ def test_start_creates_mini_window_and_survives_its_failure(monkeypatch):
     docstring posture for native-window failures)."""
     fake_window = SimpleNamespace()
     start_calls = []
-    fake_webview = SimpleNamespace(start=lambda: start_calls.append(True))
+    fake_webview = SimpleNamespace(start=lambda **kw: start_calls.append(kw))
     monkeypatch.setattr(ui_window, "_create_window", lambda port, token: (fake_window, fake_webview))
     monkeypatch.setattr(
         ui_window, "_create_mini_window",
@@ -183,13 +186,13 @@ def test_start_creates_mini_window_and_survives_its_failure(monkeypatch):
 
     assert ui_window.is_available() is True
     assert ui_window._mini_available is False
-    assert start_calls == [True]
+    assert len(start_calls) == 1
 
 
 def test_start_creates_mini_window_on_success(monkeypatch):
     fake_window = SimpleNamespace()
     fake_mini = SimpleNamespace()
-    fake_webview = SimpleNamespace(start=lambda: None)
+    fake_webview = SimpleNamespace(start=lambda **kw: None)
     monkeypatch.setattr(ui_window, "_create_window", lambda port, token: (fake_window, fake_webview))
     monkeypatch.setattr(ui_window, "_create_mini_window", lambda webview_mod, port, token: fake_mini)
 

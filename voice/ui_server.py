@@ -383,6 +383,49 @@ async def reminders_list() -> JSONResponse:
     return JSONResponse(result)
 
 
+# ── Google auth: status + reconnect ─────────────────────────────────────────
+# Backs the orb Calendar tab's per-account "Reconnect" card. status is
+# inspection only (never opens a browser); reconnect runs Google's consent
+# flow, which pops a browser window on THIS machine and blocks until done.
+
+def _google_auth_module():
+    import sys
+    sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+    from integrations import google_auth  # type: ignore
+    return google_auth
+
+
+@app.get("/cmd/google/status")
+async def google_auth_status() -> JSONResponse:
+    def _run():
+        try:
+            ga = _google_auth_module()
+            return {"accounts": [ga.account_status(a) for a in ga.list_accounts()]}
+        except Exception as exc:
+            return {"error": str(exc), "accounts": []}
+
+    loop = asyncio.get_event_loop()
+    return JSONResponse(await loop.run_in_executor(None, _run))
+
+
+class _GoogleReconnect(BaseModel):
+    account: str = "primary"
+
+
+@app.post("/cmd/google/reconnect", dependencies=[Depends(_require_token)])
+async def google_auth_reconnect(body: _GoogleReconnect) -> JSONResponse:
+    label = None if body.account == "primary" else body.account
+
+    def _run():
+        try:
+            return _google_auth_module().reauth(label)
+        except Exception as exc:
+            return {"ok": False, "account": body.account, "error": str(exc)}
+
+    loop = asyncio.get_event_loop()
+    return JSONResponse(await loop.run_in_executor(None, _run))
+
+
 # ── Tasks / Deadlines ─────────────────────────────────────────────────────────
 
 @app.get("/cmd/tasks")

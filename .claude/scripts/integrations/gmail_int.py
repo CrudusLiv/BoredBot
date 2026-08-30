@@ -14,8 +14,8 @@ from google_auth import get_credentials  # noqa: E402
 from _html_text import html_to_text as _html_to_text  # noqa: E402
 
 
-def _service(account: str | None = None):
-    creds = get_credentials(account=account)
+def _service(account: str | None = None, interactive: bool = True):
+    creds = get_credentials(account=account, interactive=interactive)
     if not creds:
         return None
     try:
@@ -26,8 +26,9 @@ def _service(account: str | None = None):
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
-def list_recent(days: int = 7, max_results: int = 30, account: str | None = None) -> list[dict]:
-    svc = _service(account)
+def list_recent(days: int = 7, max_results: int = 30, account: str | None = None,
+                interactive: bool = True) -> list[dict]:
+    svc = _service(account, interactive=interactive)
     if not svc:
         return []
     try:

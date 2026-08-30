@@ -281,6 +281,7 @@ class Heartbeat:
         ("build_watch", "_check_build_watch", 30, None),
         ("vault_daily_rollup", "_check_vault_daily_rollup", 30, None),
         ("reminder_nags", "_check_reminder_nags", 15, None),
+        ("google_auth", "_check_google_auth", 30, None),
     ]
 
     # Each task's own opt-out flag, for the status panel's enabled/disabled
@@ -300,6 +301,7 @@ class Heartbeat:
         "build_watch": "build_watch_enabled",
         "vault_daily_rollup": "vault_rollup_enabled",
         "reminder_nags": "reminder_nag_enabled",
+        "google_auth": "google_auth_check_enabled",
     }
 
     # Tasks that actually fire once/day at a configured time-of-day, rather
@@ -386,6 +388,11 @@ class Heartbeat:
         self._last_test_ok: bool | None = state.get("last_test_ok")
         self._last_workflow_conclusion: str | None = state.get("last_workflow_conclusion")
 
+        # Google-auth expiry nag: label -> ISO datetime last notified, so a
+        # dead sign-in re-nags at most once per 24h and a restart doesn't
+        # re-fire it. Cleared per-label once the account reconnects.
+        self._google_auth_notified: dict[str, str] = dict(state.get("google_auth_notified", {}))
+
     @staticmethod
     def _state_path() -> Path:
         from voice import config as cfg
@@ -413,6 +420,7 @@ class Heartbeat:
             "build_watch_date": str(self._build_watch_done_date) if self._build_watch_done_date else None,
             "last_test_ok": self._last_test_ok,
             "last_workflow_conclusion": self._last_workflow_conclusion,
+            "google_auth_notified": self._google_auth_notified,
         }
         try:
             p = self._state_path()
@@ -665,6 +673,48 @@ class Heartbeat:
         if len(self._seen_pr_event_ids) > 500:
             self._seen_pr_event_ids = self._seen_pr_event_ids[-500:]
         self._save_state()
+
+    def _check_google_auth(self) -> None:
+        """Notice when a Google account's cached sign-in has gone dead
+        (test-mode refresh tokens expire ~weekly). One URGENT notice when
+        it breaks, then no more than once per 24h until it's reconnected
+        via the orb's Calendar tab. Inspection only -- account_status()
+        never opens a browser."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("google_auth_check_enabled", True):
+            return
+        _sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
+        try:
+            from integrations import google_auth  # type: ignore
+        except Exception as _e:
+            print(f"[heartbeat] google_auth check error: {_e}", flush=True)
+            return
+
+        now = datetime.now(cfg.get_timezone())
+        renag = timedelta(hours=24)
+        changed = False
+        for account in google_auth.list_accounts():
+            label = account or "primary"
+            try:
+                status = google_auth.account_status(account)
+            except Exception as _e:
+                print(f"[heartbeat] google_auth status({label}) error: {_e}", flush=True)
+                continue
+            if status.get("needs_reconnect"):
+                last = _parse_dt(self._google_auth_notified.get(label))
+                if last is None or now - last >= renag:
+                    _post(
+                        f"Google sign-in for {label} expired -- reconnect in the Calendar tab.",
+                        level="URGENT",
+                    )
+                    self._google_auth_notified[label] = now.isoformat()
+                    changed = True
+            elif label in self._google_auth_notified:
+                del self._google_auth_notified[label]
+                changed = True
+        if changed:
+            self._save_state()
 
     def _check_urgent_email(self) -> None:
         """Speak only when a genuinely new urgent-flagged email appears

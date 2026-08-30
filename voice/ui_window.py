@@ -82,7 +82,14 @@ def start(port: int, token: str) -> None:
     except Exception:
         logger.exception("[ui_window] mini speaking-popup window unavailable")
 
-    webview_mod.start()
+    # private_mode defaults to True, which hands WebView2 a throwaway
+    # user-data folder every launch -- so the orb's microphone permission
+    # grant is wiped and re-prompted on each start. Pin a persistent
+    # profile dir so the grant sticks.
+    from voice import config as cfg
+    storage_path = cfg.get_data_dir() / "webview2"
+    storage_path.mkdir(parents=True, exist_ok=True)
+    webview_mod.start(private_mode=False, storage_path=str(storage_path))
 
 
 def show_mini() -> None:

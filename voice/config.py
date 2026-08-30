@@ -170,6 +170,10 @@ DEFAULTS: dict[str, Any] = {
     # interval-based raw-count announcement)
     "urgent_email_enabled": True,
     "urgent_email_lookback_days": 1,
+    # Google-auth expiry watch: notice when a Google account's cached
+    # sign-in dies (test-mode refresh tokens expire ~weekly), re-nagged
+    # once/day until reconnected from the orb Calendar tab.
+    "google_auth_check_enabled": True,
     # Reminder nags: repeat a spoken reminder every reminder_nag_interval_minutes
     # for every due-or-overdue Google Tasks reminder until it's marked done
     # (voice: "mark <title> done", or complete_reminder_tool).

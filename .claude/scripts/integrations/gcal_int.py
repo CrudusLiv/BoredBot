@@ -12,8 +12,8 @@ from google_auth import get_credentials  # noqa: E402
 from core import gcal_sync  # noqa: E402
 
 
-def _service():
-    creds = get_credentials()
+def _service(interactive: bool = True):
+    creds = get_credentials(interactive=interactive)
     if not creds:
         return None
     try:
@@ -24,8 +24,9 @@ def _service():
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
 
-def upcoming(days: int = 14, max_results: int = 50, days_back: int = 0) -> list[dict]:
-    svc = _service()
+def upcoming(days: int = 14, max_results: int = 50, days_back: int = 0,
+             interactive: bool = True) -> list[dict]:
+    svc = _service(interactive=interactive)
     if not svc:
         return []
     now = datetime.now(timezone.utc)
