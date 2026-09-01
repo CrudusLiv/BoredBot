@@ -349,6 +349,41 @@
   .cal-event-time { font-size: 10px; color: #404080; display: block; margin-bottom: 3px; }
   .cal-event-title { color: #a0a0cc; }
 
+  /* ── Calendar grid (month / week) ────────────────── */
+  .cal-period { font-size: var(--fs-xs); color: var(--text-dim); text-align: center;
+    margin-bottom: 8px; letter-spacing: .04em; }
+  .cal-grid-month, .cal-grid-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-dow { font-size: var(--fs-2xs); color: var(--text-faint); text-align: center;
+    padding: 2px 0 4px; text-transform: uppercase; letter-spacing: .08em; }
+  .cal-cell { min-height: 78px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm);
+    padding: 4px 5px; cursor: pointer; border: 1px solid transparent; overflow: hidden; }
+  .cal-cell:hover { border-color: var(--line-dim); }
+  .cal-cell.dim { opacity: .4; }
+  .cal-cell.today { border-color: var(--core); }
+  .cal-cell.sel { border-color: var(--accent); }
+  .cal-cell-num { font-size: var(--fs-2xs); color: var(--text-dim); display: block; margin-bottom: 3px; }
+  .cal-cell.today .cal-cell-num { color: var(--text); }
+  .cal-chip { font-size: var(--fs-2xs); line-height: 1.4; color: var(--text); background: var(--core-dim);
+    border-radius: 3px; padding: 1px 4px; margin-bottom: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .cal-chip.allday { background: rgba(200, 230, 76, 0.14); }
+  .cal-more { font-size: var(--fs-2xs); color: var(--text-faint); padding-left: 4px; }
+  .cal-wcol { min-height: 120px; background: rgba(255,255,255,0.02); border-radius: var(--radius-sm);
+    padding: 5px; cursor: pointer; border: 1px solid transparent; }
+  .cal-wcol:hover { border-color: var(--line-dim); }
+  .cal-wcol.today { border-color: var(--core); }
+  .cal-wcol.sel { border-color: var(--accent); }
+  .cal-wcol-head { font-size: var(--fs-2xs); color: var(--text-faint); text-align: center; margin-bottom: 4px; }
+  .cal-wcol-head b { display: block; color: var(--text-dim); font-size: var(--fs-xs); }
+  .cal-wcol.today .cal-wcol-head b { color: var(--text); }
+  .cal-wchip { font-size: var(--fs-2xs); line-height: 1.4; color: var(--text); background: var(--core-dim);
+    border-radius: 3px; padding: 1px 4px; margin-bottom: 2px; }
+  .cal-daydetail { margin-top: 10px; padding: 9px 11px; background: rgba(255,255,255,0.02);
+    border-radius: var(--radius-sm); border-left: 2px solid var(--accent); }
+  .cal-daydetail h4 { font-size: var(--fs-xs); color: var(--text); margin: 0 0 5px; }
+  .cal-daydetail .row { font-size: var(--fs-2xs); color: var(--text-dim); margin-bottom: 3px; }
+  .cal-daydetail .row b { color: var(--text); }
+
   /* ── Settings panel ─────────────────────────────── */
   .settings-field-label {
     font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
@@ -1320,6 +1355,22 @@ body.mini > *:not(canvas) { display: none !important; }
       </div>
       <div class="mod-card-body">
         <div id="google-reconnect-list"></div>
+      </div>
+    </div>
+    <div class="mod-card">
+      <div class="mod-card-head">
+        <div class="panel-row-label">Calendar</div>
+        <div class="mod-card-actions">
+          <button class="pill-btn" id="cal-view-toggle">Month</button>
+          <button class="pill-btn" id="cal-prev" aria-label="previous">&lsaquo;</button>
+          <button class="pill-btn" id="cal-today">today</button>
+          <button class="pill-btn" id="cal-next" aria-label="next">&rsaquo;</button>
+        </div>
+      </div>
+      <div class="mod-card-body">
+        <div id="cal-period" class="cal-period"></div>
+        <div id="cal-grid"></div>
+        <div id="cal-daydetail" hidden></div>
       </div>
     </div>
     <div class="mod-card">
@@ -2652,8 +2703,204 @@ async function reconnectGoogle(account, btn) {
   btn.disabled = false;
 }
 
+// Calendar starts arrive as 'YYYY-MM-DD' (all-day) or a full RFC3339
+// datetime with offset (timed). Render both as readable local text.
+function fmtCalStart(start) {
+  if (!start) return '';
+  const s = String(start);
+  if (!s.includes('T')) {
+    const [y, m, d] = s.split('-').map(Number);
+    if (!y || !m || !d) return s;
+    return new Date(y, m - 1, d).toLocaleDateString([], {
+      weekday: 'short', month: 'short', day: 'numeric',
+    });
+  }
+  const dt = new Date(s);
+  if (isNaN(dt)) return s;
+  return dt.toLocaleString([], {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
+}
+
+// ── Calendar grid: month / week view over /cmd/calendar ───────────────────
+const calState = { view: 'month', anchor: new Date(), sel: null, events: [] };
+
+function calPad2(n) { return String(n).padStart(2, '0'); }
+function calDateKey(d) { return `${d.getFullYear()}-${calPad2(d.getMonth() + 1)}-${calPad2(d.getDate())}`; }
+function calMondayIdx(d) { return (d.getDay() + 6) % 7; }
+
+function calGridDays(view, anchor) {
+  const out = [];
+  if (view === 'week') {
+    const s = new Date(anchor); s.setDate(s.getDate() - calMondayIdx(s));
+    for (let i = 0; i < 7; i++) { const d = new Date(s); d.setDate(d.getDate() + i); out.push(d); }
+    return out;
+  }
+  const f = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  f.setDate(f.getDate() - calMondayIdx(f));
+  for (let i = 0; i < 42; i++) { const d = new Date(f); d.setDate(d.getDate() + i); out.push(d); }
+  return out;
+}
+
+// /cmd/calendar takes days_back/days relative to now; widen the window to
+// span whatever grid the current view+anchor needs, plus a day of slack.
+function calWindow(view, anchor) {
+  const days = calGridDays(view, anchor);
+  const first = days[0], last = days[days.length - 1];
+  const DAY = 86400000;
+  const now = new Date();
+  const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return {
+    days_back: Math.max(0, Math.ceil((mid - first) / DAY) + 1),
+    days: Math.max(1, Math.ceil((last - mid) / DAY) + 2),
+  };
+}
+
+function calStartParts(start) {
+  const s = String(start || '');
+  if (!s) return { dateKey: '', hm: null };
+  if (!s.includes('T')) return { dateKey: s.slice(0, 10), hm: null };
+  const dt = new Date(s);
+  if (isNaN(dt)) return { dateKey: s.slice(0, 10), hm: null };
+  return { dateKey: calDateKey(dt), hm: `${calPad2(dt.getHours())}:${calPad2(dt.getMinutes())}` };
+}
+
+function calBucket(events) {
+  const by = {};
+  (events || []).forEach(ev => {
+    const p = calStartParts(ev.start || ev.date || '');
+    if (!p.dateKey) return;
+    (by[p.dateKey] = by[p.dateKey] || []).push(Object.assign({ _hm: p.hm }, ev));
+  });
+  Object.values(by).forEach(list => list.sort((a, b) => (a._hm || '').localeCompare(b._hm || '')));
+  return by;
+}
+
+function calPeriodLabel() {
+  const a = calState.anchor;
+  if (calState.view === 'week') {
+    const d = calGridDays('week', a), f = d[0], l = d[6];
+    const mo = x => x.toLocaleDateString([], { month: 'short' });
+    return `${mo(f)} ${f.getDate()} – ${mo(l)} ${l.getDate()}, ${l.getFullYear()}`;
+  }
+  return a.toLocaleDateString([], { month: 'long', year: 'numeric' });
+}
+
+function renderCalGrid() {
+  const host = document.getElementById('cal-grid');
+  if (!host) return;
+  const label = document.getElementById('cal-period');
+  if (label) label.textContent = calPeriodLabel();
+  const tog = document.getElementById('cal-view-toggle');
+  if (tog) tog.textContent = calState.view === 'month' ? 'Month' : 'Week';
+
+  const by = calBucket(calState.events);
+  const todayKey = calDateKey(new Date());
+  const days = calGridDays(calState.view, calState.anchor);
+  host.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = calState.view === 'month' ? 'cal-grid-month' : 'cal-grid-week';
+
+  if (calState.view === 'month') {
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(n => {
+      const h = document.createElement('div'); h.className = 'cal-dow'; h.textContent = n; grid.appendChild(h);
+    });
+    const mon = calState.anchor.getMonth();
+    days.forEach(d => {
+      const key = calDateKey(d);
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell' + (d.getMonth() !== mon ? ' dim' : '')
+        + (key === todayKey ? ' today' : '') + (key === calState.sel ? ' sel' : '');
+      const evs = by[key] || [];
+      let html = `<span class="cal-cell-num">${d.getDate()}</span>`;
+      evs.slice(0, 3).forEach(ev => {
+        html += `<div class="cal-chip${ev._hm ? '' : ' allday'}">`
+          + escHtml((ev._hm ? ev._hm + ' ' : '') + (ev.summary || '')) + '</div>';
+      });
+      if (evs.length > 3) html += `<div class="cal-more">+${evs.length - 3}</div>`;
+      cell.innerHTML = html;
+      cell.addEventListener('click', () => selectCalDay(key));
+      grid.appendChild(cell);
+    });
+  } else {
+    days.forEach(d => {
+      const key = calDateKey(d);
+      const col = document.createElement('div');
+      col.className = 'cal-wcol' + (key === todayKey ? ' today' : '') + (key === calState.sel ? ' sel' : '');
+      let html = `<div class="cal-wcol-head">${d.toLocaleDateString([], { weekday: 'short' })}<b>${d.getDate()}</b></div>`;
+      (by[key] || []).forEach(ev => {
+        html += '<div class="cal-wchip">'
+          + escHtml((ev._hm ? ev._hm + ' ' : '') + (ev.summary || '')) + '</div>';
+      });
+      col.innerHTML = html;
+      col.addEventListener('click', () => selectCalDay(key));
+      grid.appendChild(col);
+    });
+  }
+  host.appendChild(grid);
+  renderCalDayDetail();
+}
+
+function selectCalDay(key) {
+  calState.sel = (calState.sel === key) ? null : key;
+  renderCalGrid();
+}
+
+function renderCalDayDetail() {
+  const box = document.getElementById('cal-daydetail');
+  if (!box) return;
+  if (!calState.sel) { box.hidden = true; box.innerHTML = ''; return; }
+  const evs = calBucket(calState.events)[calState.sel] || [];
+  const d = new Date(calState.sel + 'T00:00:00');
+  let html = `<div class="cal-daydetail"><h4>`
+    + escHtml(d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })) + '</h4>';
+  if (!evs.length) html += '<div class="row">Nothing scheduled.</div>';
+  evs.forEach(ev => {
+    const time = ev._hm ? `<b>${ev._hm}</b> ` : '<b>all day</b> ';
+    const loc = ev.location ? ' · ' + escHtml(ev.location) : '';
+    html += `<div class="row">${time}${escHtml(ev.summary || '(no title)')}${loc}</div>`;
+  });
+  box.innerHTML = html + '</div>';
+  box.hidden = false;
+}
+
+async function loadCalendarGrid() {
+  const host = document.getElementById('cal-grid');
+  if (!host) return;
+  const w = calWindow(calState.view, calState.anchor);
+  try {
+    const r = await vfetch(`/cmd/calendar?days_back=${w.days_back}&days=${w.days}`);
+    const d = await r.json();
+    if (errText(d)) { host.innerHTML = paneErr(errText(d), 'Calendar won\'t answer.'); return; }
+    calState.events = d.events || [];
+    renderCalGrid();
+  } catch (_) {
+    host.innerHTML = paneErr(null, 'Calendar\'s offline. Try later.');
+  }
+}
+
+function calShift(dir) {
+  const a = new Date(calState.anchor);
+  if (calState.view === 'week') a.setDate(a.getDate() + dir * 7);
+  else a.setMonth(a.getMonth() + dir);
+  calState.anchor = a;
+  loadCalendarGrid();
+}
+
+document.getElementById('cal-view-toggle')?.addEventListener('click', () => {
+  calState.view = calState.view === 'month' ? 'week' : 'month';
+  loadCalendarGrid();
+});
+document.getElementById('cal-prev')?.addEventListener('click', () => calShift(-1));
+document.getElementById('cal-next')?.addEventListener('click', () => calShift(1));
+document.getElementById('cal-today')?.addEventListener('click', () => {
+  calState.anchor = new Date(); calState.sel = null; loadCalendarGrid();
+});
+
 async function loadCalendar() {
   refreshGoogleAuth();
+  loadCalendarGrid();
   const list = document.getElementById('calendar-list');
   if (!list) return;
   list.innerHTML = '<div class="notices-empty">one moment…</div>';
@@ -2669,7 +2916,7 @@ async function loadCalendar() {
       div.className = 'cal-event';
       const title = ev.summary || ev.title || ev.name || '(no title)';
       const start = ev.start || ev.date || ev.datetime || '';
-      div.innerHTML = `<span class="cal-event-time">${escHtml(String(start))}</span><span class="cal-event-title">${escHtml(title)}</span>`;
+      div.innerHTML = `<span class="cal-event-time">${escHtml(fmtCalStart(start))}</span><span class="cal-event-title">${escHtml(title)}</span>`;
       list.appendChild(div);
     });
   } catch (_) {

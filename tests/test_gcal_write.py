@@ -57,6 +57,76 @@ def test_create_event_inserts_when_no_duplicate(monkeypatch):
     assert body["description"] == "hello"
 
 
+def test_create_event_timed_uses_datetime_not_all_day(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.create_event("BIT216", "2026-08-24", start_time="12:00", end_time="14:00")
+    body = service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["start"] == {"dateTime": "2026-08-24T12:00:00", "timeZone": "Asia/Kuala_Lumpur"}
+    assert body["end"] == {"dateTime": "2026-08-24T14:00:00", "timeZone": "Asia/Kuala_Lumpur"}
+    assert "date" not in body["start"]
+
+
+def test_create_event_timezone_override(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.create_event("X", "2026-08-24", start_time="09:00", end_time="10:00", timezone="UTC")
+    body = service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["start"]["timeZone"] == "UTC"
+
+
+def test_create_event_timed_requires_end_time(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    with pytest.raises(ValueError, match="end_time"):
+        m.create_event("X", "2026-08-24", start_time="12:00")
+
+
+def test_create_event_weekly_recurrence_adds_rrule(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.create_event("BIT216", "2026-08-24", start_time="12:00", end_time="14:00",
+                   recur_until="2026-11-27")
+    body = service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["recurrence"] == ["RRULE:FREQ=WEEKLY;UNTIL=20261127T235959Z"]
+
+
+def test_create_event_location_passes_through(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.create_event("BIT216", "2026-08-24", start_time="12:00", end_time="14:00",
+                   location="FLH 2.7")
+    body = service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["location"] == "FLH 2.7"
+
+
+def test_create_event_all_day_has_no_recurrence_or_timezone(monkeypatch):
+    m = _import_module()
+    service = _stub_service([])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    m.create_event("Plain deadline", "2026-08-24")
+    body = service.events.return_value.insert.call_args.kwargs["body"]
+    assert body["start"] == {"date": "2026-08-24"}
+    assert "recurrence" not in body
+    assert "timeZone" not in body["start"]
+
+
+def test_create_event_timed_dedup_against_existing_datetime(monkeypatch):
+    m = _import_module()
+    service = _stub_service([
+        {"summary": "BIT216", "start": {"dateTime": "2026-08-24T12:00:00+08:00"}},
+    ])
+    monkeypatch.setattr(m, "_get_service", lambda: service)
+    result = m.create_event("BIT216", "2026-08-24", start_time="12:00", end_time="14:00")
+    assert result is None
+    service.events.return_value.insert.assert_not_called()
+
+
 def test_parse_gcal_tag_simple():
     m = _import_module()
     matches = m.parse_gcal_tags("gcal: 2026-06-10 | DIP209 capstone deadline")

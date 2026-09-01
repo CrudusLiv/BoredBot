@@ -1,7 +1,9 @@
 """Google Calendar push + delete.
 
 Public API:
-    create_event(title, date, description="", calendar_id="primary") -> event_id | None
+    create_event(title, date, description="", calendar_id="primary", *,
+                 start_time=None, end_time=None, timezone="Asia/Kuala_Lumpur",
+                 location=None, recur_until=None) -> event_id | None
     delete_event(title, date, calendar_id="primary") -> event_id | None
     parse_gcal_tags(text) -> list[(date, title)]
     parse_deadlines_md(text) -> list[(date, title)]
@@ -43,19 +45,33 @@ def create_event(
     date: str,
     description: str = "",
     calendar_id: str = "primary",
+    *,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    timezone: str = "Asia/Kuala_Lumpur",
+    location: Optional[str] = None,
+    recur_until: Optional[str] = None,
 ) -> Optional[str]:
-    """Create an all-day event on `date` (YYYY-MM-DD) with `title`.
+    """Create an event on `date` (YYYY-MM-DD) with `title`.
+
+    Default is an all-day event. Pass `start_time`/`end_time` ("HH:MM", both
+    required together) for a timed event in `timezone`. Pass `recur_until`
+    (YYYY-MM-DD) to repeat weekly from `date` through that date inclusive.
+    `location` sets the event location.
+
     Returns the event ID, or None if a duplicate (case-insensitive title +
-    same date) already exists on the calendar."""
+    same start date) already exists on the calendar."""
+    if start_time is not None and end_time is None:
+        raise ValueError("end_time is required when start_time is given")
+
     service = _get_service()
-    start = date
-    end = (date_cls.fromisoformat(date) + timedelta(days=1)).isoformat()
+    next_day = (date_cls.fromisoformat(date) + timedelta(days=1)).isoformat()
 
     # Dedup query: list events touching this date and check titles.
     existing = service.events().list(
         calendarId=calendar_id,
         timeMin=f"{date}T00:00:00Z",
-        timeMax=f"{end}T00:00:00Z",
+        timeMax=f"{next_day}T00:00:00Z",
         singleEvents=True,
     ).execute()
     title_norm = title.strip().lower()
@@ -65,12 +81,26 @@ def create_event(
         if ev_title == title_norm and ev_start == date:
             return None
 
-    body = {
-        "summary": title,
-        "description": description,
-        "start": {"date": start},
-        "end": {"date": end},
-    }
+    if start_time is not None:
+        body = {
+            "summary": title,
+            "description": description,
+            "start": {"dateTime": f"{date}T{start_time}:00", "timeZone": timezone},
+            "end": {"dateTime": f"{date}T{end_time}:00", "timeZone": timezone},
+        }
+    else:
+        body = {
+            "summary": title,
+            "description": description,
+            "start": {"date": date},
+            "end": {"date": next_day},
+        }
+    if location:
+        body["location"] = location
+    if recur_until:
+        until = recur_until.replace("-", "")
+        body["recurrence"] = [f"RRULE:FREQ=WEEKLY;UNTIL={until}T235959Z"]
+
     created = service.events().insert(calendarId=calendar_id, body=body).execute()
     return created.get("id")
 

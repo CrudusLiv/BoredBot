@@ -337,13 +337,16 @@ async def jobs_draft(body: _JobDraft) -> JSONResponse:
 # ── Calendar ─────────────────────────────────────────────────────────────────
 
 @app.get("/cmd/calendar")
-async def calendar_events() -> JSONResponse:
+async def calendar_events(days: int = 7, days_back: int = 0) -> JSONResponse:
     def _run():
         try:
             import sys
             sys.path.insert(0, str(_ROOT / ".claude" / "scripts"))
-            from integrations.gcal_int import upcoming  # type: ignore
-            return {"events": upcoming(days=7)}
+            from integrations import gcal_int  # type: ignore
+            # max_results default (50) truncates a multi-week grid; a personal
+            # calendar won't realistically exceed this in one visible window.
+            return {"events": gcal_int.upcoming(
+                days=days, days_back=days_back, max_results=500)}
         except Exception as exc:
             return {"error": str(exc), "events": []}
 
