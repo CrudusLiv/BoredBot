@@ -256,6 +256,27 @@ If nothing durable happened in this conversation, output exactly: `_(no durable 
 No preamble, no commentary, no closing remarks."""
 
 
+# Plug/unplug voice lines, in Vesper's register. {pct} is the battery
+# percentage at the moment of the transition; the _NOPCT fallbacks cover a
+# reading with no known percentage (desktop, or BatteryLifePercent == 255).
+_POWER_UNPLUG_LINES = [
+    "Unplugged. {pct}% in the tank, boss.",
+    "Running on battery now — {pct}% left.",
+    "Cord's out. {pct}% to work with.",
+    "On your own power, {pct}% remaining.",
+    "Battery it is — {pct}%.",
+]
+_POWER_PLUG_LINES = [
+    "Plugged in at {pct}%.",
+    "Back on the cord — {pct}% and climbing.",
+    "Charging now. You were at {pct}%.",
+    "Power's in, {pct}% and rising.",
+    "Tethered again, {pct}%.",
+]
+_POWER_UNPLUG_NOPCT = "Unplugged. Running on battery now."
+_POWER_PLUG_NOPCT = "Plugged in. Charging now."
+
+
 class Heartbeat:
     """Background daemon thread. Runs _SCHEDULE's event-triggered checks
     and schedules proactive spoken briefings when speak_queue is provided."""
@@ -329,10 +350,13 @@ class Heartbeat:
         context_poll_seconds: int = 60,
         idle_fn=None,
         brain=None,
+        power_fn=None,
     ) -> None:
         from voice import idle as _idle
+        from voice import power as _power
         self._context_poll_seconds = max(1, int(context_poll_seconds))
         self._idle_fn = idle_fn if idle_fn is not None else _idle.get_idle_seconds
+        self._power_fn = power_fn if power_fn is not None else _power.get_power_status
         self._last_run: dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -375,6 +399,13 @@ class Heartbeat:
         self._reminder_nag_slot: datetime | None = _parse_dt(state.get("reminder_nag_slot"))
         self._last_idle_return_fired: datetime | None = _parse_dt(state.get("idle_return_fired"))
 
+        # Power plug/unplug trigger. _last_on_ac is in-memory only -- a
+        # restart re-baselines silently on the next poll, so relaunching
+        # Vesper never fakes a plug/unplug. _last_power_fired persists so a
+        # restart loop can't re-announce, and backs the flap cooldown.
+        self._last_on_ac: bool | None = None
+        self._last_power_fired: datetime | None = _parse_dt(state.get("power_fired"))
+
         # Nudge deduplication (reset each day)
         self._nudged_events: set[str] = set(state.get("nudged", []))
         self._nudge_reset_date: date | None = _parse_date(state.get("nudged_date"))
@@ -413,6 +444,7 @@ class Heartbeat:
             "nudged": sorted(self._nudged_events),
             "nudged_date": str(self._nudge_reset_date) if self._nudge_reset_date else None,
             "idle_return_fired": self._last_idle_return_fired.isoformat() if self._last_idle_return_fired else None,
+            "power_fired": self._last_power_fired.isoformat() if self._last_power_fired else None,
             "seen_pr_event_ids": self._seen_pr_event_ids,
             "seen_urgent_email_ids": self._seen_urgent_email_ids,
             "deadline_fired": self._deadline_fired,
@@ -488,6 +520,10 @@ class Heartbeat:
             self._check_idle_return(poll_gap_s)
         except Exception as _e:
             print(f"[heartbeat] idle check error: {_e}", flush=True)
+        try:
+            self._check_power_transition()
+        except Exception as _e:
+            print(f"[heartbeat] power check error: {_e}", flush=True)
         # _run_scheduled() is called every fast poll -- each task in
         # _SCHEDULE self-gates on its own interval, so this is cheap when
         # nothing is due yet (see _run_scheduled's docstring).
@@ -548,6 +584,53 @@ class Heartbeat:
             text = " ".join(parts)
             self._speak(text)
             _post(text)
+
+    def _check_power_transition(self) -> None:
+        """Speak once when the laptop moves onto or off AC power. Runs every
+        fast poll, inside the same non-quiet-hours gate as idle-return, so
+        _speak() self-suppresses while a silence_when_running app is active
+        and nothing is spoken at night.
+
+        First reading only baselines _last_on_ac (no line). A real edge fires
+        a line unless it lands within power_trigger_cooldown_seconds of the
+        last one -- a suppressed edge deliberately leaves _last_on_ac
+        untouched, so a loose plug that flaps ends with one line for the
+        state it finally settles in."""
+        from voice import config as cfg
+        conf = cfg.load()
+        if not conf.get("power_trigger_enabled", True):
+            return
+        status = self._power_fn()
+        if status is None:
+            return
+        on_ac = status.get("on_ac")
+        if on_ac is None:
+            return
+        if self._last_on_ac is None:
+            self._last_on_ac = on_ac
+            return
+        if on_ac == self._last_on_ac:
+            return
+
+        now = datetime.now(cfg.get_timezone())
+        cooldown = timedelta(seconds=float(conf.get("power_trigger_cooldown_seconds", 45)))
+        if self._last_power_fired is not None and now - self._last_power_fired < cooldown:
+            return
+
+        self._last_on_ac = on_ac
+        self._last_power_fired = now
+        text = self._power_line(on_ac, status.get("percent"))
+        self._speak(text)
+        _post(text)
+        self._save_state()
+
+    @staticmethod
+    def _power_line(on_ac: bool, percent: int | None) -> str:
+        import random
+        if percent is None:
+            return _POWER_PLUG_NOPCT if on_ac else _POWER_UNPLUG_NOPCT
+        pool = _POWER_PLUG_LINES if on_ac else _POWER_UNPLUG_LINES
+        return random.choice(pool).format(pct=percent)
 
     def _check_activity(self) -> None:
         """One process scan per fast poll, feeding the busy-state silence gate.

@@ -65,6 +65,9 @@ DEFAULTS: dict[str, Any] = {
     "idle_return_enabled": True,
     "idle_return_threshold_minutes": 20,
     "idle_return_cooldown_minutes": 15,
+    # Power plug/unplug trigger — a line when AC power comes or goes
+    "power_trigger_enabled": True,
+    "power_trigger_cooldown_seconds": 45,
     # Activity awareness (process-based silence + reactive triggers)
     "activity_awareness_enabled": False,   # opt-in; dormant until enabled
     "silence_when_running": [],            # lowercase exe names, e.g. ["zoom.exe", "teams.exe"]
