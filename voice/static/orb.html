@@ -649,7 +649,8 @@ body.silenced #rail-state-sub { color: var(--text-dim); }
 .notice-acts .notice-dismiss { position: static; padding: 2px 4px; font-size: 12px; }
 .notice-acts .notice-dismiss:hover { color: var(--accent); }
 .notice-acts .notice-dismiss.del:hover { color: var(--danger); }
-#feed-markall { font-size: 9px; padding: 4px 12px; }
+#feed-markall, #feed-clearall { font-size: 9px; padding: 4px 12px; }
+#feed-clearall:hover { color: var(--danger); border-color: var(--danger); }
 #tool-ticker { position: static; opacity: 1; max-width: none; white-space: normal;
   overflow: visible; text-overflow: clip; min-height: 16px; }
 .tool-line { font-size: var(--fs-2xs); color: var(--text-dim); letter-spacing: var(--track-none); margin-top: 4px;
@@ -1315,6 +1316,7 @@ body.mini > *:not(canvas) { display: none !important; }
         <div class="panel-row-label">Notices <span id="feed-count"></span></div>
         <div class="mod-card-actions">
           <button id="feed-markall" hidden class="pill-btn" title="Mark all as read">&#10003; all</button>
+          <button id="feed-clearall" hidden class="pill-btn" title="Delete every notice">&#10005; clear all</button>
         </div>
       </div>
       <div class="mod-card-body">
@@ -2305,6 +2307,8 @@ async function loadNotices() {
     if (fc) fc.textContent = unread ? `· ${unread} unread` : '';
     const ma = document.getElementById('feed-markall');
     if (ma) ma.hidden = unread === 0;
+    const ca = document.getElementById('feed-clearall');
+    if (ca) ca.hidden = notices.length === 0;
     targets.forEach(list => {
       list.innerHTML = '';
       if (!notices.length) {
@@ -2606,6 +2610,13 @@ vfetch('/cmd/usage').then(r => r.json()).then(d => {
   if (ma) ma.onclick = () => {
     vfetch('/cmd/notices/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ all: true }) })
+      .then(() => { loadNotices(); updateNoticeBadge(); }).catch(() => {});
+  };
+  const ca = document.getElementById('feed-clearall');
+  if (ca) ca.onclick = () => {
+    if (!confirm('Delete every notice? This can\'t be undone.')) return;
+    vfetch('/cmd/notices/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true, delete: true }) })
       .then(() => { loadNotices(); updateNoticeBadge(); }).catch(() => {});
   };
   // Esc closes the modules overlay
