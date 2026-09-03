@@ -154,6 +154,20 @@ def import_from_events(events: Iterable[dict], keywords: list[str] | None = None
     return added
 
 
+def add_rows(pairs: list[tuple[str, str]]) -> list[str]:
+    """Merge (iso_date, title) pairs into DEADLINES.md ## Active as nogcal
+    rows. Like import_from_events but for non-calendar sources (e.g. the
+    university intake). Returns rows added ("date — title")."""
+    p = _path()
+    if p is None or not p.exists() or not pairs:
+        return []
+    text = p.read_text(encoding="utf-8")
+    new_text, added = merge_events(text, pairs)
+    if added:
+        p.write_text(new_text, encoding="utf-8")
+    return added
+
+
 def sync_with_calendar(events: Iterable[dict], keywords: list[str] | None = None,
                         days_back: int = 0, days_forward: int = 30) -> tuple[list[str], list[str]]:
     """Two-way sync against a calendar fetch window covering

@@ -52,3 +52,8 @@ chatterbox-tts
 
 # Voice brain (in-process Claude Agent SDK, replaces the claude -p subprocess)
 claude-agent-sdk>=0.2.134
+
+# University intake (heartbeat coursework ingest — voice/university_intake.py)
+pypdf>=4.0
+python-docx>=1.1
+python-pptx>=0.6

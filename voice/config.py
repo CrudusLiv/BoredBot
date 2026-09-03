@@ -196,6 +196,20 @@ DEFAULTS: dict[str, Any] = {
     "screen_read_ask_hotkey": "f10",
     "screen_read_copy_hotkey": "f11",
     "screen_read_dismiss_hotkey": "f12",
+    # University intake (heartbeat: walk D:\University -> coursework/ notes).
+    # Opt-in; dormant until enabled. See _check_university_intake.
+    "university_intake_enabled": False,
+    "university_intake_root": "D:/University",
+    "university_intake_mode": "per-file",   # "per-file" | "rollup"
+    "university_intake_extensions": [
+        ".pdf", ".docx", ".pptx",
+    ],
+    "university_intake_denylist": ["Visual Studio", "intern", "Uni General"],
+    "university_intake_max_chars": 20000,   # per-note body cap; longer -> truncated
+    "university_intake_deadline_detection": True,
+    # New/changed notes written per heartbeat tick; the rest resume next tick
+    # so the first backfill can't stall the single heartbeat thread for minutes.
+    "university_intake_max_files_per_tick": 200,
 }
 
 

@@ -303,6 +303,7 @@ class Heartbeat:
         ("vault_daily_rollup", "_check_vault_daily_rollup", 30, None),
         ("reminder_nags", "_check_reminder_nags", 15, None),
         ("google_auth", "_check_google_auth", 30, None),
+        ("university_intake", "_check_university_intake", 30, None),
     ]
 
     # Each task's own opt-out flag, for the status panel's enabled/disabled
@@ -323,6 +324,7 @@ class Heartbeat:
         "vault_daily_rollup": "vault_rollup_enabled",
         "reminder_nags": "reminder_nag_enabled",
         "google_auth": "google_auth_check_enabled",
+        "university_intake": "university_intake_enabled",
     }
 
     # Tasks that actually fire once/day at a configured time-of-day, rather
@@ -462,6 +464,27 @@ class Heartbeat:
             tmp.replace(p)
         except OSError as _e:
             print(f"[heartbeat] state save failed: {_e}", flush=True)
+
+    @staticmethod
+    def _university_manifest_path() -> Path:
+        from voice import config as cfg
+        return cfg.get_data_dir() / "university_intake.json"
+
+    def _load_university_manifest(self) -> dict:
+        try:
+            return json.loads(self._university_manifest_path().read_text(encoding="utf-8"))
+        except Exception:
+            return {"version": 1, "files": {}}
+
+    def _save_university_manifest(self, manifest: dict) -> None:
+        try:
+            p = self._university_manifest_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(p)
+        except OSError as _e:
+            print(f"[heartbeat] university_intake manifest save failed: {_e}", flush=True)
 
     def _speak(self, text: str) -> None:
         if _output_suppressed():
@@ -1134,6 +1157,71 @@ class Heartbeat:
             _post(("Deadlines from calendar: " + "; ".join(added))[:160])
         if removed:
             _post(("Deadlines cleared (removed from calendar): " + "; ".join(removed))[:160])
+
+    def _check_university_intake(self) -> None:
+        """Walk university_intake_root (read-only) into <vault>/coursework/ as
+        linked notes; feed assignment deadlines into DEADLINES.md. Opt-in,
+        dormant until university_intake_enabled. Never raises."""
+        from voice import config as cfg
+        from voice import deadlines
+        from voice import university_intake as ui
+        conf = cfg.load()
+        if not conf.get("university_intake_enabled", False):
+            return
+        vault = cfg.get_vault_dir()
+        if vault is None:
+            return
+        root = Path(conf.get("university_intake_root", "D:/University"))
+        if not root.is_dir():
+            return
+        manifest = self._load_university_manifest()
+        res = None
+        try:
+            res = ui.run_intake(root, vault, manifest=manifest, config=conf)
+        except Exception as _e:
+            print(f"[heartbeat] university_intake error: {_e}", flush=True)
+        finally:
+            # Persist whatever the walk managed to record so a mid-walk crash
+            # never strands already-written notes without a manifest entry.
+            try:
+                self._save_university_manifest(manifest)
+            except Exception as _e:
+                print(f"[heartbeat] university_intake manifest save failed: {_e}", flush=True)
+        if res is None:
+            return
+        added_dl: list[str] = []
+        if res.deadlines:
+            try:
+                added_dl = deadlines.add_rows(res.deadlines) or []
+            except Exception as _e:
+                print(f"[heartbeat] university_intake deadlines error: {_e}", flush=True)
+        changed = len(res.added) + len(res.updated)
+        if changed or added_dl:
+            detail = ""
+            if changed:
+                by_course: dict[str, int] = {}
+                for n in res.added + res.updated:
+                    c = n.split("/")[1].split(".")[0].upper()
+                    by_course[c] = by_course.get(c, 0) + 1
+                detail = ", ".join(f"{c} x{n}" for c, n in sorted(by_course.items()))
+                head = f"Coursework: +{changed} notes"
+            else:
+                head = "Coursework:"
+            # tail carries the markers the user most needs; truncate only the
+            # per-course detail in the middle so they always survive ≤160.
+            tail = ""
+            if added_dl:
+                tail += f", +{len(added_dl)} deadlines" if changed else f" +{len(added_dl)} deadlines"
+            if res.partial:
+                tail += " (… more next tick)"
+            msg = head + tail
+            if detail:
+                budget = 160 - len(head) - len(tail) - len(" ()")
+                if len(detail) <= budget:
+                    msg = f"{head} ({detail}){tail}"
+                elif budget > 1:
+                    msg = f"{head} ({detail[:budget - 1]}…){tail}"
+            _post(msg[:160])
 
     def status_snapshot(self) -> dict:
         """Point-in-time state for the orb's status panel: the busy/silence

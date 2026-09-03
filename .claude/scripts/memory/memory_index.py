@@ -24,7 +24,7 @@ VAULT = PROJECT_DIR / "Dynamous" / "Memory"
 
 # What to index. Anything outside these is ignored.
 INCLUDE_FILES = ["SOUL.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"]
-INCLUDE_DIRS = ["projects", "research", "goals", "daily", "drafts/sent"]
+INCLUDE_DIRS = ["projects", "research", "goals", "daily", "drafts/sent", "coursework"]
 
 
 def file_hash(path: Path) -> str:
