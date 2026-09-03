@@ -308,6 +308,23 @@ def test_course_hub_note_regenerates_as_notes_come_and_go(tmp_path):
     assert "[[coursework/bit216/b]]" in body
 
 
+def test_course_hub_notes_are_not_flagged_orphaned_on_second_run(tmp_path):
+    # Hub notes aren't manifest entries -- they're regenerated fresh every
+    # run -- so the *first* run's orphan check never sees them (they don't
+    # exist on disk yet). Only a second run, with the hub already written,
+    # can expose the bug where write_moc mistakes its own hub notes for
+    # orphaned per-file notes.
+    root, vault = tmp_path / "U", tmp_path / "V"
+    _tree(root); vault.mkdir()
+    manifest = {"version": 1, "files": {}}
+    ui.run_intake(root, vault, manifest=manifest, config=CONFIG)
+    ui.run_intake(root, vault, manifest=manifest, config=CONFIG)
+    moc = (vault / "coursework" / "_moc.md").read_text(encoding="utf-8")
+    assert "coursework/bit216.md" not in moc
+    assert "coursework/fec100.md" not in moc
+    assert "## Orphaned" not in moc
+
+
 def test_rollup_mode_does_not_clobber_course_note_with_a_hub(tmp_path):
     root, vault = tmp_path / "U", tmp_path / "V"
     _tree(root); vault.mkdir()

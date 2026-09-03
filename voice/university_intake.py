@@ -430,6 +430,10 @@ def write_moc(vault: Path, manifest: dict, root: Path | str = "D:\\University",
         lines.append(f"- [[{course}]] — {len(by_course[course])} note(s)")
 
     known_notes = {m["note"] for m in files.values()}
+    if mode == "per-file":
+        # Hub notes aren't manifest entries -- they're regenerated fresh
+        # every run -- so without this every one of them reads as orphaned.
+        known_notes |= {f"coursework/{course}.md" for course in by_course}
     cw = vault / "coursework"
     disk_notes = sorted(
         q.relative_to(vault).as_posix() for q in cw.rglob("*.md")
