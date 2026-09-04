@@ -77,6 +77,38 @@ def test_append_line_and_block_coexist(tmp_vault):
     assert "Pre-compact flush (exit)" in text
 
 
+# --- timeline nav block (graph-view chain) ---
+
+def test_new_note_gets_timeline_block_linking_previous(tmp_vault):
+    (tmp_vault / "daily" / "2020-01-01.md").write_text("# 2020-01-01\n", encoding="utf-8")
+    daily_mod.append_block("Session end (exit)", "- x")
+    text = _daily_file(tmp_vault).read_text(encoding="utf-8")
+    assert "<!-- timeline:begin -->" in text
+    assert "[[2020-01-01]]" in text
+
+
+def test_previous_note_gains_forward_link_to_today(tmp_vault):
+    prev = tmp_vault / "daily" / "2020-01-01.md"
+    prev.write_text(
+        "# 2020-01-01\n\n<!-- timeline:begin -->\n## Timeline\n← [[2019-12-31]]\n"
+        "<!-- timeline:end -->\n\n## [09:00] old\n\nbody\n",
+        encoding="utf-8",
+    )
+    daily_mod.append_line("first")
+    ptext = prev.read_text(encoding="utf-8")
+    assert f"[[{_today()}]]" in ptext
+    assert "body" in ptext  # existing content preserved
+
+
+def test_timeline_block_not_duplicated_on_same_day_appends(tmp_vault):
+    (tmp_vault / "daily" / "2020-01-01.md").write_text("# 2020-01-01\n", encoding="utf-8")
+    daily_mod.append_block("one", "a")
+    daily_mod.append_line("two")
+    daily_mod.append_block("three", "c")
+    text = _daily_file(tmp_vault).read_text(encoding="utf-8")
+    assert text.count("<!-- timeline:begin -->") == 1
+
+
 # --- CLI ---
 
 def test_cli_commit_work(tmp_vault, monkeypatch):
